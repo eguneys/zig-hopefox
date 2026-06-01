@@ -103,7 +103,28 @@ const Piece = enum(u8) {
     Black_Bishop,
     Black_Knight,
     Black_Pawn,
+
+    pub fn colorOf(self: Piece) Color {
+        return @enumFromInt(@intFromEnum(self) / 6);
+    }
+    pub fn roleOf(self: Piece) Role {
+        return @enumFromInt(@intFromEnum(self) % 6);
+    }
 };
+
+test "piece" {
+    try std.testing.expect(Piece.White_Pawn.colorOf() == Color.White);
+    try std.testing.expect(Piece.White_Bishop.colorOf() == Color.White);
+    try std.testing.expect(Piece.White_King.colorOf() == Color.White);
+
+    try std.testing.expect(Piece.Black_Pawn.colorOf() == Color.Black);
+    try std.testing.expect(Piece.Black_Bishop.colorOf() == Color.Black);
+    try std.testing.expect(Piece.Black_King.colorOf() == Color.Black);
+
+    try std.testing.expect(Piece.Black_Pawn.roleOf() == Role.Pawn);
+    try std.testing.expect(Piece.Black_Bishop.roleOf() == Role.Bishop);
+    try std.testing.expect(Piece.Black_King.roleOf() == Role.King);
+}
 
 const Bitboard = struct {
     bits: u64,
@@ -208,6 +229,10 @@ const Bitboard = struct {
 
     pub fn bitor(self: Bitboard, other: Bitboard) Bitboard {
         return Bitboard{ .bits = self.bits | other.bits };
+    }
+
+    pub fn bitdiff(self: Bitboard, other: Bitboard) Bitboard {
+        return Bitboard{ .bits = self.bits & ~other.bits };
     }
 };
 
@@ -384,3 +409,55 @@ test "attacks" {
 fn expectBitboard(expected: []const u8, actual: Bitboard) !void {
     return std.testing.expectEqualStrings(expected, &Prints.bitboard(actual));
 }
+
+var Position = packed struct {
+    bb_occupied: Bitboard,
+    bb_turn: Bitboard,
+    bb_pieces: [6]Bitboard,
+    color_turn: Color,
+
+    pub fn occupied(self: Position) Bitboard {
+        return self.bb_occupied;
+    }
+
+    pub fn turn(self: Position) Bitboard {
+        return self.bb_turn;
+    }
+
+    pub fn turnAsColor(self: Position) Bitboard {
+        return self.color_turn;
+    }
+
+    pub fn opponent(self: Position) Bitboard {
+        return self.bb_occupied.bitdiff(self.bb_turn);
+    }
+
+    pub fn addPiece(self: Position, square: Square, piece: Piece) void {
+        const color = piece.colorOf();
+        const role = piece.roleOf();
+
+        if (color == self.turn) {
+            self.bb_turn = self.bb_turn.set(square);
+        }
+        self.bb_pieces[role] = self.bb_pieces[role].set(square);
+    }
+};
+
+const Fen = struct {
+    pub const Initial = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+    pub fn parse(string: []const u8) Position {
+        var rank: u8 = 7;
+        var file: u8 = 0;
+
+        for (string) |char| {
+            switch (char) {
+                '/' => {
+                    rank = rank - 1;
+                    file = 0;
+                },
+                'r', 'n', 'b', 'p', 'k', 'q' => {},
+            }
+        }
+    }
+};
