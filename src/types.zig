@@ -108,7 +108,72 @@ const Piece = enum(u8) {
 const Bitboard = struct {
     bits: u64,
 
+    pub const All = Bitboard{ .bits = 0xffff_ffff_ffff_ffff };
     pub const Zero = Bitboard{ .bits = 0 };
+    pub const A1 = Bitboard.fromSquare(Square.A1);
+    pub const A2 = Bitboard.fromSquare(Square.A2);
+    pub const A3 = Bitboard.fromSquare(Square.A3);
+    pub const A4 = Bitboard.fromSquare(Square.A4);
+    pub const A5 = Bitboard.fromSquare(Square.A5);
+    pub const A6 = Bitboard.fromSquare(Square.A6);
+    pub const A7 = Bitboard.fromSquare(Square.A7);
+    pub const A8 = Bitboard.fromSquare(Square.A8);
+    pub const B1 = Bitboard.fromSquare(Square.B1);
+    pub const B2 = Bitboard.fromSquare(Square.B2);
+    pub const B3 = Bitboard.fromSquare(Square.B3);
+    pub const B4 = Bitboard.fromSquare(Square.B4);
+    pub const B5 = Bitboard.fromSquare(Square.B5);
+    pub const B6 = Bitboard.fromSquare(Square.B6);
+    pub const B7 = Bitboard.fromSquare(Square.B7);
+    pub const B8 = Bitboard.fromSquare(Square.B8);
+    pub const C1 = Bitboard.fromSquare(Square.C1);
+    pub const C2 = Bitboard.fromSquare(Square.C2);
+    pub const C3 = Bitboard.fromSquare(Square.C3);
+    pub const C4 = Bitboard.fromSquare(Square.C4);
+    pub const C5 = Bitboard.fromSquare(Square.C5);
+    pub const C6 = Bitboard.fromSquare(Square.C6);
+    pub const C7 = Bitboard.fromSquare(Square.C7);
+    pub const C8 = Bitboard.fromSquare(Square.C8);
+    pub const D1 = Bitboard.fromSquare(Square.D1);
+    pub const D2 = Bitboard.fromSquare(Square.D2);
+    pub const D3 = Bitboard.fromSquare(Square.D3);
+    pub const D4 = Bitboard.fromSquare(Square.D4);
+    pub const D5 = Bitboard.fromSquare(Square.D5);
+    pub const D6 = Bitboard.fromSquare(Square.D6);
+    pub const D7 = Bitboard.fromSquare(Square.D7);
+    pub const D8 = Bitboard.fromSquare(Square.D8);
+    pub const E1 = Bitboard.fromSquare(Square.E1);
+    pub const E2 = Bitboard.fromSquare(Square.E2);
+    pub const E3 = Bitboard.fromSquare(Square.E3);
+    pub const E4 = Bitboard.fromSquare(Square.E4);
+    pub const E5 = Bitboard.fromSquare(Square.E5);
+    pub const E6 = Bitboard.fromSquare(Square.E6);
+    pub const E7 = Bitboard.fromSquare(Square.E7);
+    pub const E8 = Bitboard.fromSquare(Square.E8);
+    pub const F1 = Bitboard.fromSquare(Square.F1);
+    pub const F2 = Bitboard.fromSquare(Square.F2);
+    pub const F3 = Bitboard.fromSquare(Square.F3);
+    pub const F4 = Bitboard.fromSquare(Square.F4);
+    pub const F5 = Bitboard.fromSquare(Square.F5);
+    pub const F6 = Bitboard.fromSquare(Square.F6);
+    pub const F7 = Bitboard.fromSquare(Square.F7);
+    pub const F8 = Bitboard.fromSquare(Square.F8);
+    pub const G1 = Bitboard.fromSquare(Square.G1);
+    pub const G2 = Bitboard.fromSquare(Square.G2);
+    pub const G3 = Bitboard.fromSquare(Square.G3);
+    pub const G4 = Bitboard.fromSquare(Square.G4);
+    pub const G5 = Bitboard.fromSquare(Square.G5);
+    pub const G6 = Bitboard.fromSquare(Square.G6);
+    pub const G7 = Bitboard.fromSquare(Square.G7);
+    pub const G8 = Bitboard.fromSquare(Square.G8);
+    pub const H1 = Bitboard.fromSquare(Square.H1);
+    pub const H2 = Bitboard.fromSquare(Square.H2);
+    pub const H3 = Bitboard.fromSquare(Square.H3);
+    pub const H4 = Bitboard.fromSquare(Square.H4);
+    pub const H5 = Bitboard.fromSquare(Square.H5);
+    pub const H6 = Bitboard.fromSquare(Square.H6);
+    pub const H7 = Bitboard.fromSquare(Square.H7);
+    pub const H8 = Bitboard.fromSquare(Square.H8);
 
     pub fn fromSquare(sq: Square) Bitboard {
         return Bitboard{ .bits = @as(u64, 1) << @intCast(@intFromEnum(sq)) };
@@ -139,6 +204,10 @@ const Bitboard = struct {
 
     pub fn bitand(self: Bitboard, other: Bitboard) Bitboard {
         return Bitboard{ .bits = self.bits & other.bits };
+    }
+
+    pub fn bitor(self: Bitboard, other: Bitboard) Bitboard {
+        return Bitboard{ .bits = self.bits | other.bits };
     }
 };
 
@@ -183,37 +252,38 @@ const Direction = enum { Up, Down, Left, Right, Up_Left, Up_Right, Down_Left, Do
 const Attacks = struct {
     const ray_masks = generate_ray_masks();
 
-    fn generate_ray_masks() Bitboard[8][64] {
-        var res = undefined;
+    fn generate_ray_masks() [8][64]Bitboard {
+        var res: [8][64]Bitboard = undefined;
 
-        const df = [8]u8{ 0, 0, -1, 1, -1, 1, -1, 1 };
-        const dr = [8]u8{ 1, -1, 0, 0, 1, 1, -1, -1 };
+        const df = [8]i8{ 0, 0, -1, 1, -1, 1, -1, 1 };
+        const dr = [8]i8{ 1, -1, 0, 0, 1, 1, -1, -1 };
 
         for (Squares) |square| {
-            const start_file = square.file();
-            const start_rank = square.rank();
+            const start_file = @intFromEnum(square.toFile());
+            const start_rank = @intFromEnum(square.toRank());
 
             for (0..8) |dir| {
-                var mask = 0;
-                var f = start_file + df[dir];
-                var r = start_rank + dr[dir];
+                var mask = Bitboard.Zero;
+                var f = @as(i8, start_file) + df[dir];
+                var r = @as(i8, start_rank) + dr[dir];
 
                 while (f >= 0 and f < 8 and r >= 0 and r < 8) {
-                    const target_square = Square.fromCoord(f, r);
-                    mask |= Bitboard.fromSquare(target_square);
+                    @setEvalBranchQuota(50000);
+                    const target_square = Square.fromCoord(@enumFromInt(f), @enumFromInt(r));
+                    mask = mask.bitor(Bitboard.fromSquare(target_square));
 
                     f += df[dir];
                     r += dr[dir];
                 }
 
-                res[dir][square] = mask;
+                res[dir][@intFromEnum(square)] = mask;
             }
         }
         return res;
     }
 
-    fn ray_attacks(square: Square, occupied: Bitboard) Bitboard {
-        return ray_masks[square] & occupied;
+    fn ray_attacks(square: Square, occupied: Bitboard, direction: Direction) Bitboard {
+        return ray_masks[@intFromEnum(direction)][@intFromEnum(square)].bitand(occupied);
     }
 };
 
@@ -226,7 +296,7 @@ const Prints = struct {
             if (f == 8) {
                 val.* = '\n';
             } else if (self.has(Square.fromCoord(@enumFromInt(f), @enumFromInt(r)))) {
-                val.* = '+';
+                val.* = 'o';
             } else {
                 val.* = '.';
             }
@@ -246,4 +316,71 @@ test "bitboards" {
         \\........
         \\........
     );
+
+    try std.testing.expectEqualStrings(&Prints.bitboard(Bitboard.A1),
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\o.......
+    );
+
+    try std.testing.expectEqualStrings(&Prints.bitboard(Bitboard.H8.bitor(Bitboard.A1)),
+        \\.......o
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\o.......
+    );
+}
+
+test "attacks" {
+    try expectBitboard(
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\..o.....
+        \\.o......
+        \\........
+    , Attacks.ray_attacks(Square.A1, Bitboard.C3.bitor(Bitboard.B2), Direction.Up_Right));
+
+    try expectBitboard(
+        \\....o...
+        \\....o...
+        \\....o...
+        \\....o...
+        \\oooo.ooo
+        \\....o...
+        \\....o...
+        \\....o...
+    , Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Up)
+        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Down))
+        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Left))
+        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Right)));
+
+    try expectBitboard(
+        \\o.......
+        \\.o.....o
+        \\..o...o.
+        \\...o.o..
+        \\........
+        \\...o.o..
+        \\..o...o.
+        \\.o.....o
+    , Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Up_Left)
+        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Down_Right))
+        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Down_Left))
+        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Up_Right)));
+}
+
+fn expectBitboard(expected: []const u8, actual: Bitboard) !void {
+    return std.testing.expectEqualStrings(expected, &Prints.bitboard(actual));
 }
