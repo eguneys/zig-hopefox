@@ -116,6 +116,10 @@ const Piece = enum(u8) {
     pub fn roleOf(self: Piece) Role {
         return @enumFromInt(@intFromEnum(self) % 6);
     }
+
+    pub fn fromColors(color: Color, role: Role) Piece {
+        return @enumFromInt(@as(u8, @intFromEnum(color)) * 6 + @intFromEnum(role));
+    }
 };
 
 test "piece" {
@@ -230,6 +234,14 @@ const Bitboard = packed struct(u64) {
 
     pub fn isNotEmpty(self: Bitboard) bool {
         return self.bits != 0;
+    }
+
+    pub fn invert(self: Bitboard) Bitboard {
+        return Bitboard{ .bits = ~self.bits };
+    }
+
+    pub fn unset(self: Bitboard, square: Square) Bitboard {
+        return self.bitand(Bitboard.fromSquare(square).invert());
     }
 
     pub fn set(self: Bitboard, square: Square) Bitboard {
@@ -469,8 +481,8 @@ pub const Position = packed struct(u512) {
     bb_bishop: Bitboard,
     bb_knight: Bitboard,
     bb_pawn: Bitboard,
-    bb_turn: Bitboard, // 8 * 7
-    color_turn: Color,
+    bb_white: Bitboard, // 8 * 7
+    turn: Color,
     padding1: u7,
     padding7: u56,
 
@@ -479,45 +491,50 @@ pub const Position = packed struct(u512) {
     }
 
     pub fn occupied(self: Position) Bitboard {
-        return self.bb_occupied;
+        return self.bb_bishop
+            .bitor(self.bb_rook)
+            .bitor(self.bb_pawn)
+            .bitor(self.bb_knight)
+            .bitor(self.bb_queen)
+            .bitor(self.bb_king);
     }
 
-    pub fn turn(self: Position) Bitboard {
-        return self.bb_turn;
-    }
-
-    pub fn turnAsColor(self: Position) Color {
-        return self.color_turn;
+    pub fn turnOf(self: Position) Color {
+        return self.turn;
     }
 
     pub fn pieceOn(self: Position, square: Square) ?Piece {
-        if (self.bb_turn.has(square)) {
-            if (self.bb_pawn.has(square))
-                return if (self.color_turn == Color.White) Piece.White_Pawn else Piece.Black_Pawn;
-            if (self.bb_bishop.has(square))
-                return if (self.color_turn == Color.White) Piece.White_Bishop else Piece.Black_Bishop;
-            if (self.bb_knight.has(square))
-                return if (self.color_turn == Color.White) Piece.White_Knight else Piece.Black_Knight;
-            if (self.bb_rook.has(square))
-                return if (self.color_turn == Color.White) Piece.White_Rook else Piece.Black_Rook;
-            if (self.bb_king.has(square))
-                return if (self.color_turn == Color.White) Piece.White_King else Piece.Black_King;
-            if (self.bb_queen.has(square))
-                return if (self.color_turn == Color.White) Piece.White_Queen else Piece.Black_Queen;
-        } else {
-            if (self.bb_pawn.has(square))
-                return if (self.color_turn == Color.Black) Piece.White_Pawn else Piece.Black_Pawn;
-            if (self.bb_bishop.has(square))
-                return if (self.color_turn == Color.Black) Piece.White_Bishop else Piece.Black_Bishop;
-            if (self.bb_knight.has(square))
-                return if (self.color_turn == Color.Black) Piece.White_Knight else Piece.Black_Knight;
-            if (self.bb_rook.has(square))
-                return if (self.color_turn == Color.Black) Piece.White_Rook else Piece.Black_Rook;
-            if (self.bb_king.has(square))
-                return if (self.color_turn == Color.Black) Piece.White_King else Piece.Black_King;
-            if (self.bb_queen.has(square))
-                return if (self.color_turn == Color.Black) Piece.White_Queen else Piece.Black_Queen;
+        if (self.colorOn(square)) |color| {
+            if (self.roleOn(square)) |role| {
+                return Piece.fromColors(color, role);
+            }
         }
+        return null;
+    }
+
+    pub fn colorOn(self: Position, square: Square) ?Color {
+        if (self.bb_white.has(square)) {
+            return Color.White;
+        } else if (self.occupied().has(square)) {
+            return Color.Black;
+        } else {
+            return null;
+        }
+    }
+
+    pub fn roleOn(self: Position, square: Square) ?Role {
+        if (self.bb_pawn.has(square))
+            return Role.Pawn;
+        if (self.bb_bishop.has(square))
+            return Role.Bishop;
+        if (self.bb_knight.has(square))
+            return Role.Knight;
+        if (self.bb_rook.has(square))
+            return Role.Rook;
+        if (self.bb_king.has(square))
+            return Role.King;
+        if (self.bb_queen.has(square))
+            return Role.Queen;
         return null;
     }
 
@@ -529,15 +546,61 @@ pub const Position = packed struct(u512) {
         const color = piece.colorOf();
         const role = piece.roleOf();
 
-        if (color == self.color_turn) {
-            self.bb_turn = self.bb_turn.set(square);
+        if (color == Color.White) {
+            self.bb_white = self.bb_white.set(square);
         }
         const pieces: [*]Bitboard = @ptrCast(self);
         pieces[@intFromEnum(role)] = pieces[@intFromEnum(role)].set(square);
     }
 
     pub fn flipTurn(self: *Position) void {
-        self.color_turn = self.color_turn.opposite();
+        self.turn = self.turn.opposite();
+    }
+
+    pub fn remove_piece(self: *Position, square: Square) void {
+        self.bb_pawn = self.bb_pawn.unset(square);
+        self.bb_king = self.bb_king.unset(square);
+        self.bb_rook = self.bb_rook.unset(square);
+        self.bb_knight = self.bb_knight.unset(square);
+        self.bb_queen = self.bb_queen.unset(square);
+        self.bb_bishop = self.bb_bishop.unset(square);
+        self.bb_turn = self.bb_turn.unset(square);
+    }
+
+    pub fn put_piece(self: *Position, square: Square, piece: Piece) void {
+        switch (piece.roleOf()) {
+            Role.Bishop => self.bb_bishop = self.bb_bishop.set(square),
+            Role.Rook => self.bb_rook = self.bb_rook.set(square),
+            Role.Knight => self.bb_knight = self.bb_knight.set(square),
+            Role.Queen => self.bb_queen = self.bb_queen.set(square),
+            Role.King => self.bb_king = self.bb_king.set(square),
+            Role.Pawn => self.bb_pawn = self.bb_pawn.set(square),
+        }
+        if (piece.colorOf() == self.color_turn) {
+            self.bb_turn = self.bb_turn.set(square);
+        }
+    }
+
+    pub fn make_normal_move(self: *Position, from: Square, to: Square) ?Piece {
+        const from_piece = self.remove_piece(from);
+        return self.put_piece(to, from_piece);
+    }
+
+    pub fn make_move(self: *Position, move: Move) ?Piece {
+        switch (move.kind) {
+            MoveType.Normal => {
+                return self.make_normal_move(move.from, move.to);
+            },
+            MoveType.Castling => {
+                return null;
+            },
+            MoveType.Promotion => {
+                return null;
+            },
+            MoveType.EnPassant => {
+                return null;
+            },
+        }
     }
 };
 
@@ -600,9 +663,9 @@ pub const Fen = struct {
 
 test "Position A" {
     var position: Position = Position.empty();
-    try std.testing.expectEqual(position.turnAsColor(), Color.White);
+    try std.testing.expectEqual(position.turnOf(), Color.White);
     position.flipTurn();
-    try std.testing.expectEqual(position.turnAsColor(), Color.Black);
+    try std.testing.expectEqual(position.turnOf(), Color.Black);
 
     try std.testing.expectEqual(64, @sizeOf(Position));
 
