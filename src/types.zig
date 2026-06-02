@@ -135,7 +135,7 @@ test "piece" {
     try std.testing.expect(Piece.Black_King.roleOf() == Role.King);
 }
 
-const Bitboard = packed struct {
+const Bitboard = packed struct(u64) {
     bits: u64,
 
     pub const All = Bitboard{ .bits = 0xffff_ffff_ffff_ffff };
@@ -328,7 +328,7 @@ const Attacks = struct {
     }
 };
 
-const Prints = struct {
+pub const Prints = struct {
     pub fn bitboard(self: Bitboard) [71]u8 {
         var string: [71]u8 = undefined;
         for (&string, 0..) |*val, i| {
@@ -462,7 +462,7 @@ fn expectBitboard(expected: []const u8, actual: Bitboard) !void {
     return std.testing.expectEqualStrings(expected, &Prints.bitboard(actual));
 }
 
-const Position = packed struct {
+pub const Position = packed struct(u512) {
     bb_king: Bitboard,
     bb_queen: Bitboard,
     bb_rook: Bitboard,
@@ -471,6 +471,8 @@ const Position = packed struct {
     bb_pawn: Bitboard,
     bb_turn: Bitboard, // 8 * 7
     color_turn: Color,
+    padding1: u7,
+    padding7: u56,
 
     pub fn empty() Position {
         return std.mem.zeroes(Position);
@@ -557,8 +559,8 @@ pub const Fen = struct {
                     rank = rank - 1;
                     file = 0;
                 },
-                1...8 => {
-                    file = file + char;
+                '1'...'8' => {
+                    file = file + char - '0';
                 },
                 else => {
                     if (state == 0) {
@@ -653,3 +655,22 @@ test "Fen" {
         \\RNBQKBNR
     , Fen.parse(Fen.Initial));
 }
+
+pub const MoveType = enum(u2) { Normal, Castling, Promotion, EnPassant };
+
+pub const MovePromotionRole = enum(u2) { Queen, Knight, Rook, Bishop };
+
+pub const Move = packed struct(u16) { from: u6, to: u6, kind: MoveType, promotion: MovePromotionRole };
+
+pub const Uci = struct {
+    pub fn parse(uci: []const u8) Move {
+        _ = uci;
+
+        var res: Move = undefined;
+
+        res.from = 0;
+        res.to = 0;
+
+        return res;
+    }
+};
