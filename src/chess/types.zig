@@ -564,7 +564,7 @@ pub const Position = packed struct(u512) {
         self.bb_knight = self.bb_knight.unset(square);
         self.bb_queen = self.bb_queen.unset(square);
         self.bb_bishop = self.bb_bishop.unset(square);
-        self.bb_turn = self.bb_turn.unset(square);
+        self.bb_white = self.bb_white.unset(square);
     }
 
     pub fn put_piece(self: *Position, square: Square, piece: Piece) void {
@@ -576,20 +576,23 @@ pub const Position = packed struct(u512) {
             Role.King => self.bb_king = self.bb_king.set(square),
             Role.Pawn => self.bb_pawn = self.bb_pawn.set(square),
         }
-        if (piece.colorOf() == self.color_turn) {
-            self.bb_turn = self.bb_turn.set(square);
+        if (piece.colorOf() == Color.White) {
+            self.bb_white = self.bb_white.set(square);
         }
     }
 
     pub fn make_normal_move(self: *Position, from: Square, to: Square) ?Piece {
-        const from_piece = self.remove_piece(from);
-        return self.put_piece(to, from_piece);
+        const from_piece = self.pieceOn(from).?;
+        const captured = self.pieceOn(to);
+        self.remove_piece(from);
+        self.put_piece(to, from_piece);
+        return captured;
     }
 
     pub fn make_move(self: *Position, move: Move) ?Piece {
         switch (move.kind) {
             MoveType.Normal => {
-                return self.make_normal_move(move.from, move.to);
+                return self.make_normal_move(@enumFromInt(move.from), @enumFromInt(move.to));
             },
             MoveType.Castling => {
                 return null;
