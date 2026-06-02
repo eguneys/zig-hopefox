@@ -69,36 +69,48 @@ const DbWriter = struct {
     }
 };
 
-fn read_csv_to_build_db(io: std.Io, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
-    var writer: DbWriter = undefined;
-
-    try writer.open(io, db_file, meta_file);
-
-    var buffer: [500]u8 = undefined;
-
-    const file = try std.Io.Dir.cwd()
-        .openFile(io, csv_file, .{ .mode = .read_only });
-
-    defer file.close(io);
-    var reader = file.reader(io, &buffer);
-
-    var i_reader = &reader.interface;
-
-    while (try i_reader.takeDelimiter('\n')) |line| {
-        var parts = std.mem.splitScalar(u8, line, ',');
-
-        const id = parts.next().?;
-        const fen = parts.next().?;
-        const moves = parts.next().?;
-
-        const meta = PuzzleMeta.parse(id, moves);
-
-        try writer.add(types.Fen.parse(fen), meta);
+pub const BuildDb = struct {
+    pub fn read_csv_to_build_db_if_doesnt_exists(io: std.Io, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
+        std.Io.Dir.cwd().access(io, meta_file, .{}) catch |err| {
+            if (err == error.FileNotFound) {
+                var stdout = std.Io.File.stdout().writer(io, &.{});
+                try stdout.interface.print("Building, Positions Db.\n", .{});
+                try read_csv_to_build_db(io, csv_file, db_file, meta_file);
+            }
+        };
     }
 
-    try writer.close(io);
-}
+    fn read_csv_to_build_db(io: std.Io, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
+        var writer: DbWriter = undefined;
+
+        try writer.open(io, db_file, meta_file);
+
+        var buffer: [500]u8 = undefined;
+
+        const file = try std.Io.Dir.cwd()
+            .openFile(io, csv_file, .{ .mode = .read_only });
+
+        defer file.close(io);
+        var reader = file.reader(io, &buffer);
+
+        var i_reader = &reader.interface;
+
+        while (try i_reader.takeDelimiter('\n')) |line| {
+            var parts = std.mem.splitScalar(u8, line, ',');
+
+            const id = parts.next().?;
+            const fen = parts.next().?;
+            const moves = parts.next().?;
+
+            const meta = PuzzleMeta.parse(id, moves);
+
+            try writer.add(types.Fen.parse(fen), meta);
+        }
+
+        try writer.close(io);
+    }
+};
 
 test "af" {
-    try read_csv_to_build_db(std.testing.io, "data/athousand_sorted.csv", "data/athousand.pos.db", "data/athousand.meta.db");
+    try BuildDb.read_csv_to_build_db_if_doesnt_exists(std.testing.io, "data/athousand_sorted.csv", "data/athousand.pos.db", "data/athousand.meta.db");
 }
