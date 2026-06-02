@@ -87,7 +87,13 @@ const Square = enum(u8) {
 
 const Squares = [64]Square{ Square.A1, Square.B1, Square.C1, Square.D1, Square.E1, Square.F1, Square.G1, Square.H1, Square.A2, Square.B2, Square.C2, Square.D2, Square.E2, Square.F2, Square.G2, Square.H2, Square.A3, Square.B3, Square.C3, Square.D3, Square.E3, Square.F3, Square.G3, Square.H3, Square.A4, Square.B4, Square.C4, Square.D4, Square.E4, Square.F4, Square.G4, Square.H4, Square.A5, Square.B5, Square.C5, Square.D5, Square.E5, Square.F5, Square.G5, Square.H5, Square.A6, Square.B6, Square.C6, Square.D6, Square.E6, Square.F6, Square.G6, Square.H6, Square.A7, Square.B7, Square.C7, Square.D7, Square.E7, Square.F7, Square.G7, Square.H7, Square.A8, Square.B8, Square.C8, Square.D8, Square.E8, Square.F8, Square.G8, Square.H8 };
 
-const Color = enum(u1) { White, Black };
+const Color = enum(u1) {
+    White,
+    Black,
+    pub fn opposite(self: Color) Color {
+        return if (self == Color.White) Color.Black else Color.White;
+    }
+};
 const Role = enum(u8) { King, Queen, Rook, Bishop, Knight, Pawn };
 
 const Piece = enum(u8) {
@@ -113,6 +119,9 @@ const Piece = enum(u8) {
 };
 
 test "piece" {
+    try std.testing.expectEqual(@as(File, @enumFromInt(0)), File.A);
+    try std.testing.expectEqual(@as(Rank, @enumFromInt(7)), Rank.R8);
+
     try std.testing.expect(Piece.White_Pawn.colorOf() == Color.White);
     try std.testing.expect(Piece.White_Bishop.colorOf() == Color.White);
     try std.testing.expect(Piece.White_King.colorOf() == Color.White);
@@ -126,7 +135,7 @@ test "piece" {
     try std.testing.expect(Piece.Black_King.roleOf() == Role.King);
 }
 
-const Bitboard = struct {
+const Bitboard = packed struct {
     bits: u64,
 
     pub const All = Bitboard{ .bits = 0xffff_ffff_ffff_ffff };
@@ -223,6 +232,10 @@ const Bitboard = struct {
         return self.bits != 0;
     }
 
+    pub fn set(self: Bitboard, square: Square) Bitboard {
+        return self.bitor(Bitboard.fromSquare(square));
+    }
+
     pub fn bitand(self: Bitboard, other: Bitboard) Bitboard {
         return Bitboard{ .bits = self.bits & other.bits };
     }
@@ -270,6 +283,9 @@ test "square" {
 
     for (Squares) |square|
         try std.testing.expect(Bitboard.fromSquare(square).single() == square);
+
+    try std.testing.expectEqual(Square.A1, Square.fromCoord(File.A, Rank.R1));
+    try std.testing.expectEqual(Square.H8, Square.fromCoord(File.H, Rank.R8));
 }
 
 const Direction = enum { Up, Down, Left, Right, Up_Left, Up_Right, Down_Left, Down_Right };
@@ -327,6 +343,42 @@ const Prints = struct {
             }
         }
         return string;
+    }
+
+    pub fn position(self: Position) [71]u8 {
+        var string: [71]u8 = undefined;
+        for (&string, 0..) |*val, i| {
+            const f: usize = i % 9;
+            const r: usize = (71 - i) / 9;
+            if (f == 8) {
+                val.* = '\n';
+            } else {
+                const square = Square.fromCoord(@enumFromInt(f), @enumFromInt(r));
+                if (self.pieceOn(square)) |pieceOn| {
+                    val.* = piece(pieceOn);
+                } else {
+                    val.* = '.';
+                }
+            }
+        }
+        return string;
+    }
+
+    pub fn piece(self: Piece) u8 {
+        return switch (self) {
+            Piece.White_Bishop => 'B',
+            Piece.White_Rook => 'R',
+            Piece.White_Knight => 'N',
+            Piece.White_King => 'K',
+            Piece.White_Queen => 'Q',
+            Piece.White_Pawn => 'P',
+            Piece.Black_Bishop => 'b',
+            Piece.Black_Rook => 'r',
+            Piece.Black_Knight => 'n',
+            Piece.Black_King => 'k',
+            Piece.Black_Queen => 'q',
+            Piece.Black_Pawn => 'p',
+        };
     }
 };
 
@@ -410,11 +462,19 @@ fn expectBitboard(expected: []const u8, actual: Bitboard) !void {
     return std.testing.expectEqualStrings(expected, &Prints.bitboard(actual));
 }
 
-var Position = packed struct {
-    bb_occupied: Bitboard,
-    bb_turn: Bitboard,
-    bb_pieces: [6]Bitboard,
+const Position = packed struct {
+    bb_king: Bitboard,
+    bb_queen: Bitboard,
+    bb_rook: Bitboard,
+    bb_bishop: Bitboard,
+    bb_knight: Bitboard,
+    bb_pawn: Bitboard,
+    bb_turn: Bitboard, // 8 * 7
     color_turn: Color,
+
+    pub fn empty() Position {
+        return std.mem.zeroes(Position);
+    }
 
     pub fn occupied(self: Position) Bitboard {
         return self.bb_occupied;
@@ -424,40 +484,172 @@ var Position = packed struct {
         return self.bb_turn;
     }
 
-    pub fn turnAsColor(self: Position) Bitboard {
+    pub fn turnAsColor(self: Position) Color {
         return self.color_turn;
+    }
+
+    pub fn pieceOn(self: Position, square: Square) ?Piece {
+        if (self.bb_turn.has(square)) {
+            if (self.bb_pawn.has(square))
+                return if (self.color_turn == Color.White) Piece.White_Pawn else Piece.Black_Pawn;
+            if (self.bb_bishop.has(square))
+                return if (self.color_turn == Color.White) Piece.White_Bishop else Piece.Black_Bishop;
+            if (self.bb_knight.has(square))
+                return if (self.color_turn == Color.White) Piece.White_Knight else Piece.Black_Knight;
+            if (self.bb_rook.has(square))
+                return if (self.color_turn == Color.White) Piece.White_Rook else Piece.Black_Rook;
+            if (self.bb_king.has(square))
+                return if (self.color_turn == Color.White) Piece.White_King else Piece.Black_King;
+            if (self.bb_queen.has(square))
+                return if (self.color_turn == Color.White) Piece.White_Queen else Piece.Black_Queen;
+        } else {
+            if (self.bb_pawn.has(square))
+                return if (self.color_turn == Color.Black) Piece.White_Pawn else Piece.Black_Pawn;
+            if (self.bb_bishop.has(square))
+                return if (self.color_turn == Color.Black) Piece.White_Bishop else Piece.Black_Bishop;
+            if (self.bb_knight.has(square))
+                return if (self.color_turn == Color.Black) Piece.White_Knight else Piece.Black_Knight;
+            if (self.bb_rook.has(square))
+                return if (self.color_turn == Color.Black) Piece.White_Rook else Piece.Black_Rook;
+            if (self.bb_king.has(square))
+                return if (self.color_turn == Color.Black) Piece.White_King else Piece.Black_King;
+            if (self.bb_queen.has(square))
+                return if (self.color_turn == Color.Black) Piece.White_Queen else Piece.Black_Queen;
+        }
+        return null;
     }
 
     pub fn opponent(self: Position) Bitboard {
         return self.bb_occupied.bitdiff(self.bb_turn);
     }
 
-    pub fn addPiece(self: Position, square: Square, piece: Piece) void {
+    pub fn addPiece(self: *Position, square: Square, piece: Piece) void {
         const color = piece.colorOf();
         const role = piece.roleOf();
 
-        if (color == self.turn) {
+        if (color == self.color_turn) {
             self.bb_turn = self.bb_turn.set(square);
         }
-        self.bb_pieces[role] = self.bb_pieces[role].set(square);
+        const pieces: [*]Bitboard = @ptrCast(self);
+        pieces[@intFromEnum(role)] = pieces[@intFromEnum(role)].set(square);
+    }
+
+    pub fn flipTurn(self: *Position) void {
+        self.color_turn = self.color_turn.opposite();
     }
 };
 
-const Fen = struct {
+pub const Fen = struct {
     pub const Initial = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
     pub fn parse(string: []const u8) Position {
+        var state: u8 = 0;
+        var position: Position = Position.empty();
         var rank: u8 = 7;
         var file: u8 = 0;
 
         for (string) |char| {
             switch (char) {
+                ' ' => {
+                    state = state + 1;
+                },
                 '/' => {
                     rank = rank - 1;
                     file = 0;
                 },
-                'r', 'n', 'b', 'p', 'k', 'q' => {},
+                1...8 => {
+                    file = file + char;
+                },
+                else => {
+                    if (state == 0) {
+                        if (parsePiece(char)) |piece| {
+                            const square = Square.fromCoord(@enumFromInt(file), @enumFromInt(rank));
+                            position.addPiece(square, piece);
+                            file = file + 1;
+                        }
+                    }
+                    if (char == 'b' and state == 1) {
+                        position.flipTurn();
+                    }
+                },
             }
         }
+        return position;
+    }
+
+    pub fn parsePiece(char: u8) ?Piece {
+        return switch (char) {
+            'r' => Piece.Black_Rook,
+            'b' => Piece.Black_Bishop,
+            'n' => Piece.Black_Knight,
+            'k' => Piece.Black_King,
+            'q' => Piece.Black_Queen,
+            'p' => Piece.Black_Pawn,
+            'R' => Piece.White_Rook,
+            'B' => Piece.White_Bishop,
+            'N' => Piece.White_Knight,
+            'K' => Piece.White_King,
+            'Q' => Piece.White_Queen,
+            'P' => Piece.White_Pawn,
+            else => null,
+        };
     }
 };
+
+test "Position A" {
+    var position: Position = Position.empty();
+    try std.testing.expectEqual(position.turnAsColor(), Color.White);
+    position.flipTurn();
+    try std.testing.expectEqual(position.turnAsColor(), Color.Black);
+
+    try std.testing.expectEqual(64, @sizeOf(Position));
+
+    var position2: Position = Position.empty();
+
+    position2.addPiece(Square.A1, Piece.White_Rook);
+
+    try std.testing.expectEqual(Piece.White_Rook, position2.pieceOn(Square.A1));
+
+    try expectPosition(
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\R.......
+    , position2);
+
+    position2.addPiece(Square.B1, Piece.White_Bishop);
+    position2.addPiece(Square.C1, Piece.White_Knight);
+    position2.addPiece(Square.C3, Piece.White_Pawn);
+
+    try expectPosition(
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\..P.....
+        \\........
+        \\RBN.....
+    , position2);
+}
+
+fn expectPosition(expected: []const u8, actual: Position) !void {
+    return std.testing.expectEqualStrings(expected, &Prints.position(actual));
+}
+
+test "Fen" {
+    try expectPosition(
+        \\rnbqkbnr
+        \\pppppppp
+        \\........
+        \\........
+        \\........
+        \\........
+        \\PPPPPPPP
+        \\RNBQKBNR
+    , Fen.parse(Fen.Initial));
+}
