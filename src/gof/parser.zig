@@ -2,37 +2,37 @@ const std = @import("std");
 
 const Def = struct {};
 
-pub const ParseErrorMsg = struct {
+const ParseErrorMsg = struct {
     line: usize,
     column: usize,
     message: []const u8,
 };
 
-pub const Diagnostics = struct {
+const Diagnostics = struct {
     errors: std.ArrayList(ParseErrorMsg),
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator) !Diagnostics {
+    fn init(allocator: std.mem.Allocator) !Diagnostics {
         return Diagnostics{
             .errors = try std.ArrayList(ParseErrorMsg).initCapacity(allocator, 20),
             .allocator = allocator,
         };
     }
 
-    pub fn deinit(self: *Diagnostics) void {
+    fn deinit(self: *Diagnostics) void {
         for (self.errors.items) |err| {
             self.allocator.free(err.message);
         }
         self.errors.deinit(self.allocator);
     }
 
-    pub fn addError(self: *Diagnostics, line: usize, col: usize, msg: []const u8) !void {
+    fn addError(self: *Diagnostics, line: usize, col: usize, msg: []const u8) !void {
         const owned_msg = try self.allocator.dupe(u8, msg);
 
         try self.errors.append(ParseErrorMsg{ .line = line, .column = col, .message = owned_msg });
     }
 
-    pub fn printAll(self: Diagnostics) void {
+    fn printAll(self: Diagnostics) void {
         for (self.errors.items) |err| {
             std.debug.print("Parser Error [{d}:{d}]: {s}\n", .{ err.line, err.column, err.message });
         }
@@ -240,7 +240,7 @@ test "lexer" {
 }
 
 const DefinitionHeader = struct {
-    name: []Token,
+    name: Token,
     parameters: []Token,
     tags: []Token,
 };
@@ -281,11 +281,17 @@ const Parser = struct {
     allocator: std.mem.Allocator,
     lexer: Lexer,
 
+    next_token: ?Token,
+    lookahead_token: ?Token,
+
+    fn advance(self: *Parser) void {
+        self.next_token = self.lookahead_token;
+        self.lookahead_token = self.lexer.next_token();
+    }
+
     fn init(allocator: std.mem.Allocator, script: []const u8) Parser {
-        return Parser{
-            .allocator = allocator,
-            .lexer = Lexer.init(script),
-        };
+        var lexer = Lexer.init(script);
+        return Parser{ .allocator = allocator, .lexer = lexer, .next_token = lexer.next_token(), .lookahead_token = lexer.next_token() };
     }
 
     fn parse_program(self: *Parser) !Program {
@@ -294,7 +300,7 @@ const Parser = struct {
         var blocks: std.ArrayList(Block) = .empty;
         errdefer blocks.deinit(self.allocator);
 
-        while (self.parse_block()) |block| {
+        while (try self.parse_block()) |block| {
             try blocks.append(self.allocator, block);
         }
 
@@ -315,22 +321,149 @@ const Parser = struct {
         return configurations.toOwnedSlice(self.allocator);
     }
 
+    fn eat(self: *Parser, kind: TokenType) ?Token {
+        if (self.next_token) |token| {
+            if (token.kind != kind) {
+                return null;
+            }
+            self.advance();
+            return token;
+        }
+        return null;
+    }
+
     fn parse_configuration(self: *Parser) ?Configuration {
         _ = self;
         return null;
     }
 
-    fn parse_block(self: *Parser) ?Block {
+    fn parse_definition(self: *Parser) !?Definition {
+        if (try self.parse_definition_header()) |header| {
+            var calls: std.ArrayList(DefinitionCall) = .empty;
+            errdefer calls.deinit(self.allocator);
+
+            while (self.parse_definition_call()) |call| {
+                try calls.append(self.allocator, call);
+            }
+
+            return .{
+                .header = header,
+                .calls = try calls.toOwnedSlice(self.allocator),
+            };
+        }
+        return null;
+    }
+
+    fn parse_definition_header(self: *Parser) !?DefinitionHeader {
+        var parameters: std.ArrayList(Token) = .empty;
+        errdefer parameters.deinit(self.allocator);
+
+        var tags: std.ArrayList(Token) = .empty;
+        errdefer tags.deinit(self.allocator);
+
+        var name: ?Token = undefined;
+
+        const has_failed = has_failed: {
+            if (self.next_token) |token| {
+                if (token.kind == TokenType.Def) {
+                    name = self.eat(TokenType.LowerVariable);
+                    if (name == null) {
+                        break :has_failed true;
+                    }
+
+                    if (self.eat(TokenType.OpenParenthesis) == null) {
+                        // diagnostics
+                        // synchronize
+                        break :has_failed true;
+                    }
+                    while (self.next_token) |token2| {
+                        if (token2.kind == TokenType.CloseParenthesis)
+                            break;
+                        if (self.parse_definition_parameter_token()) |token3| {
+                            try parameters.append(self.allocator, token3);
+                            if (self.eat(TokenType.CloseParenthesis) != null)
+                                break;
+                            if (self.eat(TokenType.Comma) != null)
+                                continue;
+                            break :has_failed true;
+                        } else if (self.eat(TokenType.CloseParenthesis) != null) {
+                            break;
+                        } else {
+                            break :has_failed true;
+                        }
+                    }
+                }
+            }
+            break :has_failed false;
+        };
+
+        if (has_failed) {
+            parameters.clearAndFree(self.allocator);
+            tags.clearAndFree(self.allocator);
+            return null;
+        }
+
+        return .{
+            .name = name.?,
+            .parameters = try parameters.toOwnedSlice(self.allocator),
+            .tags = try tags.toOwnedSlice(self.allocator),
+        };
+    }
+
+    fn parse_definition_call(self: *Parser) ?DefinitionCall {
         _ = self;
         return null;
     }
+
+    fn parse_definition_parameter_token(self: *Parser) ?Token {
+        if (self.next_token) |token| {
+            if (token.kind == TokenType.UpperVariable)
+                return token;
+            if (token.kind == TokenType.Underscore)
+                return token;
+        }
+        return null;
+    }
+
+    fn parse_description(self: *Parser) ?Description {
+        _ = self;
+        return null;
+    }
+
+    fn parse_block(self: *Parser) !?Block {
+        const configurations = try self.parse_configurations();
+
+        var definitions: std.ArrayList(Definition) = .empty;
+        errdefer definitions.deinit(self.allocator);
+
+        var descriptions: std.ArrayList(Description) = .empty;
+        errdefer descriptions.deinit(self.allocator);
+
+        while (true) {
+            if (try self.parse_definition()) |definition|
+                try definitions.append(self.allocator, definition)
+            else if (self.parse_description()) |description|
+                try descriptions.append(self.allocator, description)
+            else
+                break;
+        }
+
+        if (definitions.items.len == 0 and descriptions.items.len == 0)
+            return null;
+
+        return .{
+            .configurations = configurations,
+            .descriptions = try descriptions.toOwnedSlice(self.allocator),
+            .definitions = try definitions.toOwnedSlice(self.allocator),
+        };
+    }
 };
 
-pub const ParsedProgram = struct {
+const ParsedProgram = struct {
     arena: std.heap.ArenaAllocator,
     program: Program,
 
-    pub fn init(allocator: std.mem.Allocator, text: []const u8) !ParsedProgram {
+    fn init(allocator: std.mem.Allocator, text: []const u8) !ParsedProgram {
         var arena = std.heap.ArenaAllocator.init(allocator);
         errdefer arena.deinit();
 
@@ -339,42 +472,38 @@ pub const ParsedProgram = struct {
         return ParsedProgram{ .arena = arena, .program = program };
     }
 
-    pub fn deinit(self: *ParsedProgram) void {
+    fn deinit(self: *ParsedProgram) void {
         self.arena.deinit();
-    }
-
-    pub fn blocks(self: *const ParsedProgram) []Block {
-        return self.program.blocks;
-    }
-
-    pub fn configurations(self: *const ParsedProgram) []Configuration {
-        return self.program.configurations;
     }
 };
 
 test "parser empty" {
     const allocator = std.testing.allocator;
 
-    const program = try ParsedProgram.init(allocator,
+    const parsed_program = try ParsedProgram.init(allocator,
         \\
         \\
         \\
     );
 
-    try std.testing.expectEqual(0, program.blocks().len);
-    try std.testing.expectEqual(0, program.configurations().len);
+    const program = parsed_program.program;
+
+    try std.testing.expectEqual(0, program.blocks.len);
+    try std.testing.expectEqual(0, program.configurations.len);
 }
 
 test "parser definition" {
     const allocator = std.testing.allocator;
 
-    const program = try ParsedProgram.init(allocator,
+    const parsed_program = try ParsedProgram.init(allocator,
         \\
         \\ def captures(From, Captured_To)
         \\   capture(From, To, Captured)
         \\
     );
 
-    try std.testing.expectEqual(1, program.blocks().len);
-    try std.testing.expectEqual(0, program.configurations().len);
+    const program = parsed_program.program;
+
+    try std.testing.expectEqual(1, program.blocks.len);
+    try std.testing.expectEqual(0, program.configurations.len);
 }
