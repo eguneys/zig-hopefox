@@ -9,5 +9,7 @@ pub fn main(init: std.process.Init) !void {
     //try file.BuildDb.read_csv_to_build_db_if_doesnt_exists(init.io, "data/athousand_sorted.csv", "data/athousand.pos.db", "data/athousand.meta.db");
 
     var gpa: std.heap.DebugAllocator(.{}) = .init;
-    try gof.Usage.usage("hello world", gpa.allocator());
+    try gof.Usage.usage(
+        \\
+    , gpa.allocator());
 }
