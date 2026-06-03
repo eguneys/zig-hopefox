@@ -550,3 +550,15 @@ test "parser definition" {
     try std.testing.expectEqual(3, program.blocks[0].definitions[0].calls[0].arguments.len);
     try std.testing.expectEqualStrings("Captured", program.blocks[0].definitions[0].calls[0].arguments[2].value);
 }
+
+test "fuzz example" {
+    const global = struct {
+        fn testOne(ctx: type, input: *std.testing.Smith) anyerror!void {
+            _ = ctx;
+            var output = [_]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+            input.bytes(&output);
+            try std.testing.expect(!std.mem.eql(u8, "canyoufindme", &output));
+        }
+    };
+    try std.testing.fuzz(global, global.testOne, .{});
+}
