@@ -16,13 +16,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          autocrlf: false
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
 
       - name: Check code formatting
+        if: runner.os == 'Linux'
         run: zig fmt --check .
 
       - name: Build and run tests
