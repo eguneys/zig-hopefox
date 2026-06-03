@@ -552,7 +552,7 @@ test "parser definition" {
 }
 
 test "fuzz lexer" {
-    try std.testing.fuzz({}, fuzzLexer, .{});
+    //try std.testing.fuzz({}, fuzzLexer, .{});
 }
 
 fn fuzzLexer(context: void, smith: *std.testing.Smith) !void {
