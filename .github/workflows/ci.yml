@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          autocrlf: false
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
