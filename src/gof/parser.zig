@@ -234,7 +234,7 @@ const DefinitionHeader = struct {
 };
 
 const DefinitionCall = struct {
-    name: []Token,
+    name: Token,
     arguments: []Token,
 };
 
@@ -337,7 +337,7 @@ const Parser = struct {
             var calls: std.ArrayList(DefinitionCall) = .empty;
             errdefer calls.deinit(self.allocator);
 
-            while (self.parse_definition_call()) |call| {
+            while (try self.parse_definition_call()) |call| {
                 try calls.append(self.allocator, call);
             }
 
@@ -370,26 +370,14 @@ const Parser = struct {
                     // synchronize
                     break :has_failed true;
                 }
-                while (self.next_token) |token2| {
-                    if (token2.kind == TokenType.CloseParenthesis)
-                        break;
-                    if (self.parse_definition_parameter_token()) |token3| {
-                        try parameters.append(self.allocator, token3);
-                        if (self.eat(TokenType.CloseParenthesis) != null)
-                            break;
-                        if (self.eat(TokenType.Comma) != null)
-                            continue;
-                        break :has_failed true;
-                    } else if (self.eat(TokenType.CloseParenthesis) != null) {
-                        break;
-                    } else {
-                        break :has_failed true;
-                    }
-                }
-            } else {
-                break :has_failed true;
-            }
-            break :has_failed false;
+                while (self.parse_definition_parameter_token()) |token2| {
+                    try parameters.append(self.allocator, token2);
+                    if (self.eat(TokenType.CloseParenthesis) != null)
+                        break :has_failed false;
+                    if (self.eat(TokenType.Comma) != null)
+                        continue;
+                } else break :has_failed true;
+            } else break :has_failed true;
         };
 
         if (has_failed) {
@@ -397,7 +385,6 @@ const Parser = struct {
             tags.clearAndFree(self.allocator);
             return null;
         }
-        std.debug.print("\nXXX{s}XXX\n", .{"has_passed"});
 
         return if (m_name) |name|
             .{
@@ -409,6 +396,11 @@ const Parser = struct {
             null;
     }
 
+    fn log_token(self: *Parser, token: Token) void {
+        _ = self;
+        std.debug.print("Log Token: .{s} {s}\n", .{ std.enums.tagName(TokenType, token.kind).?, token.value });
+    }
+
     fn log_next_token(self: *Parser) void {
         if (self.next_token) |token| {
             std.debug.print("Next Token: .{s} {s}\n", .{ std.enums.tagName(TokenType, token.kind).?, token.value });
@@ -418,9 +410,44 @@ const Parser = struct {
         }
     }
 
-    fn parse_definition_call(self: *Parser) ?DefinitionCall {
-        _ = self;
-        return null;
+    fn parse_definition_call(self: *Parser) !?DefinitionCall {
+        var arguments: std.ArrayList(Token) = .empty;
+        errdefer arguments.deinit(self.allocator);
+
+        var m_name: ?Token = undefined;
+
+        const has_failed = has_failed: {
+            m_name = self.eat(TokenType.LowerVariable);
+            if (m_name == null) {
+                break :has_failed true;
+            }
+
+            if (self.eat(TokenType.OpenParenthesis) == null) {
+                // diagnostics
+                // synchronize
+                break :has_failed true;
+            }
+            while (self.eat(TokenType.UpperVariable)) |token2| {
+                try arguments.append(self.allocator, token2);
+                if (self.eat(TokenType.CloseParenthesis) != null)
+                    break :has_failed false;
+                if (self.eat(TokenType.Comma) != null)
+                    continue;
+            } else break :has_failed true;
+        };
+
+        if (has_failed) {
+            arguments.clearAndFree(self.allocator);
+            return null;
+        }
+
+        return if (m_name) |name|
+            .{
+                .name = name,
+                .arguments = try arguments.toOwnedSlice(self.allocator),
+            }
+        else
+            null;
     }
 
     fn parse_definition_parameter_token(self: *Parser) ?Token {
@@ -450,6 +477,7 @@ const Parser = struct {
                 break;
         }
 
+        //std.debug.print("Definitions {d}", .{definitions.items.len});
         if (definitions.items.len == 0 and descriptions.items.len == 0)
             return null;
 
@@ -509,4 +537,16 @@ test "parser definition" {
 
     try std.testing.expectEqual(1, program.blocks.len);
     try std.testing.expectEqual(0, program.configurations.len);
+
+    try std.testing.expectEqual(1, program.blocks[0].definitions.len);
+
+    try std.testing.expectEqualStrings("captures", program.blocks[0].definitions[0].header.name.value);
+
+    try std.testing.expectEqual(4, program.blocks[0].definitions[0].header.parameters.len);
+
+    try std.testing.expectEqual(1, program.blocks[0].definitions[0].calls.len);
+
+    try std.testing.expectEqualStrings("captures", program.blocks[0].definitions[0].calls[0].name.value);
+    try std.testing.expectEqual(3, program.blocks[0].definitions[0].calls[0].arguments.len);
+    try std.testing.expectEqualStrings("Captured", program.blocks[0].definitions[0].calls[0].arguments[2].value);
 }
