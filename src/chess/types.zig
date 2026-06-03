@@ -504,33 +504,37 @@ pub const Position = packed struct(u512) {
     }
 
     pub fn pieceOn(self: Position, square: Square) ?Piece {
-        if (self.colorOn(square)) |color| {
-            if (self.roleOn(square)) |role| {
-                return Piece.fromColors(color, role);
-            }
+        if (self.roleOn(square)) |role| {
+            return Piece.fromColors(self.colorOnFast(square), role);
         }
         return null;
     }
 
+    pub fn colorOnFast(self: Position, square: Square) Color {
+        return if (self.bb_white.has(square))
+            Color.White
+        else
+            Color.Black;
+    }
+
     pub fn colorOn(self: Position, square: Square) ?Color {
-        if (self.bb_white.has(square)) {
-            return Color.White;
-        } else if (self.occupied().has(square)) {
-            return Color.Black;
-        } else {
-            return null;
-        }
+        return if (self.bb_white.has(square))
+            Color.White
+        else if (self.occupied().has(square))
+            Color.Black
+        else
+            null;
     }
 
     pub fn roleOn(self: Position, square: Square) ?Role {
         if (self.bb_pawn.has(square))
             return Role.Pawn;
+        if (self.bb_rook.has(square))
+            return Role.Rook;
         if (self.bb_bishop.has(square))
             return Role.Bishop;
         if (self.bb_knight.has(square))
             return Role.Knight;
-        if (self.bb_rook.has(square))
-            return Role.Rook;
         if (self.bb_king.has(square))
             return Role.King;
         if (self.bb_queen.has(square))
@@ -542,13 +546,13 @@ pub const Position = packed struct(u512) {
         return self.bb_occupied.bitdiff(self.bb_turn);
     }
 
-    pub fn addPiece(self: *Position, square: Square, piece: Piece) void {
+    pub fn put_piece(self: *Position, square: Square, piece: Piece) void {
         const color = piece.colorOf();
         const role = piece.roleOf();
 
-        if (color == Color.White) {
+        if (color == Color.White)
             self.bb_white = self.bb_white.set(square);
-        }
+
         const pieces: [*]Bitboard = @ptrCast(self);
         pieces[@intFromEnum(role)] = pieces[@intFromEnum(role)].set(square);
     }
@@ -565,20 +569,6 @@ pub const Position = packed struct(u512) {
         self.bb_queen = self.bb_queen.unset(square);
         self.bb_bishop = self.bb_bishop.unset(square);
         self.bb_white = self.bb_white.unset(square);
-    }
-
-    pub fn put_piece(self: *Position, square: Square, piece: Piece) void {
-        switch (piece.roleOf()) {
-            Role.Bishop => self.bb_bishop = self.bb_bishop.set(square),
-            Role.Rook => self.bb_rook = self.bb_rook.set(square),
-            Role.Knight => self.bb_knight = self.bb_knight.set(square),
-            Role.Queen => self.bb_queen = self.bb_queen.set(square),
-            Role.King => self.bb_king = self.bb_king.set(square),
-            Role.Pawn => self.bb_pawn = self.bb_pawn.set(square),
-        }
-        if (piece.colorOf() == Color.White) {
-            self.bb_white = self.bb_white.set(square);
-        }
     }
 
     pub fn make_normal_move(self: *Position, from: Square, to: Square) ?Piece {
@@ -632,7 +622,7 @@ pub const Fen = struct {
                     if (state == 0) {
                         if (parsePiece(char)) |piece| {
                             const square = Square.fromCoord(@enumFromInt(file), @enumFromInt(rank));
-                            position.addPiece(square, piece);
+                            position.put_piece(square, piece);
                             file = file + 1;
                         }
                     }
@@ -674,7 +664,7 @@ test "Position A" {
 
     var position2: Position = Position.empty();
 
-    position2.addPiece(Square.A1, Piece.White_Rook);
+    position2.put_piece(Square.A1, Piece.White_Rook);
 
     try std.testing.expectEqual(Piece.White_Rook, position2.pieceOn(Square.A1));
 
@@ -689,9 +679,9 @@ test "Position A" {
         \\R.......
     , position2);
 
-    position2.addPiece(Square.B1, Piece.White_Bishop);
-    position2.addPiece(Square.C1, Piece.White_Knight);
-    position2.addPiece(Square.C3, Piece.White_Pawn);
+    position2.put_piece(Square.B1, Piece.White_Bishop);
+    position2.put_piece(Square.C1, Piece.White_Knight);
+    position2.put_piece(Square.C3, Piece.White_Pawn);
 
     try expectPosition(
         \\........

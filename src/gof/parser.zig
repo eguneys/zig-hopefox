@@ -56,7 +56,6 @@ const TokenType = enum {
     Negation,
     Other,
     Eof,
-    BeginIndentation,
 };
 
 const Token = struct { kind: TokenType, value: []const u8, line_no: usize, column_no: usize };
@@ -88,9 +87,7 @@ const Lexer = struct {
             null;
     }
 
-    fn skip_whitespace(self: *Lexer) ?Token {
-        var indent_start = self.i_next;
-        var is_indentation = self.column_no == 0;
+    fn skip_whitespace(self: *Lexer) void {
         while (self.i_next < self.text.len) {
             const char = self.text[self.i_next];
 
@@ -98,8 +95,6 @@ const Lexer = struct {
                 self.i_next += 1;
                 self.line_no += 1;
                 self.column_no = 0;
-                is_indentation = true;
-                indent_start = self.i_next;
                 continue;
             }
             if (std.ascii.isWhitespace(char)) {
@@ -109,11 +104,6 @@ const Lexer = struct {
             }
             break;
         }
-
-        return if (is_indentation and self.column_no > 0)
-            Token{ .kind = TokenType.BeginIndentation, .line_no = self.line_no, .column_no = 0, .value = self.text[indent_start .. indent_start + self.column_no] }
-        else
-            null;
     }
 
     fn next_word(self: *Lexer) ?[]const u8 {
@@ -159,24 +149,23 @@ const Lexer = struct {
     }
 
     fn next_token(self: *Lexer) Token {
-        if (self.skip_whitespace()) |indentation| {
-            return indentation;
-        }
+        self.skip_whitespace();
 
         if (self.i_next == self.text.len) {
             return Token{ .kind = TokenType.Eof, .line_no = self.line_no, .column_no = 0, .value = undefined };
         }
 
+        const column_no = self.column_no;
         if (self.next_word()) |word| {
             if (std.mem.eql(u8, word, "def")) {
-                return Token{ .kind = TokenType.Def, .line_no = self.line_no, .column_no = self.column_no, .value = word };
+                return Token{ .kind = TokenType.Def, .line_no = self.line_no, .column_no = column_no, .value = word };
             } else if (std.mem.eql(u8, word, "if")) {
-                return Token{ .kind = TokenType.If, .line_no = self.line_no, .column_no = self.column_no, .value = word };
+                return Token{ .kind = TokenType.If, .line_no = self.line_no, .column_no = column_no, .value = word };
             }
             if (std.ascii.isLower(word[0])) {
-                return Token{ .kind = TokenType.LowerVariable, .line_no = self.line_no, .column_no = self.column_no, .value = word };
+                return Token{ .kind = TokenType.LowerVariable, .line_no = self.line_no, .column_no = column_no, .value = word };
             } else if (std.ascii.isUpper(word[0])) {
-                return Token{ .kind = TokenType.UpperVariable, .line_no = self.line_no, .column_no = self.column_no, .value = word };
+                return Token{ .kind = TokenType.UpperVariable, .line_no = self.line_no, .column_no = column_no, .value = word };
             }
         }
 
@@ -185,7 +174,7 @@ const Lexer = struct {
         }
 
         if (self.take_until_whitespace()) |stuff| {
-            return Token{ .kind = TokenType.Other, .line_no = self.line_no, .column_no = self.column_no, .value = stuff };
+            return Token{ .kind = TokenType.Other, .line_no = self.line_no, .column_no = column_no, .value = stuff };
         }
         unreachable;
     }
@@ -222,8 +211,8 @@ test "lexer" {
 
     lexer = Lexer.init("    hello\n\n");
     token = lexer.next_token();
-    try std.testing.expectEqual(TokenType.BeginIndentation, token.kind);
-    try std.testing.expectEqual(4, token.value.len);
+    try std.testing.expectEqual(TokenType.LowerVariable, token.kind);
+    try std.testing.expectEqual(4, token.column_no);
 
     lexer = Lexer.init("    \n\n");
     token = lexer.next_token();
@@ -232,11 +221,10 @@ test "lexer" {
     lexer = Lexer.init(" \n\n   hello");
 
     token = lexer.next_token();
-    try std.testing.expectEqual(TokenType.BeginIndentation, token.kind);
-    try std.testing.expectEqual(3, token.value.len);
-    token = lexer.next_token();
     try std.testing.expectEqual(TokenType.LowerVariable, token.kind);
-    try std.testing.expectEqualStrings("hello", token.value);
+    try std.testing.expectEqual(3, token.column_no);
+    token = lexer.next_token();
+    try std.testing.expectEqual(TokenType.Eof, token.kind);
 }
 
 const DefinitionHeader = struct {
@@ -291,7 +279,14 @@ const Parser = struct {
 
     fn init(allocator: std.mem.Allocator, script: []const u8) Parser {
         var lexer = Lexer.init(script);
-        return Parser{ .allocator = allocator, .lexer = lexer, .next_token = lexer.next_token(), .lookahead_token = lexer.next_token() };
+        const next_token = lexer.next_token();
+        const lookahed_token = lexer.next_token();
+        return Parser{
+            .allocator = allocator,
+            .lexer = lexer,
+            .next_token = next_token,
+            .lookahead_token = lookahed_token,
+        };
     }
 
     fn parse_program(self: *Parser) !Program {
@@ -364,33 +359,31 @@ const Parser = struct {
         var m_name: ?Token = undefined;
 
         const has_failed = has_failed: {
-            if (self.next_token) |token| {
-                if (token.kind == TokenType.Def) {
-                    m_name = self.eat(TokenType.LowerVariable);
-                    if (m_name == null) {
-                        break :has_failed true;
-                    }
+            if (self.eat(TokenType.Def) != null) {
+                m_name = self.eat(TokenType.LowerVariable);
+                if (m_name == null) {
+                    break :has_failed true;
+                }
 
-                    if (self.eat(TokenType.OpenParenthesis) == null) {
-                        // diagnostics
-                        // synchronize
+                if (self.eat(TokenType.OpenParenthesis) == null) {
+                    // diagnostics
+                    // synchronize
+                    break :has_failed true;
+                }
+                while (self.next_token) |token2| {
+                    if (token2.kind == TokenType.CloseParenthesis)
+                        break;
+                    if (self.parse_definition_parameter_token()) |token3| {
+                        try parameters.append(self.allocator, token3);
+                        if (self.eat(TokenType.CloseParenthesis) != null)
+                            break;
+                        if (self.eat(TokenType.Comma) != null)
+                            continue;
                         break :has_failed true;
-                    }
-                    while (self.next_token) |token2| {
-                        if (token2.kind == TokenType.CloseParenthesis)
-                            break;
-                        if (self.parse_definition_parameter_token()) |token3| {
-                            try parameters.append(self.allocator, token3);
-                            if (self.eat(TokenType.CloseParenthesis) != null)
-                                break;
-                            if (self.eat(TokenType.Comma) != null)
-                                continue;
-                            break :has_failed true;
-                        } else if (self.eat(TokenType.CloseParenthesis) != null) {
-                            break;
-                        } else {
-                            break :has_failed true;
-                        }
+                    } else if (self.eat(TokenType.CloseParenthesis) != null) {
+                        break;
+                    } else {
+                        break :has_failed true;
                     }
                 }
             } else {
@@ -404,6 +397,7 @@ const Parser = struct {
             tags.clearAndFree(self.allocator);
             return null;
         }
+        std.debug.print("\nXXX{s}XXX\n", .{"has_passed"});
 
         return if (m_name) |name|
             .{
@@ -415,19 +409,22 @@ const Parser = struct {
             null;
     }
 
+    fn log_next_token(self: *Parser) void {
+        if (self.next_token) |token| {
+            std.debug.print("Next Token: .{s} {s}\n", .{ std.enums.tagName(TokenType, token.kind).?, token.value });
+        }
+        if (self.lookahead_token) |token| {
+            std.debug.print("Lookahead Token: .{s} {s}\n", .{ std.enums.tagName(TokenType, token.kind).?, token.value });
+        }
+    }
+
     fn parse_definition_call(self: *Parser) ?DefinitionCall {
         _ = self;
         return null;
     }
 
     fn parse_definition_parameter_token(self: *Parser) ?Token {
-        if (self.next_token) |token| {
-            if (token.kind == TokenType.UpperVariable)
-                return token;
-            if (token.kind == TokenType.Underscore)
-                return token;
-        }
-        return null;
+        return self.eat(TokenType.UpperVariable) orelse self.eat(TokenType.Underscore);
     }
 
     fn parse_description(self: *Parser) ?Description {
@@ -500,12 +497,13 @@ test "parser empty" {
 test "parser definition" {
     const allocator = std.testing.allocator;
 
-    const parsed_program = try ParsedProgram.init(allocator,
+    var parsed_program = try ParsedProgram.init(allocator,
         \\
         \\ def captures(From, Captured_To)
-        \\   capture(From, To, Captured)
+        \\  captures(From, To, Captured)
         \\
     );
+    defer parsed_program.deinit();
 
     const program = parsed_program.program;
 
