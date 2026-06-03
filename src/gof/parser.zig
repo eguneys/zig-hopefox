@@ -361,13 +361,13 @@ const Parser = struct {
         var tags: std.ArrayList(Token) = .empty;
         errdefer tags.deinit(self.allocator);
 
-        var name: ?Token = undefined;
+        var m_name: ?Token = undefined;
 
         const has_failed = has_failed: {
             if (self.next_token) |token| {
                 if (token.kind == TokenType.Def) {
-                    name = self.eat(TokenType.LowerVariable);
-                    if (name == null) {
+                    m_name = self.eat(TokenType.LowerVariable);
+                    if (m_name == null) {
                         break :has_failed true;
                     }
 
@@ -393,6 +393,8 @@ const Parser = struct {
                         }
                     }
                 }
+            } else {
+                break :has_failed true;
             }
             break :has_failed false;
         };
@@ -403,11 +405,14 @@ const Parser = struct {
             return null;
         }
 
-        return .{
-            .name = name.?,
-            .parameters = try parameters.toOwnedSlice(self.allocator),
-            .tags = try tags.toOwnedSlice(self.allocator),
-        };
+        return if (m_name) |name|
+            .{
+                .name = name,
+                .parameters = try parameters.toOwnedSlice(self.allocator),
+                .tags = try tags.toOwnedSlice(self.allocator),
+            }
+        else
+            null;
     }
 
     fn parse_definition_call(self: *Parser) ?DefinitionCall {
