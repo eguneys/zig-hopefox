@@ -14,7 +14,7 @@ pub const Diagnostics = struct {
 
     pub fn init(allocator: std.mem.Allocator) !Diagnostics {
         return Diagnostics{
-            .errors = try std.ArrayList(ParseErrorMsg).initCapacity(allocator, 100),
+            .errors = try std.ArrayList(ParseErrorMsg).initCapacity(allocator, 20),
             .allocator = allocator,
         };
     }
@@ -29,7 +29,7 @@ pub const Diagnostics = struct {
     pub fn addError(self: *Diagnostics, line: usize, col: usize, msg: []const u8) !void {
         const owned_msg = try self.allocator.dupe(u8, msg);
 
-        try self.allocator.append(.{ .line = line, .column = col, .message = owned_msg });
+        try self.errors.append(ParseErrorMsg{ .line = line, .column = col, .message = owned_msg });
     }
 
     pub fn printAll(self: Diagnostics) void {
@@ -50,6 +50,7 @@ const TokenType = enum {
     OpenBrackets,
     CloseBrackets,
     Equals,
+    Underscore,
     Eaten,
     Dollar,
     Negation,
@@ -145,6 +146,7 @@ const Lexer = struct {
             '$' => TokenType.Dollar,
             '=' => TokenType.Equals,
             ',' => TokenType.Comma,
+            '_' => TokenType.Underscore,
             else => null,
         };
 
@@ -270,116 +272,109 @@ const Block = struct {
     definitions: []Definition,
 };
 
-const Program = struct { configurations: []Configuration, blocks: []Block };
+const Program = struct {
+    blocks: []Block,
+    configurations: []Configuration,
+};
 
 const Parser = struct {
-    diags: Diagnostics,
-    blocks: std.ArrayList(Block),
-    configurations: std.ArrayList(Configuration),
     allocator: std.mem.Allocator,
+    lexer: Lexer,
 
-    pub fn init(allocator: std.mem.Allocator) !Parser {
+    fn init(allocator: std.mem.Allocator, script: []const u8) Parser {
         return Parser{
-            .diags = try Diagnostics.init(allocator),
             .allocator = allocator,
-            .blocks = undefined,
-            .configurations = undefined,
+            .lexer = Lexer.init(script),
         };
     }
 
-    fn parse_program(self: *Parser, script: []const u8) !Program {
-        var lexer = Lexer.init(script);
+    fn parse_program(self: *Parser) !Program {
+        const configurations = try self.parse_configurations();
 
-        const configurations = try self.parse_configurations(&lexer);
+        var blocks: std.ArrayList(Block) = .empty;
+        errdefer blocks.deinit(self.allocator);
 
-        self.blocks = .empty;
-        while (self.parse_block(&lexer)) |block| {
-            try self.blocks.append(self.allocator, block);
+        while (self.parse_block()) |block| {
+            try blocks.append(self.allocator, block);
         }
 
         return Program{
             .configurations = configurations,
-            .blocks = self.blocks.items,
+            .blocks = try blocks.toOwnedSlice(self.allocator),
         };
     }
 
-    fn parse_configurations(self: *Parser, lexer: *Lexer) ![]Configuration {
-        self.configurations = .empty;
+    fn parse_configurations(self: *Parser) ![]Configuration {
+        var configurations: std.ArrayList(Configuration) = .empty;
+        errdefer configurations.deinit(self.allocator);
 
-        while (self.parse_configuration(lexer)) |configuration| {
-            try self.configurations.append(self.allocator, configuration);
+        while (self.parse_configuration()) |configuration| {
+            try configurations.append(self.allocator, configuration);
         }
 
-        return self.configurations.items;
+        return configurations.toOwnedSlice(self.allocator);
     }
 
-    fn parse_configuration(self: *Parser, lexer: *Lexer) ?Configuration {
+    fn parse_configuration(self: *Parser) ?Configuration {
         _ = self;
-        _ = lexer;
         return null;
     }
 
-    fn parse_block(self: *Parser, lexer: *Lexer) ?Block {
+    fn parse_block(self: *Parser) ?Block {
         _ = self;
-        _ = lexer;
         return null;
     }
+};
 
-    pub fn deinit(self: *Parser) void {
-        self.diags.deinit();
+pub const ParsedProgram = struct {
+    arena: std.heap.ArenaAllocator,
+    program: Program,
+
+    pub fn init(allocator: std.mem.Allocator, text: []const u8) !ParsedProgram {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        errdefer arena.deinit();
+
+        var parser = Parser.init(arena.allocator(), text);
+        const program = try parser.parse_program();
+        return ParsedProgram{ .arena = arena, .program = program };
+    }
+
+    pub fn deinit(self: *ParsedProgram) void {
+        self.arena.deinit();
+    }
+
+    pub fn blocks(self: *const ParsedProgram) []Block {
+        return self.program.blocks;
+    }
+
+    pub fn configurations(self: *const ParsedProgram) []Configuration {
+        return self.program.configurations;
     }
 };
 
-pub const Usage = struct {
-    pub fn usage(script: []const u8, allocator: std.mem.Allocator) !void {
-        var diags = try Diagnostics.init(allocator);
-
-        var parser = Parser.init(allocator, &diags);
-
-        const ast = try parser.parse_program(script);
-
-        if (diags.errors.items.len > 0) {
-            std.debug.print("Parsing failed with {d} errors:\n", .{diags.errors.items.len});
-            diags.printAll();
-            return;
-        }
-
-        _ = ast;
-    }
-};
-
-test "usage" {
+test "parser empty" {
     const allocator = std.testing.allocator;
 
-    var parser = try Parser.init(allocator);
-    defer parser.deinit();
-
-    _ = try parser.parse_program(
+    const program = try ParsedProgram.init(allocator,
         \\
         \\
         \\
     );
 
-    try std.testing.expectEqual(0, parser.diags.errors.items.len);
+    try std.testing.expectEqual(0, program.blocks().len);
+    try std.testing.expectEqual(0, program.configurations().len);
 }
 
-fn expectError(script: []const u8, split_errors: []const u8) !void {
+test "parser definition" {
     const allocator = std.testing.allocator;
 
-    var parser = try Parser.init(allocator);
-    defer parser.deinit();
+    const program = try ParsedProgram.init(allocator,
+        \\
+        \\ def captures(From, Captured_To)
+        \\   capture(From, To, Captured)
+        \\
+    );
 
-    _ = try parser.parse(script);
-
-    var errors = std.mem.splitScalar(u8, split_errors, '\n');
-
-    var i: usize = 0;
-    while (errors.next()) |expected| {
-        try std.testing.expect(parser.diags.errors.items.len > i);
-        const actual = parser.diags.errors.items[i];
-        try std.testing.expectEqualStrings(actual.message, expected);
-        i += 1;
-    }
-
-    try std.testing.expectEqual(i, parser.diags.errors.items.len);
+    try std.testing.expectEqual(1, program.blocks().len);
+    try std.testing.expectEqual(0, program.configurations().len);
 }
