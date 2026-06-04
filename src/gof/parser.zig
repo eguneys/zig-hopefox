@@ -289,17 +289,17 @@ const DescriptionLine = struct {
 
 const Description = struct { lines: []DescriptionLine };
 
-const Configuration = struct { name: Token, value: Token };
+const Configuration = struct { name: Token };
 
 const Block = struct {
-    configurations: []Configuration,
+    configurations: ?[]Configuration,
     descriptions: []Description,
     definitions: []Definition,
 };
 
 const Program = struct {
     blocks: []Block,
-    configurations: []Configuration,
+    configurations: ?[]Configuration,
 };
 
 const Parser = struct {
@@ -333,24 +333,31 @@ const Parser = struct {
         errdefer blocks.deinit(self.allocator);
 
         while (try self.parse_block()) |block| {
+            if (block.definitions.len == 0 and block.descriptions.len == 0) {
+                continue;
+            }
             try blocks.append(self.allocator, block);
         }
 
-        return Program{
+        return .{
             .configurations = configurations,
             .blocks = try blocks.toOwnedSlice(self.allocator),
         };
     }
 
-    fn parse_configurations(self: *Parser) ![]Configuration {
+    fn parse_configurations(self: *Parser) !?[]Configuration {
         var configurations: std.ArrayList(Configuration) = .empty;
         errdefer configurations.deinit(self.allocator);
 
+        if (self.eat(TokenType.Equals) == null) {
+            configurations.clearAndFree(self.allocator);
+            return null;
+        }
         while (self.parse_configuration()) |configuration| {
             try configurations.append(self.allocator, configuration);
         }
 
-        return configurations.toOwnedSlice(self.allocator);
+        return try configurations.toOwnedSlice(self.allocator);
     }
 
     fn eat(self: *Parser, kind: TokenType) ?Token {
@@ -365,7 +372,9 @@ const Parser = struct {
     }
 
     fn parse_configuration(self: *Parser) ?Configuration {
-        _ = self;
+        if (self.eat(TokenType.UpperVariable) orelse self.eat(TokenType.LowerVariable)) |name| {
+            return Configuration{ .name = name };
+        }
         return null;
     }
 
@@ -562,7 +571,9 @@ const Parser = struct {
     }
 
     fn parse_block(self: *Parser) !?Block {
-        _ = self.eat(TokenType.TripleHash);
+        if (self.eat(TokenType.TripleHash) == null) {
+            return null;
+        }
 
         const configurations = try self.parse_configurations();
 
@@ -582,8 +593,8 @@ const Parser = struct {
         }
 
         //std.debug.print("Definitions {d}", .{definitions.items.len});
-        if (definitions.items.len == 0 and descriptions.items.len == 0)
-            return null;
+        //if (definitions.items.len == 0 and descriptions.items.len == 0)
+        //    return null;
 
         return .{
             .configurations = configurations,
@@ -623,13 +634,15 @@ test "parser empty" {
     const program = parsed_program.program;
 
     try std.testing.expectEqual(0, program.blocks.len);
-    try std.testing.expectEqual(0, program.configurations.len);
+    try std.testing.expect(program.configurations == null);
+    try std.testing.expectEqual(null, program.configurations);
 }
 
 test "parser definition" {
     const allocator = std.testing.allocator;
 
     var parsed_program = try ParsedProgram.init(allocator,
+        \\###
         \\
         \\ def captures(From, Captured_To)
         \\  captures(From, To, Captured)
@@ -640,7 +653,7 @@ test "parser definition" {
     const program = parsed_program.program;
 
     try std.testing.expectEqual(1, program.blocks.len);
-    try std.testing.expectEqual(0, program.configurations.len);
+    try std.testing.expectEqual(program.configurations, null);
 
     try std.testing.expectEqual(1, program.blocks[0].definitions.len);
 
@@ -659,6 +672,7 @@ test "parser description" {
     const allocator = std.testing.allocator;
 
     var parsed_program = try ParsedProgram.init(allocator,
+        \\###
         \\
         \\ if captures(king, queen_rook)
         \\ ve attacks(king2, bishop, f3)
@@ -670,7 +684,7 @@ test "parser description" {
     const program = parsed_program.program;
 
     try std.testing.expectEqual(1, program.blocks.len);
-    try std.testing.expectEqual(0, program.configurations.len);
+    try std.testing.expectEqual(null, program.configurations);
 
     try std.testing.expectEqual(1, program.blocks[0].descriptions.len);
 
@@ -689,7 +703,7 @@ test "parser mixed" {
     const allocator = std.testing.allocator;
 
     var parsed_program = try ParsedProgram.init(allocator,
-        \\
+        \\###
         \\
         \\ def captures(From, Captured_To)
         \\  captures(From, To, Captured)
@@ -708,7 +722,7 @@ test "parser mixed" {
     const program = parsed_program.program;
 
     try std.testing.expectEqual(1, program.blocks.len);
-    try std.testing.expectEqual(0, program.configurations.len);
+    try std.testing.expectEqual(null, program.configurations);
 
     try std.testing.expectEqual(1, program.blocks[0].descriptions.len);
     try std.testing.expectEqual(2, program.blocks[0].definitions.len);
@@ -743,45 +757,71 @@ test "parser blocks" {
     try std.testing.expectEqual(2, program.blocks.len);
 }
 
-test "fuzz lexer" {
-    //try std.testing.fuzz({}, fuzzLexer, .{});
+test "configurations program" {
+    const allocator = std.testing.allocator;
+
+    var parsed_program = try ParsedProgram.init(allocator,
+        \\=GlobalConfig123 anotherConfigabc
+        \\
+        \\###
+        \\
+        \\ def captures(From, Captured_To)
+        \\  captures(From, To, Captured)
+        \\
+        \\###
+    );
+    defer parsed_program.deinit();
+
+    const program = parsed_program.program;
+
+    try std.testing.expectEqual(2, program.configurations.?.len);
+    try std.testing.expectEqualStrings("GlobalConfig123", program.configurations.?[0].name.value);
+    try std.testing.expectEqualStrings("anotherConfigabc", program.configurations.?[1].name.value);
 }
 
-fn fuzzLexer(context: void, smith: *std.testing.Smith) !void {
-    _ = context;
+test "configurations program with block" {
+    const allocator = std.testing.allocator;
 
-    _ = smith;
-    //const a = smith.value(u8);
-    //try std.testing.expect(a != 3);
+    var parsed_program = try ParsedProgram.init(allocator,
+        \\ ###
+        \\=GlobalConfig123 anotherConfigabc
+        \\
+        \\###
+        \\
+        \\ def captures(From, Captured_To)
+        \\  captures(From, To, Captured)
+        \\
+        \\###
+    );
+    defer parsed_program.deinit();
+
+    const program = parsed_program.program;
+
+    try std.testing.expectEqual(null, program.configurations);
+    try std.testing.expectEqual(1, program.blocks.len);
+    try std.testing.expectEqual(null, program.blocks[0].configurations);
 }
 
-fn testOne(context: void, smith: *std.testing.Smith) !void {
-    _ = context;
-    // Try passing `--fuzz` to `zig build test` and see if it manages to fail this test case!
+test "configurations block" {
+    const allocator = std.testing.allocator;
 
-    const gpa = std.testing.allocator;
-    var list: std.ArrayList(u8) = .empty;
-    defer list.deinit(gpa);
-    while (!smith.eos()) switch (smith.value(enum { add_data, dup_data })) {
-        .add_data => {
-            const slice = try list.addManyAsSlice(gpa, smith.value(u4));
-            smith.bytes(slice);
-        },
-        .dup_data => {
-            if (list.items.len == 0) continue;
-            if (list.items.len > std.math.maxInt(u32)) return error.SkipZigTest;
-            const len = smith.valueRangeAtMost(u32, 1, @min(32, list.items.len));
-            const off = smith.valueRangeAtMost(u32, 0, @intCast(list.items.len - len));
-            try list.appendSlice(gpa, list.items[off..][0..len]);
-            try std.testing.expectEqualSlices(
-                u8,
-                list.items[off..][0..len],
-                list.items[list.items.len - len ..],
-            );
-        },
-    };
-}
+    var parsed_program = try ParsedProgram.init(allocator,
+        \\ ###
+        \\=GlobalConfig123 anotherConfigabc
+        \\
+        \\###
+        \\
+        \\=GlobalConfig123 anotherConfigabc
+        \\ def captures(From, Captured_To)
+        \\  captures(From, To, Captured)
+        \\
+        \\###
+    );
+    defer parsed_program.deinit();
 
-test "fuzz example" {
-    //try std.testing.fuzz({}, testOne, .{});
+    const program = parsed_program.program;
+
+    try std.testing.expectEqual(null, program.configurations);
+    try std.testing.expectEqual(1, program.blocks.len);
+    try std.testing.expectEqual(2, program.blocks[0].configurations.?.len);
 }
