@@ -604,20 +604,23 @@ const Parser = struct {
     }
 };
 
-const ParsedProgram = struct {
+const Compilation = struct {
     arena: std.heap.ArenaAllocator,
-    program: Program,
+    program: ?Program = null,
 
-    fn init(allocator: std.mem.Allocator, text: []const u8) !ParsedProgram {
+    fn init(allocator: std.mem.Allocator) Compilation {
         var arena = std.heap.ArenaAllocator.init(allocator);
         errdefer arena.deinit();
-
-        var parser = Parser.init(arena.allocator(), text);
-        const program = try parser.parse_program();
-        return ParsedProgram{ .arena = arena, .program = program };
+        return .{ .arena = arena };
     }
 
-    fn deinit(self: *ParsedProgram) void {
+    fn parse(self: *Compilation, text: []const u8) !Program {
+        var parser = Parser.init(self.arena.allocator(), text);
+        self.program = try parser.parse_program();
+        return self.program.?;
+    }
+
+    fn deinit(self: *Compilation) void {
         self.arena.deinit();
     }
 };
@@ -625,13 +628,13 @@ const ParsedProgram = struct {
 test "parser empty" {
     const allocator = std.testing.allocator;
 
-    const parsed_program = try ParsedProgram.init(allocator,
+    var compilation = Compilation.init(allocator);
+
+    const program = try compilation.parse(
         \\
         \\
         \\
     );
-
-    const program = parsed_program.program;
 
     try std.testing.expectEqual(0, program.blocks.len);
     try std.testing.expect(program.configurations == null);
@@ -641,16 +644,16 @@ test "parser empty" {
 test "parser definition" {
     const allocator = std.testing.allocator;
 
-    var parsed_program = try ParsedProgram.init(allocator,
+    var compilation = Compilation.init(allocator);
+    defer compilation.deinit();
+
+    const program = try compilation.parse(
         \\###
         \\
         \\ def captures(From, Captured_To)
         \\  captures(From, To, Captured)
         \\
     );
-    defer parsed_program.deinit();
-
-    const program = parsed_program.program;
 
     try std.testing.expectEqual(1, program.blocks.len);
     try std.testing.expectEqual(program.configurations, null);
@@ -671,7 +674,10 @@ test "parser definition" {
 test "parser description" {
     const allocator = std.testing.allocator;
 
-    var parsed_program = try ParsedProgram.init(allocator,
+    var compilation = Compilation.init(allocator);
+    defer compilation.deinit();
+
+    const program = try compilation.parse(
         \\###
         \\
         \\ if captures(king, queen_rook)
@@ -679,9 +685,6 @@ test "parser description" {
         \\   if captures(king2, king3_knight)
         \\
     );
-    defer parsed_program.deinit();
-
-    const program = parsed_program.program;
 
     try std.testing.expectEqual(1, program.blocks.len);
     try std.testing.expectEqual(null, program.configurations);
@@ -702,7 +705,10 @@ test "parser description" {
 test "parser mixed" {
     const allocator = std.testing.allocator;
 
-    var parsed_program = try ParsedProgram.init(allocator,
+    var compilation = Compilation.init(allocator);
+    defer compilation.deinit();
+
+    const program = try compilation.parse(
         \\###
         \\
         \\ def captures(From, Captured_To)
@@ -717,9 +723,6 @@ test "parser mixed" {
         \\
         \\
     );
-    defer parsed_program.deinit();
-
-    const program = parsed_program.program;
 
     try std.testing.expectEqual(1, program.blocks.len);
     try std.testing.expectEqual(null, program.configurations);
@@ -731,7 +734,10 @@ test "parser mixed" {
 test "parser blocks" {
     const allocator = std.testing.allocator;
 
-    var parsed_program = try ParsedProgram.init(allocator,
+    var compilation = Compilation.init(allocator);
+    defer compilation.deinit();
+
+    const program = try compilation.parse(
         \\
         \\
         \\###
@@ -750,9 +756,6 @@ test "parser blocks" {
         \\
         \\###
     );
-    defer parsed_program.deinit();
-
-    const program = parsed_program.program;
 
     try std.testing.expectEqual(2, program.blocks.len);
 }
@@ -760,7 +763,10 @@ test "parser blocks" {
 test "configurations program" {
     const allocator = std.testing.allocator;
 
-    var parsed_program = try ParsedProgram.init(allocator,
+    var compilation = Compilation.init(allocator);
+    defer compilation.deinit();
+
+    const program = try compilation.parse(
         \\=GlobalConfig123 anotherConfigabc
         \\
         \\###
@@ -770,9 +776,6 @@ test "configurations program" {
         \\
         \\###
     );
-    defer parsed_program.deinit();
-
-    const program = parsed_program.program;
 
     try std.testing.expectEqual(2, program.configurations.?.len);
     try std.testing.expectEqualStrings("GlobalConfig123", program.configurations.?[0].name.value);
@@ -782,7 +785,10 @@ test "configurations program" {
 test "configurations program with block" {
     const allocator = std.testing.allocator;
 
-    var parsed_program = try ParsedProgram.init(allocator,
+    var compilation = Compilation.init(allocator);
+    defer compilation.deinit();
+
+    const program = try compilation.parse(
         \\ ###
         \\=GlobalConfig123 anotherConfigabc
         \\
@@ -793,9 +799,6 @@ test "configurations program with block" {
         \\
         \\###
     );
-    defer parsed_program.deinit();
-
-    const program = parsed_program.program;
 
     try std.testing.expectEqual(null, program.configurations);
     try std.testing.expectEqual(1, program.blocks.len);
@@ -805,7 +808,10 @@ test "configurations program with block" {
 test "configurations block" {
     const allocator = std.testing.allocator;
 
-    var parsed_program = try ParsedProgram.init(allocator,
+    var compilation = Compilation.init(allocator);
+    defer compilation.deinit();
+
+    const program = try compilation.parse(
         \\ ###
         \\=GlobalConfig123 anotherConfigabc
         \\
@@ -817,9 +823,6 @@ test "configurations block" {
         \\
         \\###
     );
-    defer parsed_program.deinit();
-
-    const program = parsed_program.program;
 
     try std.testing.expectEqual(null, program.configurations);
     try std.testing.expectEqual(1, program.blocks.len);
