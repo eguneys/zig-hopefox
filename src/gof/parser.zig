@@ -42,6 +42,7 @@ const Diagnostics = struct {
 const TokenType = enum {
     Def,
     If,
+    Ve,
     OpenParenthesis,
     CloseParenthesis,
     Comma,
@@ -54,6 +55,8 @@ const TokenType = enum {
     Eaten,
     Dollar,
     Negation,
+    Hash,
+    TripleHash,
     Other,
     Eof,
 };
@@ -148,11 +151,29 @@ const Lexer = struct {
         return null;
     }
 
+    fn triple_hash(self: *Lexer) ?Token {
+        const i_start = self.i_next;
+        while (self.i_next < self.text.len and self.text[self.i_next] == '#') {
+            self.i_next += 1;
+            self.column_no += 1;
+        }
+        return if (self.i_next == i_start)
+            null
+        else if (self.i_next - i_start == 1)
+            Token{ .kind = TokenType.Hash, .line_no = self.line_no, .column_no = self.column_no, .value = self.text[i_start..self.i_next] }
+        else
+            Token{ .kind = TokenType.TripleHash, .line_no = self.line_no, .column_no = self.column_no, .value = self.text[i_start..self.i_next] };
+    }
+
     fn next_token(self: *Lexer) Token {
         self.skip_whitespace();
 
         if (self.i_next == self.text.len) {
             return Token{ .kind = TokenType.Eof, .line_no = self.line_no, .column_no = 0, .value = undefined };
+        }
+
+        if (self.triple_hash()) |token| {
+            return token;
         }
 
         const column_no = self.column_no;
@@ -161,6 +182,8 @@ const Lexer = struct {
                 return Token{ .kind = TokenType.Def, .line_no = self.line_no, .column_no = column_no, .value = word };
             } else if (std.mem.eql(u8, word, "if")) {
                 return Token{ .kind = TokenType.If, .line_no = self.line_no, .column_no = column_no, .value = word };
+            } else if (std.mem.eql(u8, word, "ve")) {
+                return Token{ .kind = TokenType.Ve, .line_no = self.line_no, .column_no = column_no, .value = word };
             }
             if (std.ascii.isLower(word[0])) {
                 return Token{ .kind = TokenType.LowerVariable, .line_no = self.line_no, .column_no = column_no, .value = word };
@@ -225,6 +248,20 @@ test "lexer" {
     try std.testing.expectEqual(3, token.column_no);
     token = lexer.next_token();
     try std.testing.expectEqual(TokenType.Eof, token.kind);
+
+    lexer = Lexer.init(" \n\n   #");
+    token = lexer.next_token();
+    try std.testing.expectEqual(TokenType.Hash, token.kind);
+
+    lexer = Lexer.init(" \n\n #  ## ### #####");
+    token = lexer.next_token();
+    try std.testing.expectEqual(TokenType.Hash, token.kind);
+    token = lexer.next_token();
+    try std.testing.expectEqual(TokenType.TripleHash, token.kind);
+    token = lexer.next_token();
+    try std.testing.expectEqual(TokenType.TripleHash, token.kind);
+    token = lexer.next_token();
+    try std.testing.expectEqual(TokenType.TripleHash, token.kind);
 }
 
 const DefinitionHeader = struct {
@@ -244,10 +281,10 @@ const Definition = struct {
 };
 
 const DescriptionLine = struct {
-    name: []Token,
+    description: Token,
+    name: Token,
     arguments: []Token,
     tags: []Token,
-    indentation: Token,
 };
 
 const Description = struct { lines: []DescriptionLine };
@@ -454,12 +491,79 @@ const Parser = struct {
         return self.eat(TokenType.UpperVariable) orelse self.eat(TokenType.Underscore);
     }
 
-    fn parse_description(self: *Parser) ?Description {
-        _ = self;
-        return null;
+    fn parse_description_line(self: *Parser) !?DescriptionLine {
+        var arguments: std.ArrayList(Token) = .empty;
+        errdefer arguments.deinit(self.allocator);
+
+        var tags: std.ArrayList(Token) = .empty;
+        errdefer tags.deinit(self.allocator);
+
+        var name: Token = undefined;
+        var description: Token = undefined;
+
+        const has_failed = has_failed: {
+            if (self.eat(TokenType.If) orelse self.eat(TokenType.Ve)) |token| {
+                description = token;
+            } else {
+                break :has_failed true;
+            }
+            if (self.eat(TokenType.LowerVariable)) |token| {
+                name = token;
+            } else {
+                break :has_failed true;
+            }
+
+            if (self.eat(TokenType.OpenParenthesis) == null) {
+                // diagnostics
+                // synchronize
+                break :has_failed true;
+            }
+            while (self.parse_description_argument_token()) |token| {
+                try arguments.append(self.allocator, token);
+                if (self.eat(TokenType.CloseParenthesis) != null)
+                    break :has_failed false;
+                if (self.eat(TokenType.Comma) != null)
+                    continue;
+            } else break :has_failed true;
+        };
+
+        if (has_failed) {
+            arguments.clearAndFree(self.allocator);
+            tags.clearAndFree(self.allocator);
+            return null;
+        }
+
+        return .{
+            .name = name,
+            .description = description,
+            .arguments = try arguments.toOwnedSlice(self.allocator),
+            .tags = try tags.toOwnedSlice(self.allocator),
+        };
+    }
+
+    fn parse_description_argument_token(self: *Parser) ?Token {
+        return self.eat(TokenType.LowerVariable) orelse self.eat(TokenType.Underscore);
+    }
+
+    fn parse_description(self: *Parser) !?Description {
+        var lines: std.ArrayList(DescriptionLine) = .empty;
+        errdefer lines.deinit(self.allocator);
+
+        while (try self.parse_description_line()) |line| {
+            try lines.append(self.allocator, line);
+        }
+        if (lines.items.len == 0) {
+            lines.clearAndFree(self.allocator);
+            return null;
+        }
+        return .{
+            .lines = try lines.toOwnedSlice(self.allocator),
+        };
     }
 
     fn parse_block(self: *Parser) !?Block {
+        _ = self.eat(TokenType.TripleHash);
+
         const configurations = try self.parse_configurations();
 
         var definitions: std.ArrayList(Definition) = .empty;
@@ -471,7 +575,7 @@ const Parser = struct {
         while (true) {
             if (try self.parse_definition()) |definition|
                 try definitions.append(self.allocator, definition)
-            else if (self.parse_description()) |description|
+            else if (try self.parse_description()) |description|
                 try descriptions.append(self.allocator, description)
             else
                 break;
@@ -549,6 +653,94 @@ test "parser definition" {
     try std.testing.expectEqualStrings("captures", program.blocks[0].definitions[0].calls[0].name.value);
     try std.testing.expectEqual(3, program.blocks[0].definitions[0].calls[0].arguments.len);
     try std.testing.expectEqualStrings("Captured", program.blocks[0].definitions[0].calls[0].arguments[2].value);
+}
+
+test "parser description" {
+    const allocator = std.testing.allocator;
+
+    var parsed_program = try ParsedProgram.init(allocator,
+        \\
+        \\ if captures(king, queen_rook)
+        \\ ve attacks(king2, bishop, f3)
+        \\   if captures(king2, king3_knight)
+        \\
+    );
+    defer parsed_program.deinit();
+
+    const program = parsed_program.program;
+
+    try std.testing.expectEqual(1, program.blocks.len);
+    try std.testing.expectEqual(0, program.configurations.len);
+
+    try std.testing.expectEqual(1, program.blocks[0].descriptions.len);
+
+    try std.testing.expectEqual(3, program.blocks[0].descriptions[0].lines.len);
+
+    try std.testing.expectEqualStrings("captures", program.blocks[0].descriptions[0].lines[0].name.value);
+
+    try std.testing.expectEqualStrings("if", program.blocks[0].descriptions[0].lines[0].description.value);
+    try std.testing.expectEqualStrings("ve", program.blocks[0].descriptions[0].lines[1].description.value);
+
+    try std.testing.expectEqual(4, program.blocks[0].descriptions[0].lines[0].arguments.len);
+    try std.testing.expectEqual(TokenType.Underscore, program.blocks[0].descriptions[0].lines[0].arguments[2].kind);
+}
+
+test "parser mixed" {
+    const allocator = std.testing.allocator;
+
+    var parsed_program = try ParsedProgram.init(allocator,
+        \\
+        \\
+        \\ def captures(From, Captured_To)
+        \\  captures(From, To, Captured)
+        \\
+        \\ if captures(king, queen_rook)
+        \\ ve attacks(king2, bishop, f3)
+        \\   if captures(king2, king3_knight)
+        \\
+        \\ def captures(From, Captured_To)
+        \\  captures(From, To, Captured)
+        \\
+        \\
+    );
+    defer parsed_program.deinit();
+
+    const program = parsed_program.program;
+
+    try std.testing.expectEqual(1, program.blocks.len);
+    try std.testing.expectEqual(0, program.configurations.len);
+
+    try std.testing.expectEqual(1, program.blocks[0].descriptions.len);
+    try std.testing.expectEqual(2, program.blocks[0].definitions.len);
+}
+
+test "parser blocks" {
+    const allocator = std.testing.allocator;
+
+    var parsed_program = try ParsedProgram.init(allocator,
+        \\
+        \\
+        \\###
+        \\
+        \\ def captures(From, Captured_To)
+        \\  captures(From, To, Captured)
+        \\
+        \\ if captures(king, queen_rook)
+        \\ ve attacks(king2, bishop, f3)
+        \\   if captures(king2, king3_knight)
+        \\
+        \\###
+        \\
+        \\ def captures(From, Captured_To)
+        \\  captures(From, To, Captured)
+        \\
+        \\###
+    );
+    defer parsed_program.deinit();
+
+    const program = parsed_program.program;
+
+    try std.testing.expectEqual(2, program.blocks.len);
 }
 
 test "fuzz lexer" {
