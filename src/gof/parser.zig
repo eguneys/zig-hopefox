@@ -1,4 +1,5 @@
 const std = @import("std");
+const atomic_filters = @import("atomic_filters.zig");
 
 const Def = struct {};
 
@@ -607,6 +608,7 @@ const Parser = struct {
 const Compilation = struct {
     arena: std.heap.ArenaAllocator,
     program: ?Program = null,
+    semantic_program: ?SemanticProgram = null,
 
     fn init(allocator: std.mem.Allocator) Compilation {
         var arena = std.heap.ArenaAllocator.init(allocator);
@@ -618,6 +620,14 @@ const Compilation = struct {
         var parser = Parser.init(self.arena.allocator(), text);
         self.program = try parser.parse_program();
         return self.program.?;
+    }
+
+    fn parse_semantics(self: *Compilation) !SemanticProgram {
+        return if (self.program) |program| {
+            var semantic_parser = SemanticParser.init(self.arena.allocator());
+            self.semantic_program = try semantic_parser.parse_program(program);
+            return self.semantic_program.?;
+        } else error.ProgramNotParsed;
     }
 
     fn deinit(self: *Compilation) void {
@@ -827,4 +837,327 @@ test "configurations block" {
     try std.testing.expectEqual(null, program.configurations);
     try std.testing.expectEqual(1, program.blocks.len);
     try std.testing.expectEqual(2, program.blocks[0].configurations.?.len);
+}
+
+const SemanticDefinitionName = []const u8;
+const SemanticDefinitionParameter = struct { name: []const u8, name2: ?[]const u8 };
+
+const SemanticDefinitionTag = enum { Win, Cond };
+
+const SemanticDefinitionHeader = struct {
+    name: SemanticDefinitionName,
+    parameters: []SemanticDefinitionParameter,
+    tags: []SemanticDefinitionTag,
+};
+
+const DefinitionCallArgument = struct { name: []const u8 };
+
+const SemanticDefinitionCall = struct {
+    name: atomic_filters.DefinitionCallAction,
+    arguments: []DefinitionCallArgument,
+};
+
+const SemanticDefinition = struct {
+    header: SemanticDefinitionHeader,
+    calls: []const SemanticDefinitionCall,
+};
+
+const SemanticDescriptionDescription = enum { desc_if, desc_ve };
+const SemanticDescriptionName = []const u8;
+
+const SemanticDescriptionArgument = struct { name: []const u8, name2: ?[]const u8 };
+
+const SemanticDescriptionTag = enum {};
+
+const SemanticDescriptionLine = struct {
+    description: SemanticDescriptionDescription,
+    name: SemanticDescriptionName,
+    arguments: []SemanticDescriptionArgument,
+    tags: []SemanticDescriptionTag,
+};
+
+const SemanticDescription = struct { lines: []SemanticDescriptionLine };
+
+const SemanticConfigurationName = enum { id };
+const SemanticConfigurationValue = u64;
+
+const SemanticConfiguration = struct { name: SemanticConfigurationName, value: SemanticConfigurationValue };
+
+const SemanticBlock = struct {
+    configurations: ?[]SemanticConfiguration,
+    descriptions: []SemanticDescription,
+    definitions: []SemanticDefinition,
+};
+
+const SemanticProgram = struct {
+    blocks: []SemanticBlock,
+    configurations: ?[]SemanticConfiguration,
+};
+
+const SemanticParser = struct {
+    allocator: std.mem.Allocator,
+
+    fn init(allocator: std.mem.Allocator) SemanticParser {
+        return .{
+            .allocator = allocator,
+        };
+    }
+
+    fn parse_program(self: *SemanticParser, program: Program) !SemanticProgram {
+        const configurations =
+            if (program.configurations) |configurations|
+                try self.parse_configurations(configurations)
+            else
+                null;
+        const blocks = try self.parse_blocks(program);
+
+        return .{
+            .configurations = configurations,
+            .blocks = blocks,
+        };
+    }
+
+    fn parse_configurations(self: *SemanticParser, configurations: []Configuration) ![]SemanticConfiguration {
+        var semantic_configs: std.ArrayList(SemanticConfiguration) = .empty;
+        errdefer semantic_configs.deinit(self.allocator);
+
+        for (configurations) |config| {
+            if (SemanticParser.parse_semantic_configuration(config)) |semantic_config| {
+                try semantic_configs.append(self.allocator, semantic_config);
+            }
+        }
+        return try semantic_configs.toOwnedSlice(self.allocator);
+    }
+
+    fn parse_blocks(self: *SemanticParser, program: Program) ![]SemanticBlock {
+        var semantic_blocks: std.ArrayList(SemanticBlock) = .empty;
+        errdefer semantic_blocks.deinit(self.allocator);
+
+        for (program.blocks) |block| {
+            try semantic_blocks.append(self.allocator, try self.parse_semantic_block(block));
+        }
+        return try semantic_blocks.toOwnedSlice(self.allocator);
+    }
+
+    fn parse_semantic_configuration(config: Configuration) ?SemanticConfiguration {
+        _ = config;
+        return null;
+    }
+
+    fn parse_semantic_block(self: *SemanticParser, block: Block) !SemanticBlock {
+        const configurations = if (block.configurations) |configs|
+            try self.parse_configurations(configs)
+        else
+            null;
+
+        var semantic_descriptions: std.ArrayList(SemanticDescription) = .empty;
+        errdefer semantic_descriptions.deinit(self.allocator);
+
+        for (block.descriptions) |description| {
+            try semantic_descriptions.append(self.allocator, try self.parse_semantic_description(description));
+        }
+
+        var semantic_definitions: std.ArrayList(SemanticDefinition) = .empty;
+        errdefer semantic_definitions.deinit(self.allocator);
+
+        for (block.definitions) |definition| {
+            try semantic_definitions.append(self.allocator, try self.parse_semantic_definition(definition));
+        }
+
+        return .{
+            .configurations = configurations,
+            .descriptions = try semantic_descriptions.toOwnedSlice(self.allocator),
+            .definitions = try semantic_definitions.toOwnedSlice(self.allocator),
+        };
+    }
+
+    fn parse_semantic_description(self: *SemanticParser, description: Description) !SemanticDescription {
+        var semantic_lines: std.ArrayList(SemanticDescriptionLine) = .empty;
+        errdefer semantic_lines.deinit(self.allocator);
+
+        for (description.lines) |line| {
+            if (try self.parse_semantic_description_line(line)) |semantic_line| {
+                try semantic_lines.append(self.allocator, semantic_line);
+            }
+        }
+        return .{
+            .lines = try semantic_lines.toOwnedSlice(self.allocator),
+        };
+    }
+
+    fn parse_semantic_description_line(self: *SemanticParser, line: DescriptionLine) !?SemanticDescriptionLine {
+        const description =
+            if (std.mem.eql(u8, line.description.value, "if"))
+                SemanticDescriptionDescription.desc_if
+            else if (std.mem.eql(u8, line.description.value, "ve"))
+                SemanticDescriptionDescription.desc_ve
+            else
+                null;
+
+        if (description == null) {
+            return null;
+        }
+
+        return .{
+            .description = description.?,
+            .name = line.name.value,
+            .arguments = try self.parse_semantic_description_arguments(line.arguments),
+            .tags = try self.parse_semantic_description_tags(line.tags),
+        };
+    }
+
+    fn parse_semantic_description_tags(self: *SemanticParser, tags: []Token) ![]SemanticDescriptionTag {
+        var semantic_tags: std.ArrayList(SemanticDescriptionTag) = .empty;
+        errdefer semantic_tags.deinit(self.allocator);
+
+        for (tags) |tag| {
+            if (SemanticParser.parse_semantic_description_tag(tag)) |semantic_tag| {
+                try semantic_tags.append(self.allocator, semantic_tag);
+            }
+        }
+        return try semantic_tags.toOwnedSlice(self.allocator);
+    }
+
+    fn parse_semantic_description_tag(tag: Token) ?SemanticDescriptionTag {
+        _ = tag;
+        return null;
+    }
+
+    fn parse_semantic_description_arguments(self: *SemanticParser, arguments: []Token) ![]SemanticDescriptionArgument {
+        var semantic_arguments: std.ArrayList(SemanticDescriptionArgument) = .empty;
+        errdefer semantic_arguments.deinit(self.allocator);
+
+        for (arguments) |argument| {
+            try semantic_arguments.append(self.allocator, try SemanticParser.parse_semantic_description_argument(argument));
+        }
+        return try semantic_arguments.toOwnedSlice(self.allocator);
+    }
+
+    fn parse_semantic_description_argument(argument: Token) !SemanticDescriptionArgument {
+        return .{
+            .name = argument.value,
+            .name2 = argument.value,
+        };
+    }
+
+    fn parse_semantic_definition(self: *SemanticParser, definition: Definition) !SemanticDefinition {
+        return .{
+            .header = try self.parse_semantic_definition_header(definition.header),
+            .calls = try self.parse_semantic_definition_calls(definition.calls),
+        };
+    }
+
+    fn parse_semantic_definition_calls(self: *SemanticParser, calls: []const DefinitionCall) ![]SemanticDefinitionCall {
+        var semantic_calls: std.ArrayList(SemanticDefinitionCall) = .empty;
+        errdefer semantic_calls.deinit(self.allocator);
+
+        for (calls) |call| {
+            if (try self.parse_semantic_definition_call(call)) |semantic_call| {
+                try semantic_calls.append(self.allocator, semantic_call);
+            }
+        }
+        return try semantic_calls.toOwnedSlice(self.allocator);
+    }
+
+    fn parse_semantic_definition_call(self: *SemanticParser, call: DefinitionCall) !?SemanticDefinitionCall {
+        if (atomic_filters.Parser.definition_call_action(call.name.value)) |name| {
+            return .{
+                .name = name,
+                .arguments = try self.parse_semantic_definition_call_arguments(call.arguments),
+            };
+        } else {
+            return null;
+        }
+    }
+
+    fn parse_semantic_definition_call_arguments(self: *SemanticParser, arguments: []Token) ![]DefinitionCallArgument {
+        var semantic_arguments: std.ArrayList(DefinitionCallArgument) = .empty;
+        errdefer semantic_arguments.deinit(self.allocator);
+
+        for (arguments) |argument| {
+            try semantic_arguments.append(self.allocator, try SemanticParser.parse_semantic_definition_call_argument(argument));
+        }
+        return try semantic_arguments.toOwnedSlice(self.allocator);
+    }
+
+    fn parse_semantic_definition_call_argument(argument: Token) !DefinitionCallArgument {
+        return .{
+            .name = argument.value,
+        };
+    }
+
+    fn parse_semantic_definition_header(self: *SemanticParser, header: DefinitionHeader) !SemanticDefinitionHeader {
+        var semantic_parameters: std.ArrayList(SemanticDefinitionParameter) = .empty;
+        errdefer semantic_parameters.deinit(self.allocator);
+
+        for (header.parameters) |parameter| {
+            try semantic_parameters.append(self.allocator, try SemanticParser.parse_semantic_definition_parameter(parameter));
+        }
+
+        var semantic_tags: std.ArrayList(SemanticDefinitionTag) = .empty;
+        errdefer semantic_tags.deinit(self.allocator);
+
+        for (header.tags) |tag| {
+            if (try SemanticParser.parse_semantic_definition_tag(tag)) |semantic_tag| {
+                try semantic_tags.append(self.allocator, semantic_tag);
+            }
+        }
+
+        return .{
+            .name = header.name.value,
+            .parameters = try semantic_parameters.toOwnedSlice(self.allocator),
+            .tags = try semantic_tags.toOwnedSlice(self.allocator),
+        };
+    }
+
+    fn parse_semantic_definition_tag(tag: Token) !?SemanticDefinitionTag {
+        if (std.mem.eql(u8, tag.value, "Win")) {
+            return SemanticDefinitionTag.Win;
+        } else if (std.mem.eql(u8, tag.value, "Cond")) {
+            return SemanticDefinitionTag.Cond;
+        }
+        return null;
+    }
+
+    fn parse_semantic_definition_parameter(parameter: Token) !SemanticDefinitionParameter {
+        return .{
+            .name = parameter.value,
+            .name2 = parameter.value,
+        };
+    }
+};
+
+test "semantic parser" {
+    const allocator = std.testing.allocator;
+
+    var compilation = Compilation.init(allocator);
+    defer compilation.deinit();
+
+    _ = try compilation.parse(
+        \\ ###
+        \\=GlobalConfig123 anotherConfigabc
+        \\
+        \\###
+        \\
+        \\=GlobalConfig123 anotherConfigabc
+        \\ def captures(From, Captured_To)
+        \\  captures(From, To, Captured)
+        \\
+        \\###
+    );
+
+    const semantic_program = try compilation.parse_semantics();
+
+    try std.testing.expectEqual(null, semantic_program.configurations);
+    try std.testing.expectEqual(1, semantic_program.blocks.len);
+    try std.testing.expectEqual(0, semantic_program.blocks[0].configurations.?.len);
+
+    try std.testing.expectEqualStrings("captures", semantic_program.blocks[0].definitions[0].header.name);
+    try std.testing.expectEqualStrings("From", semantic_program.blocks[0].definitions[0].header.parameters[0].name);
+
+    try std.testing.expectEqual(1, semantic_program.blocks[0].definitions[0].calls.len);
+    try std.testing.expectEqualStrings("To", semantic_program.blocks[0].definitions[0].calls[0].arguments[1].name);
+    try std.testing.expectEqualStrings("Captured", semantic_program.blocks[0].definitions[0].calls[0].arguments[2].name);
+
+    try std.testing.expectEqual(atomic_filters.Atomic_action.Captures, semantic_program.blocks[0].definitions[0].calls[0].name.action);
 }
