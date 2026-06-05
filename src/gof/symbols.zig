@@ -1,4 +1,4 @@
-pub const IrDescriptionSymbolType = enum {
+pub const DescriptionSymbolType = enum {
     Piece,
     Pawn,
     King,
@@ -11,13 +11,13 @@ pub const IrDescriptionSymbolType = enum {
     Square,
 };
 
-pub const IrDescriptionSymbolId = usize;
+pub const DescriptionSymbolId = usize;
 
-pub const IrDescriptionSymbol = struct {
-    kind: IrDescriptionSymbolType,
-    id: IrDescriptionSymbolId,
+pub const DescriptionSymbol = struct {
+    kind: DescriptionSymbolType,
+    id: DescriptionSymbolId,
 
-    pub fn fromSlice(slice: []const u8) ?IrDescriptionSymbol {
+    pub fn fromSlice(slice: []const u8) ?DescriptionSymbol {
         _ = slice;
         return null;
     }

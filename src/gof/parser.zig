@@ -292,7 +292,7 @@ const Definition = struct {
 };
 
 const DescriptionLine = struct {
-    description: Token,
+    binding: Token,
     name: Token,
     arguments: []Token,
     tags: []Token,
@@ -519,11 +519,11 @@ const Parser = struct {
         errdefer tags.deinit(self.allocator);
 
         var name: Token = undefined;
-        var description: Token = undefined;
+        var binding: Token = undefined;
 
         const has_failed = has_failed: {
             if (self.eat(TokenType.If) orelse self.eat(TokenType.Ve)) |token| {
-                description = token;
+                binding = token;
             } else {
                 break :has_failed true;
             }
@@ -555,7 +555,7 @@ const Parser = struct {
 
         return .{
             .name = name,
-            .description = description,
+            .binding = binding,
             .arguments = try arguments.toOwnedSlice(self.allocator),
             .tags = try tags.toOwnedSlice(self.allocator),
         };
@@ -729,8 +729,8 @@ test "parser description" {
 
     try std.testing.expectEqualStrings("captures", program.blocks[0].descriptions[0].lines[0].name.value);
 
-    try std.testing.expectEqualStrings("if", program.blocks[0].descriptions[0].lines[0].description.value);
-    try std.testing.expectEqualStrings("ve", program.blocks[0].descriptions[0].lines[1].description.value);
+    try std.testing.expectEqualStrings("if", program.blocks[0].descriptions[0].lines[0].binding.value);
+    try std.testing.expectEqualStrings("ve", program.blocks[0].descriptions[0].lines[1].binding.value);
 
     try std.testing.expectEqual(4, program.blocks[0].descriptions[0].lines[0].arguments.len);
     try std.testing.expectEqual(TokenType.Underscore, program.blocks[0].descriptions[0].lines[0].arguments[2].kind);
@@ -792,6 +792,33 @@ test "parser blocks" {
     );
 
     try std.testing.expectEqual(2, program.blocks.len);
+}
+
+test "parser description blocks" {
+    const allocator = std.testing.allocator;
+
+    var compilation = Parsification.init(allocator);
+    defer compilation.deinit();
+
+    const program = try compilation.parse(
+        \\
+        \\
+        \\###
+        \\
+        \\ if captures(king, queen_rook)
+        \\ ve attacks(king2, bishop, f3)
+        \\   if captures(king2, king3_knight)
+        \\
+        \\
+        \\ if captures(king, queen_rook)
+        \\ ve attacks(king2, bishop, f3)
+        \\   if captures(king2, king3_knight)
+        \\
+        \\
+        \\###
+    );
+
+    try std.testing.expectEqual(1, program.blocks[0].descriptions.len);
 }
 
 test "configurations program" {
@@ -886,17 +913,18 @@ const SemanticDefinition = struct {
     calls: []const SemanticDefinitionCall,
 };
 
-const SemanticDescriptionDescription = enum { desc_if, desc_ve };
+const SemanticDescriptionBinding = enum { desc_if, desc_ve };
 
 const SemanticDescriptionArgument = struct { name: []const u8, name2: ?[]const u8 };
 
 const SemanticDescriptionTag = enum {};
 
 const SemanticDescriptionLine = struct {
-    description: SemanticDescriptionDescription,
+    binding: SemanticDescriptionBinding,
     name: SemanticDefinitionName,
     arguments: []SemanticDescriptionArgument,
     tags: []SemanticDescriptionTag,
+    indent: usize,
 };
 
 const SemanticDescription = struct { lines: []SemanticDescriptionLine };
@@ -1011,23 +1039,24 @@ const SemanticParser = struct {
     }
 
     fn parse_semantic_description_line(self: *SemanticParser, line: DescriptionLine) !?SemanticDescriptionLine {
-        const description =
-            if (std.mem.eql(u8, line.description.value, "if"))
-                SemanticDescriptionDescription.desc_if
-            else if (std.mem.eql(u8, line.description.value, "ve"))
-                SemanticDescriptionDescription.desc_ve
+        const binding =
+            if (std.mem.eql(u8, line.binding.value, "if"))
+                SemanticDescriptionBinding.desc_if
+            else if (std.mem.eql(u8, line.binding.value, "ve"))
+                SemanticDescriptionBinding.desc_ve
             else
                 null;
 
-        if (description == null) {
+        if (binding == null) {
             return null;
         }
 
         return .{
-            .description = description.?,
+            .binding = binding.?,
             .name = line.name.value,
             .arguments = try self.parse_semantic_description_arguments(line.arguments),
             .tags = try self.parse_semantic_description_tags(line.tags),
+            .indent = line.name.column_no,
         };
     }
 
@@ -1245,40 +1274,44 @@ pub fn expectDiagnostics(compilation: Parsification, expected: []const u8) !void
     try std.testing.expectEqualStrings(expected, actual);
 }
 
-const IrDefinitionId = usize;
+pub const IrDefinitionId = usize;
 
 const IrDefinitionParameterId = usize;
-const IrDefinitionParameter = struct { one: IrDefinitionParameterId, two: ?IrDefinitionParameterId };
+pub const IrDefinitionParameter = struct { one: IrDefinitionParameterId, two: ?IrDefinitionParameterId };
 
 const IrDefinitionHeader = struct { id: IrDefinitionId, parameters: []IrDefinitionParameter, tags: []SemanticDefinitionTag };
 
-const IrDefinitionCallArgumentId = usize;
+pub const IrDefinitionCallArgumentId = usize;
 
-const IrDefinitionCall = struct {
+pub const IrDefinitionCall = struct {
     action: atomic_filters.DefinitionCallAction,
     arguments: []IrDefinitionCallArgumentId,
 };
 
-const IrDefinition = struct {
+pub const IrDefinition = struct {
     header: IrDefinitionHeader,
     calls: []IrDefinitionCall,
 };
 
-const IrDescriptionDescription = SemanticDescriptionDescription;
-const IrDescriptionId = usize;
+pub const IrDescriptionBinding = SemanticDescriptionBinding;
+pub const IrDescriptionId = usize;
 
-const IrDescriptionArgument = struct { one: symbols.IrDescriptionSymbol, two: ?symbols.IrDescriptionSymbol };
-
-const IrDescriptionLine = struct {
-    definition_call_id: IrDefinitionId,
-    description: IrDescriptionDescription,
-    arguments: []IrDescriptionArgument,
-    tags: []SemanticDescriptionTag,
+pub const IrDescriptionArgument = struct {
+    one: symbols.DescriptionSymbol,
+    two: ?symbols.DescriptionSymbol,
 };
 
-const IrDescription = struct { lines: []IrDescriptionLine };
+pub const IrDescriptionLine = struct {
+    definition_call_id: IrDefinitionId,
+    binding: IrDescriptionBinding,
+    arguments: []IrDescriptionArgument,
+    tags: []SemanticDescriptionTag,
+    indent: usize,
+};
 
-const IrBlock = struct {
+pub const IrDescription = struct { lines: []IrDescriptionLine };
+
+pub const IrBlock = struct {
     definitions: []IrDefinition,
     descriptions: []IrDescription,
 };
@@ -1352,12 +1385,7 @@ const IrParser = struct {
     }
 
     fn parse_ir_description_line(self: *IrParser, line: SemanticDescriptionLine) !?IrDescriptionLine {
-        return .{
-            .definition_call_id = IrParser.hash_definition_id(line.name),
-            .description = line.description,
-            .tags = line.tags,
-            .arguments = try self.parse_ir_description_arguments(line.arguments),
-        };
+        return .{ .definition_call_id = IrParser.hash_definition_id(line.name), .binding = line.binding, .tags = line.tags, .arguments = try self.parse_ir_description_arguments(line.arguments), .indent = line.indent };
     }
 
     fn parse_ir_description_arguments(self: *IrParser, arguments: []SemanticDescriptionArgument) ![]IrDescriptionArgument {
@@ -1373,11 +1401,11 @@ const IrParser = struct {
     }
 
     fn parse_ir_description_argument(argument: SemanticDescriptionArgument) ?IrDescriptionArgument {
-        const one = symbols.IrDescriptionSymbol.fromSlice(argument.name);
-        var two: ?symbols.IrDescriptionSymbol = undefined;
+        const one = symbols.DescriptionSymbol.fromSlice(argument.name);
+        var two: ?symbols.DescriptionSymbol = undefined;
 
         if (argument.name2) |name2| {
-            two = symbols.IrDescriptionSymbol.fromSlice(name2);
+            two = symbols.DescriptionSymbol.fromSlice(name2);
             if (two == null) {
                 // diagnostics
                 return null;
