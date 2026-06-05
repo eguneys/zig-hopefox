@@ -107,7 +107,7 @@ const Lexer = struct {
             if (char == '\n') {
                 self.i_next += 1;
                 self.line_no += 1;
-                self.column_no = 0;
+                self.column_no = 1;
                 continue;
             }
             if (std.ascii.isWhitespace(char)) {
@@ -245,7 +245,7 @@ test "lexer" {
     lexer = Lexer.init("    hello\n\n");
     token = lexer.next_token();
     try std.testing.expectEqual(TokenType.LowerVariable, token.kind);
-    try std.testing.expectEqual(4, token.column_no);
+    try std.testing.expectEqual(5, token.column_no);
 
     lexer = Lexer.init("    \n\n");
     token = lexer.next_token();
@@ -255,7 +255,7 @@ test "lexer" {
 
     token = lexer.next_token();
     try std.testing.expectEqual(TokenType.LowerVariable, token.kind);
-    try std.testing.expectEqual(3, token.column_no);
+    try std.testing.expectEqual(4, token.column_no);
     token = lexer.next_token();
     try std.testing.expectEqual(TokenType.Eof, token.kind);
 
@@ -619,6 +619,7 @@ const Compilation = struct {
     diagnostics: Diagnostics,
     program: ?Program = null,
     semantic_program: ?SemanticProgram = null,
+    ir_program: ?IrProgram = null,
 
     fn init(allocator: std.mem.Allocator) Compilation {
         const arena = std.heap.ArenaAllocator.init(allocator);
@@ -641,6 +642,14 @@ const Compilation = struct {
             var semantic_parser = SemanticParser.init(self, self.arena.allocator());
             self.semantic_program = try semantic_parser.parse_program(program);
             return self.semantic_program.?;
+        } else error.ProgramNotParsed;
+    }
+
+    fn parse_ir(self: *Compilation) !IrProgram {
+        return if (self.semantic_program) |program| {
+            var ir_parser = IrParser.init(self, self.arena.allocator());
+            self.ir_program = try ir_parser.parse_program(program);
+            return self.ir_program.?;
         } else error.ProgramNotParsed;
     }
 
@@ -877,7 +886,6 @@ const SemanticDefinition = struct {
 };
 
 const SemanticDescriptionDescription = enum { desc_if, desc_ve };
-const SemanticDescriptionName = []const u8;
 
 const SemanticDescriptionArgument = struct { name: []const u8, name2: ?[]const u8 };
 
@@ -885,7 +893,7 @@ const SemanticDescriptionTag = enum {};
 
 const SemanticDescriptionLine = struct {
     description: SemanticDescriptionDescription,
-    name: SemanticDescriptionName,
+    name: SemanticDefinitionName,
     arguments: []SemanticDescriptionArgument,
     tags: []SemanticDescriptionTag,
 };
@@ -1193,11 +1201,11 @@ test "diagnostics" {
     _ = try compilation.parse_semantics();
 
     try expectDiagnostics(compilation,
-        \\Invalid atomic action captres at line 3 column 2
+        \\Invalid atomic action captres at line 3 column 3
     );
 }
 
-test "more diagnostics" {
+test "more definition diagnostics" {
     try expectSemanticDiagnostics(
         \\
         \\###
@@ -1209,8 +1217,8 @@ test "more diagnostics" {
         \\ mofes(From, To, Captured)
         \\
     ,
-        \\Invalid atomic action captres at line 5 column 2
-        \\Invalid atomic action mofes at line 8 column 1
+        \\Invalid atomic action captres at line 5 column 3
+        \\Invalid atomic action mofes at line 8 column 2
     );
 }
 
@@ -1235,3 +1243,68 @@ pub fn expectDiagnostics(compilation: Compilation, expected: []const u8) !void {
 
     try std.testing.expectEqualStrings(expected, actual);
 }
+
+const IrDefinitionId = usize;
+const IrDefinitionParameter = struct { one: usize, two: ?usize };
+
+const IrDefinitionHeader = struct { id: IrDefinitionId, parameters: []IrDefinitionParameter, tags: []SemanticDefinitionTag };
+
+const IrDefinitionCallId = usize;
+
+const IrDefinitionCall = struct {
+    action: atomic_filters.Atomic_action,
+    arguments: []IrDefinitionCallId,
+};
+
+const IrDefinition = struct {
+    header: IrDefinitionHeader,
+    calls: []IrDefinitionCall,
+};
+
+const IrDescriptionDescription = SemanticDescriptionDescription;
+const IrDescriptionId = usize;
+
+const IrDescriptionSymbolType = enum { Piece, Square };
+
+const IrDescriptionSymbolId = usize;
+
+const IrDescriptionSymbol = struct { kind: IrDescriptionSymbolType, id: IrDescriptionSymbolId };
+
+const IrDescriptionArgument = struct { one: IrDescriptionSymbol, two: ?IrDescriptionSymbol };
+
+const IrDescriptionLine = struct {
+    description: IrDescriptionDescription,
+    arguments: []IrDescriptionArgument,
+    tags: []SemanticDescriptionTag,
+};
+
+const IrDescription = struct { lines: []IrDescriptionLine };
+
+const IrBlock = struct {
+    definitions: []IrDefinition,
+    descriptions: []IrDescription,
+};
+
+const IrProgram = struct {
+    blocks: []IrBlock,
+};
+
+const IrParser = struct {
+    allocator: std.mem.Allocator,
+    compilation: *Compilation,
+
+    fn init(compilation: *Compilation, allocator: std.mem.Allocator) IrParser {
+        return .{
+            .compilation = compilation,
+            .allocator = allocator,
+        };
+    }
+
+    fn parse_program(self: *IrParser, program: Program) !IrProgram {
+        const blocks = try self.parse_blocks(program);
+
+        return .{
+            .blocks = blocks,
+        };
+    }
+};
