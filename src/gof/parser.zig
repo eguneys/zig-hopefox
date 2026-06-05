@@ -7,35 +7,44 @@ const ParseErrorMsg = struct {
     line: usize,
     column: usize,
     message: []const u8,
+    argument: ?[]const u8,
+
+    pub fn format(message: ParseErrorMsg, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        if (message.argument) |arg|
+            try writer.print("{s} {s} at line {d} column {d}", .{ message.message, arg, message.line, message.column })
+        else
+            try writer.print("{s} at line {d} column {d}", .{ message.message, message.line, message.column });
+    }
 };
 
 const Diagnostics = struct {
     errors: std.ArrayList(ParseErrorMsg),
-    allocator: std.mem.Allocator,
 
-    fn init(allocator: std.mem.Allocator) !Diagnostics {
+    fn init() Diagnostics {
         return Diagnostics{
-            .errors = try std.ArrayList(ParseErrorMsg).initCapacity(allocator, 20),
-            .allocator = allocator,
+            .errors = .empty,
         };
     }
 
-    fn deinit(self: *Diagnostics) void {
+    fn deinit(self: *Diagnostics, allocator: std.mem.Allocator) void {
         for (self.errors.items) |err| {
-            self.allocator.free(err.message);
+            allocator.free(err.message);
         }
-        self.errors.deinit(self.allocator);
+        self.errors.deinit(allocator);
     }
 
-    fn addError(self: *Diagnostics, line: usize, col: usize, msg: []const u8) !void {
-        const owned_msg = try self.allocator.dupe(u8, msg);
+    fn addError(self: *Diagnostics, allocator: std.mem.Allocator, line: usize, col: usize, msg: []const u8, argument: ?[]const u8) !void {
+        const owned_msg = try allocator.dupe(u8, msg);
+        const owned_arg = if (argument) |arg| try allocator.dupe(u8, arg) else null;
 
-        try self.errors.append(ParseErrorMsg{ .line = line, .column = col, .message = owned_msg });
+        try self.errors.append(allocator, ParseErrorMsg{ .line = line, .column = col, .message = owned_msg, .argument = owned_arg });
     }
 
-    fn printAll(self: Diagnostics) void {
-        for (self.errors.items) |err| {
-            std.debug.print("Parser Error [{d}:{d}]: {s}\n", .{ err.line, err.column, err.message });
+    pub fn format(self: Diagnostics, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        var sep: []const u8 = "";
+        for (self.errors.items) |item| {
+            try writer.print("{s}{f}", .{ sep, item });
+            sep = "\n";
         }
     }
 };
@@ -67,8 +76,8 @@ const Token = struct { kind: TokenType, value: []const u8, line_no: usize, colum
 const Lexer = struct {
     i_next: usize = 0,
     text: []const u8,
-    line_no: usize = 0,
-    column_no: usize = 0,
+    line_no: usize = 1,
+    column_no: usize = 1,
 
     fn init(text: []const u8) Lexer {
         return Lexer{ .text = text };
@@ -607,13 +616,18 @@ const Parser = struct {
 
 const Compilation = struct {
     arena: std.heap.ArenaAllocator,
+    diagnostics: Diagnostics,
     program: ?Program = null,
     semantic_program: ?SemanticProgram = null,
 
     fn init(allocator: std.mem.Allocator) Compilation {
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        errdefer arena.deinit();
-        return .{ .arena = arena };
+        const arena = std.heap.ArenaAllocator.init(allocator);
+        var res = Compilation{
+            .arena = arena,
+            .diagnostics = undefined,
+        };
+        res.diagnostics = Diagnostics.init();
+        return res;
     }
 
     fn parse(self: *Compilation, text: []const u8) !Program {
@@ -624,7 +638,7 @@ const Compilation = struct {
 
     fn parse_semantics(self: *Compilation) !SemanticProgram {
         return if (self.program) |program| {
-            var semantic_parser = SemanticParser.init(self.arena.allocator());
+            var semantic_parser = SemanticParser.init(self, self.arena.allocator());
             self.semantic_program = try semantic_parser.parse_program(program);
             return self.semantic_program.?;
         } else error.ProgramNotParsed;
@@ -896,9 +910,11 @@ const SemanticProgram = struct {
 
 const SemanticParser = struct {
     allocator: std.mem.Allocator,
+    compilation: *Compilation,
 
-    fn init(allocator: std.mem.Allocator) SemanticParser {
+    fn init(compilation: *Compilation, allocator: std.mem.Allocator) SemanticParser {
         return .{
+            .compilation = compilation,
             .allocator = allocator,
         };
     }
@@ -1066,6 +1082,7 @@ const SemanticParser = struct {
                 .arguments = try self.parse_semantic_definition_call_arguments(call.arguments),
             };
         } else {
+            try self.compilation.diagnostics.addError(self.allocator, call.name.line_no, call.name.column_no, "Invalid atomic action", call.name.value);
             return null;
         }
     }
@@ -1160,4 +1177,61 @@ test "semantic parser" {
     try std.testing.expectEqualStrings("Captured", semantic_program.blocks[0].definitions[0].calls[0].arguments[2].name);
 
     try std.testing.expectEqual(atomic_filters.Atomic_action.Captures, semantic_program.blocks[0].definitions[0].calls[0].name.action);
+}
+
+test "diagnostics" {
+    const allocator = std.testing.allocator;
+
+    var compilation = Compilation.init(allocator);
+    defer compilation.deinit();
+
+    _ = try compilation.parse(
+        \\###
+        \\ def captures(From, Captured_To)
+        \\  captres(From, To, Captured)
+    );
+    _ = try compilation.parse_semantics();
+
+    try expectDiagnostics(compilation,
+        \\Invalid atomic action captres at line 3 column 2
+    );
+}
+
+test "more diagnostics" {
+    try expectSemanticDiagnostics(
+        \\
+        \\###
+        \\
+        \\def captures(From, Captured_To)
+        \\  captres(From, To, Captured)
+        \\
+        \\def captures(From, Captured_To)
+        \\ mofes(From, To, Captured)
+        \\
+    ,
+        \\Invalid atomic action captres at line 5 column 2
+        \\Invalid atomic action mofes at line 8 column 1
+    );
+}
+
+pub fn expectSemanticDiagnostics(script: []const u8, errors: []const u8) !void {
+    const allocator = std.testing.allocator;
+
+    var compilation = Compilation.init(allocator);
+    defer compilation.deinit();
+
+    _ = try compilation.parse(script);
+    _ = try compilation.parse_semantics();
+
+    try expectDiagnostics(compilation, errors);
+}
+
+pub fn expectDiagnostics(compilation: Compilation, expected: []const u8) !void {
+    const allocator = std.testing.allocator;
+
+    const actual = try std.fmt.allocPrint(allocator, "{f}", .{compilation.diagnostics});
+
+    defer allocator.free(actual);
+
+    try std.testing.expectEqualStrings(expected, actual);
 }
