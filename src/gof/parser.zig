@@ -1,5 +1,6 @@
 const std = @import("std");
 const atomic_filters = @import("atomic_filters.zig");
+const symbols = @import("symbols.zig");
 
 const Def = struct {};
 
@@ -1245,15 +1246,17 @@ pub fn expectDiagnostics(compilation: Compilation, expected: []const u8) !void {
 }
 
 const IrDefinitionId = usize;
-const IrDefinitionParameter = struct { one: usize, two: ?usize };
+
+const IrDefinitionParameterId = usize;
+const IrDefinitionParameter = struct { one: IrDefinitionParameterId, two: ?IrDefinitionParameterId };
 
 const IrDefinitionHeader = struct { id: IrDefinitionId, parameters: []IrDefinitionParameter, tags: []SemanticDefinitionTag };
 
-const IrDefinitionCallId = usize;
+const IrDefinitionCallArgumentId = usize;
 
 const IrDefinitionCall = struct {
-    action: atomic_filters.Atomic_action,
-    arguments: []IrDefinitionCallId,
+    action: atomic_filters.DefinitionCallAction,
+    arguments: []IrDefinitionCallArgumentId,
 };
 
 const IrDefinition = struct {
@@ -1264,15 +1267,10 @@ const IrDefinition = struct {
 const IrDescriptionDescription = SemanticDescriptionDescription;
 const IrDescriptionId = usize;
 
-const IrDescriptionSymbolType = enum { Piece, Square };
-
-const IrDescriptionSymbolId = usize;
-
-const IrDescriptionSymbol = struct { kind: IrDescriptionSymbolType, id: IrDescriptionSymbolId };
-
-const IrDescriptionArgument = struct { one: IrDescriptionSymbol, two: ?IrDescriptionSymbol };
+const IrDescriptionArgument = struct { one: symbols.IrDescriptionSymbol, two: ?symbols.IrDescriptionSymbol };
 
 const IrDescriptionLine = struct {
+    definition_call_id: IrDefinitionId,
     description: IrDescriptionDescription,
     arguments: []IrDescriptionArgument,
     tags: []SemanticDescriptionTag,
@@ -1300,11 +1298,187 @@ const IrParser = struct {
         };
     }
 
-    fn parse_program(self: *IrParser, program: Program) !IrProgram {
+    fn parse_program(self: *IrParser, program: SemanticProgram) !IrProgram {
         const blocks = try self.parse_blocks(program);
 
         return .{
             .blocks = blocks,
         };
     }
+
+    fn parse_blocks(self: *IrParser, program: SemanticProgram) ![]IrBlock {
+        var ir_blocks: std.ArrayList(IrBlock) = .empty;
+        errdefer ir_blocks.deinit(self.allocator);
+
+        for (program.blocks) |block| {
+            try ir_blocks.append(self.allocator, try self.parse_ir_block(block));
+        }
+        return try ir_blocks.toOwnedSlice(self.allocator);
+    }
+
+    fn parse_ir_block(self: *IrParser, block: SemanticBlock) !IrBlock {
+        var ir_descriptions: std.ArrayList(IrDescription) = .empty;
+        errdefer ir_descriptions.deinit(self.allocator);
+
+        for (block.descriptions) |description| {
+            try ir_descriptions.append(self.allocator, try self.parse_ir_description(description));
+        }
+
+        var ir_definitions: std.ArrayList(IrDefinition) = .empty;
+        errdefer ir_definitions.deinit(self.allocator);
+
+        for (block.definitions) |definition| {
+            try ir_definitions.append(self.allocator, try self.parse_ir_definition(definition));
+        }
+
+        return .{
+            .descriptions = try ir_descriptions.toOwnedSlice(self.allocator),
+            .definitions = try ir_definitions.toOwnedSlice(self.allocator),
+        };
+    }
+
+    fn parse_ir_description(self: *IrParser, description: SemanticDescription) !IrDescription {
+        var ir_lines: std.ArrayList(IrDescriptionLine) = .empty;
+        errdefer ir_lines.deinit(self.allocator);
+
+        for (description.lines) |line| {
+            if (try self.parse_ir_description_line(line)) |ir_line| {
+                try ir_lines.append(self.allocator, ir_line);
+            }
+        }
+        return .{
+            .lines = try ir_lines.toOwnedSlice(self.allocator),
+        };
+    }
+
+    fn parse_ir_description_line(self: *IrParser, line: SemanticDescriptionLine) !?IrDescriptionLine {
+        return .{
+            .definition_call_id = IrParser.hash_definition_id(line.name),
+            .description = line.description,
+            .tags = line.tags,
+            .arguments = try self.parse_ir_description_arguments(line.arguments),
+        };
+    }
+
+    fn parse_ir_description_arguments(self: *IrParser, arguments: []SemanticDescriptionArgument) ![]IrDescriptionArgument {
+        var ir_arguments: std.ArrayList(IrDescriptionArgument) = .empty;
+        errdefer ir_arguments.deinit(self.allocator);
+
+        for (arguments) |argument| {
+            if (IrParser.parse_ir_description_argument(argument)) |arg| {
+                try ir_arguments.append(self.allocator, arg);
+            }
+        }
+        return try ir_arguments.toOwnedSlice(self.allocator);
+    }
+
+    fn parse_ir_description_argument(argument: SemanticDescriptionArgument) ?IrDescriptionArgument {
+        const one = symbols.IrDescriptionSymbol.fromSlice(argument.name);
+        var two: ?symbols.IrDescriptionSymbol = undefined;
+
+        if (argument.name2) |name2| {
+            two = symbols.IrDescriptionSymbol.fromSlice(name2);
+            if (two == null) {
+                // diagnostics
+                return null;
+            }
+        }
+        if (one == null) {
+            // diagnostics
+            return null;
+        }
+
+        return .{ .one = one.?, .two = two };
+    }
+
+    fn parse_ir_definition(self: *IrParser, definition: SemanticDefinition) !IrDefinition {
+        return .{
+            .header = try self.parse_ir_definition_header(definition.header),
+            .calls = try self.parse_ir_definition_calls(definition.calls),
+        };
+    }
+
+    fn parse_ir_definition_calls(self: *IrParser, calls: []const SemanticDefinitionCall) ![]IrDefinitionCall {
+        var ir_calls: std.ArrayList(IrDefinitionCall) = .empty;
+        errdefer ir_calls.deinit(self.allocator);
+
+        for (calls) |call| {
+            if (try self.parse_ir_definition_call(call)) |ir_call| {
+                try ir_calls.append(self.allocator, ir_call);
+            }
+        }
+        return try ir_calls.toOwnedSlice(self.allocator);
+    }
+
+    fn parse_ir_definition_call(self: *IrParser, call: SemanticDefinitionCall) !?IrDefinitionCall {
+        return .{
+            .action = call.name,
+            .arguments = try self.parse_ir_definition_call_arguments(call.arguments),
+        };
+    }
+
+    fn parse_ir_definition_call_arguments(self: *IrParser, arguments: []DefinitionCallArgument) ![]IrDefinitionCallArgumentId {
+        var ir_arguments: std.ArrayList(IrDefinitionCallArgumentId) = .empty;
+        errdefer ir_arguments.deinit(self.allocator);
+
+        for (arguments) |argument| {
+            try ir_arguments.append(self.allocator, IrParser.hash_ir_definition_call_argument(argument));
+        }
+        return try ir_arguments.toOwnedSlice(self.allocator);
+    }
+
+    fn hash_ir_definition_call_argument(argument: DefinitionCallArgument) IrDefinitionCallArgumentId {
+        return argument.name[0];
+    }
+
+    fn parse_ir_definition_header(self: *IrParser, header: SemanticDefinitionHeader) !IrDefinitionHeader {
+        var ir_parameters: std.ArrayList(IrDefinitionParameter) = .empty;
+        errdefer ir_parameters.deinit(self.allocator);
+
+        for (header.parameters) |parameter| {
+            try ir_parameters.append(self.allocator, try IrParser.parse_ir_definition_parameter(parameter));
+        }
+
+        return .{ .id = IrParser.hash_definition_id(header.name), .parameters = try ir_parameters.toOwnedSlice(self.allocator), .tags = header.tags };
+    }
+
+    fn parse_ir_definition_parameter(parameter: SemanticDefinitionParameter) !IrDefinitionParameter {
+        const one = IrParser.hash_definition_parameter_id(parameter.name);
+        const two = if (parameter.name2) |name2| IrParser.hash_definition_parameter_id(name2) else null;
+
+        return .{ .one = one, .two = two };
+    }
+
+    fn hash_definition_id(name: []const u8) IrDefinitionId {
+        return name[0];
+    }
+
+    fn hash_definition_parameter_id(name: []const u8) IrDefinitionParameterId {
+        return name[0];
+    }
 };
+
+test "ir parser" {
+    const allocator = std.testing.allocator;
+
+    var compilation = Compilation.init(allocator);
+    defer compilation.deinit();
+
+    _ = try compilation.parse(
+        \\ ###
+        \\=GlobalConfig123 anotherConfigabc
+        \\
+        \\###
+        \\
+        \\=GlobalConfig123 anotherConfigabc
+        \\ def captures(From, Captured_To)
+        \\  captures(From, To, Captured)
+        \\
+        \\###
+    );
+
+    _ = try compilation.parse_semantics();
+    const ir_program = try compilation.parse_ir();
+
+    try std.testing.expectEqual(1, ir_program.blocks.len);
+}
