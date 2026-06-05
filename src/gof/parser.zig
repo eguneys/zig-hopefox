@@ -615,16 +615,16 @@ const Parser = struct {
     }
 };
 
-const Compilation = struct {
+pub const Parsification = struct {
     arena: std.heap.ArenaAllocator,
     diagnostics: Diagnostics,
     program: ?Program = null,
     semantic_program: ?SemanticProgram = null,
     ir_program: ?IrProgram = null,
 
-    fn init(allocator: std.mem.Allocator) Compilation {
+    pub fn init(allocator: std.mem.Allocator) Parsification {
         const arena = std.heap.ArenaAllocator.init(allocator);
-        var res = Compilation{
+        var res = Parsification{
             .arena = arena,
             .diagnostics = undefined,
         };
@@ -632,13 +632,13 @@ const Compilation = struct {
         return res;
     }
 
-    fn parse(self: *Compilation, text: []const u8) !Program {
+    pub fn parse(self: *Parsification, text: []const u8) !Program {
         var parser = Parser.init(self.arena.allocator(), text);
         self.program = try parser.parse_program();
         return self.program.?;
     }
 
-    fn parse_semantics(self: *Compilation) !SemanticProgram {
+    pub fn parse_semantics(self: *Parsification) !SemanticProgram {
         return if (self.program) |program| {
             var semantic_parser = SemanticParser.init(self, self.arena.allocator());
             self.semantic_program = try semantic_parser.parse_program(program);
@@ -646,7 +646,7 @@ const Compilation = struct {
         } else error.ProgramNotParsed;
     }
 
-    fn parse_ir(self: *Compilation) !IrProgram {
+    pub fn parse_ir(self: *Parsification) !IrProgram {
         return if (self.semantic_program) |program| {
             var ir_parser = IrParser.init(self, self.arena.allocator());
             self.ir_program = try ir_parser.parse_program(program);
@@ -654,7 +654,7 @@ const Compilation = struct {
         } else error.ProgramNotParsed;
     }
 
-    fn deinit(self: *Compilation) void {
+    pub fn deinit(self: *Parsification) void {
         self.arena.deinit();
     }
 };
@@ -662,7 +662,7 @@ const Compilation = struct {
 test "parser empty" {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
 
     const program = try compilation.parse(
         \\
@@ -678,7 +678,7 @@ test "parser empty" {
 test "parser definition" {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
     defer compilation.deinit();
 
     const program = try compilation.parse(
@@ -708,7 +708,7 @@ test "parser definition" {
 test "parser description" {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
     defer compilation.deinit();
 
     const program = try compilation.parse(
@@ -739,7 +739,7 @@ test "parser description" {
 test "parser mixed" {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
     defer compilation.deinit();
 
     const program = try compilation.parse(
@@ -768,7 +768,7 @@ test "parser mixed" {
 test "parser blocks" {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
     defer compilation.deinit();
 
     const program = try compilation.parse(
@@ -797,7 +797,7 @@ test "parser blocks" {
 test "configurations program" {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
     defer compilation.deinit();
 
     const program = try compilation.parse(
@@ -819,7 +819,7 @@ test "configurations program" {
 test "configurations program with block" {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
     defer compilation.deinit();
 
     const program = try compilation.parse(
@@ -842,7 +842,7 @@ test "configurations program with block" {
 test "configurations block" {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
     defer compilation.deinit();
 
     const program = try compilation.parse(
@@ -919,9 +919,9 @@ const SemanticProgram = struct {
 
 const SemanticParser = struct {
     allocator: std.mem.Allocator,
-    compilation: *Compilation,
+    compilation: *Parsification,
 
-    fn init(compilation: *Compilation, allocator: std.mem.Allocator) SemanticParser {
+    fn init(compilation: *Parsification, allocator: std.mem.Allocator) SemanticParser {
         return .{
             .compilation = compilation,
             .allocator = allocator,
@@ -1156,7 +1156,7 @@ const SemanticParser = struct {
 test "semantic parser" {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
     defer compilation.deinit();
 
     _ = try compilation.parse(
@@ -1191,7 +1191,7 @@ test "semantic parser" {
 test "diagnostics" {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
     defer compilation.deinit();
 
     _ = try compilation.parse(
@@ -1226,7 +1226,7 @@ test "more definition diagnostics" {
 pub fn expectSemanticDiagnostics(script: []const u8, errors: []const u8) !void {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
     defer compilation.deinit();
 
     _ = try compilation.parse(script);
@@ -1235,7 +1235,7 @@ pub fn expectSemanticDiagnostics(script: []const u8, errors: []const u8) !void {
     try expectDiagnostics(compilation, errors);
 }
 
-pub fn expectDiagnostics(compilation: Compilation, expected: []const u8) !void {
+pub fn expectDiagnostics(compilation: Parsification, expected: []const u8) !void {
     const allocator = std.testing.allocator;
 
     const actual = try std.fmt.allocPrint(allocator, "{f}", .{compilation.diagnostics});
@@ -1289,9 +1289,9 @@ const IrProgram = struct {
 
 const IrParser = struct {
     allocator: std.mem.Allocator,
-    compilation: *Compilation,
+    compilation: *Parsification,
 
-    fn init(compilation: *Compilation, allocator: std.mem.Allocator) IrParser {
+    fn init(compilation: *Parsification, allocator: std.mem.Allocator) IrParser {
         return .{
             .compilation = compilation,
             .allocator = allocator,
@@ -1461,7 +1461,7 @@ const IrParser = struct {
 test "ir parser" {
     const allocator = std.testing.allocator;
 
-    var compilation = Compilation.init(allocator);
+    var compilation = Parsification.init(allocator);
     defer compilation.deinit();
 
     _ = try compilation.parse(
