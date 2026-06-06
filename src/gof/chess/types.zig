@@ -224,6 +224,13 @@ pub const Bitboard = packed struct(u64) {
             null;
     }
 
+    pub fn first(self: Bitboard) ?Square {
+        return if (self.isNotEmpty())
+            @enumFromInt(@ctz(self.bits))
+        else
+            null;
+    }
+
     pub fn has(self: Bitboard, square: Square) bool {
         return self.bitand(Bitboard.fromSquare(square)).isNotEmpty();
     }
@@ -258,6 +265,13 @@ pub const Bitboard = packed struct(u64) {
 
     pub fn bitdiff(self: Bitboard, other: Bitboard) Bitboard {
         return Bitboard{ .bits = self.bits & ~other.bits };
+    }
+
+    pub fn next(self: *Bitboard) ?Square {
+        if (self.first()) |sq| {
+            self.bits &= (self.bits -% 1);
+            return sq;
+        } else return null;
     }
 };
 
@@ -300,7 +314,7 @@ test "square" {
     try std.testing.expectEqual(Square.H8, Square.fromCoord(File.H, Rank.R8));
 }
 
-const Direction = enum { Up, Down, Left, Right, Up_Left, Up_Right, Down_Left, Down_Right };
+pub const Direction = enum { Up, Down, Left, Right, Up_Left, Up_Right, Down_Left, Down_Right };
 
 const Attacks = struct {
     const ray_masks = generate_ray_masks();

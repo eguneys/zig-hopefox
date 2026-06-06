@@ -150,7 +150,7 @@ const Runner = struct {
         const start = self.history.items.len;
         for (bound_lines) |line| {
             for (line) |call| {
-                try atomic.CallRunner.atomic_call(allocator, self.history.items, self.compiled.table, range, call);
+                try atomic.CallRunner.atomic_call(allocator, &self.history, &self.compiled.table, range, call);
             }
         }
         const end = self.history.items.len;

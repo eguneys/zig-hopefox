@@ -1,4 +1,5 @@
 const std = @import("std");
+const chess = @import("chess/types.zig");
 
 pub const DescriptionSymbolType = enum {
     Piece,
@@ -58,3 +59,11 @@ test "fromSlice" {
     try std.testing.expectEqual(3, DescriptionSymbol.fromSlice("king3").?.id);
     try std.testing.expectEqual(12, DescriptionSymbol.fromSlice("king12").?.id);
 }
+
+pub const SymbolPosition = struct {
+    pub fn bitboardFrom(symbol: DescriptionSymbol, position: chess.Position) chess.Bitboard {
+        _ = symbol;
+        _ = position;
+        return chess.Bitboard.Zero;
+    }
+};
