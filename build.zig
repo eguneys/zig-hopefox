@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
-    const chess_mod = b.createModule(.{ .root_source_file = b.path("src/chess/types.zig") });
+    //const chess_mod = b.createModule(.{ .root_source_file = b.path("src/gof/chess/types.zig") });
 
     const exe = b.addExecutable(.{
         .name = "zig_hopefox",
@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "zig_hopefox", .module = mod },
-                .{ .name = "chess", .module = chess_mod },
+                //.{ .name = "chess", .module = chess_mod },
             },
         }),
     });
@@ -36,7 +36,7 @@ pub fn build(b: *std.Build) void {
         .root_module = mod,
     });
 
-    mod_tests.root_module.addImport("chess", chess_mod);
+    //mod_tests.root_module.addImport("chess", chess_mod);
 
     const run_mod_tests = b.addRunArtifact(mod_tests);
 
@@ -47,7 +47,7 @@ pub fn build(b: *std.Build) void {
     exe_tests.max_memory = 10000;
     mod_tests.max_memory = 10000;
 
-    exe_tests.root_module.addImport("chess", chess_mod);
+    //exe_tests.root_module.addImport("chess", chess_mod);
 
     const run_exe_tests = b.addRunArtifact(exe_tests);
 

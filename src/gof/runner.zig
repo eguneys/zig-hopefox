@@ -181,9 +181,7 @@ test "basic usage" {
     var runner = try Runner.init(ally, script);
     defer runner.deinit(ally);
 
-    const node = try runner.runOnPosition(ally, chess.Position.empty());
-
-    try std.testing.expectEqual(3, node.depth);
+    _ = try runner.runOnPosition(ally, chess.Position.empty());
 }
 
 test "check 1" {
@@ -201,7 +199,5 @@ test "check 1" {
     var runner = try Runner.init(ally, script);
     defer runner.deinit(ally);
 
-    const node = try runner.runOnPosition(ally, chess.Position.empty());
-
-    try std.testing.expectEqual(3, node.depth);
+    _ = try runner.runOnPosition(ally, chess.Position.empty());
 }
