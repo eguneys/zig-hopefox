@@ -27,6 +27,10 @@ pub const DescriptionSymbol = struct {
     kind: DescriptionSymbolType,
     id: DescriptionSymbolId,
 
+    pub fn equals(self: DescriptionSymbol, other: DescriptionSymbol) bool {
+        return self.kind == other.kind and self.id == other.id;
+    }
+
     pub fn fromSlice(slice: []const u8) ?DescriptionSymbol {
         for (RoleNames, RoleKinds) |name, kind| {
             if (std.mem.startsWith(u8, slice, name)) {

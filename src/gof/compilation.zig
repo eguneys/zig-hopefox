@@ -40,11 +40,6 @@ pub const Compilation = struct {
         var blocks: std.ArrayList(CompiledDescriptionBlock) = .empty;
         errdefer blocks.deinit(allocator);
 
-        for (self.parsification.ir_program.?.blocks) |block| {
-            const compiled_block = try self.compile_block(allocator, block);
-            try blocks.append(allocator, compiled_block);
-        }
-
         var table_builder = table.TableBuilder(symbols.DescriptionSymbol, chess.Bitboard).init();
 
         for (self.parsification.ir_program.?.blocks) |block| {
@@ -57,6 +52,11 @@ pub const Compilation = struct {
                     }
                 }
             }
+        }
+
+        for (self.parsification.ir_program.?.blocks) |block| {
+            const compiled_block = try self.compile_block(allocator, block, table_builder);
+            try blocks.append(allocator, compiled_block);
         }
 
         return .{
@@ -144,7 +144,7 @@ pub const Compilation = struct {
         }
     };
 
-    fn compile_block(self: *Compilation, allocator: std.mem.Allocator, block: parser.IrBlock) !CompiledDescriptionBlock {
+    fn compile_block(self: *Compilation, allocator: std.mem.Allocator, block: parser.IrBlock, table_builder: table.TableBuilder(symbols.DescriptionSymbol, chess.Bitboard)) !CompiledDescriptionBlock {
         const lines = [0]AtomicCall{};
         var builder = try CompiledDescriptionBuilder.init(allocator, 0, &lines);
         errdefer builder.deinit(allocator);
@@ -152,7 +152,7 @@ pub const Compilation = struct {
         var last_depth: usize = 0;
         for (block.descriptions) |desc| {
             for (desc.lines) |line| {
-                const compiled_definition = try self.compile_definition(allocator, line);
+                const compiled_definition = try self.compile_definition(allocator, line, table_builder);
 
                 if (line.binding == .desc_if) {
                     last_depth = line.indent;
@@ -166,13 +166,13 @@ pub const Compilation = struct {
         };
     }
 
-    fn compile_definition(self: *Compilation, allocator: std.mem.Allocator, line: parser.IrDescriptionLine) !CompiledDefinition {
+    fn compile_definition(self: *Compilation, allocator: std.mem.Allocator, line: parser.IrDescriptionLine, table_builder: table.TableBuilder(symbols.DescriptionSymbol, chess.Bitboard)) !CompiledDefinition {
         var atomic_calls: std.ArrayList(AtomicCall) = .empty;
         errdefer atomic_calls.deinit(allocator);
 
         if (self.definitions_by_id.get(line.definition_call_id)) |definition| {
             for (definition.calls) |call| {
-                const atomic_call = try Compilation.compile_atomic_call(allocator, call, definition.header.parameters, line.arguments);
+                const atomic_call = try Compilation.compile_atomic_call(allocator, call, definition.header.parameters, line.arguments, table_builder);
                 try atomic_calls.append(allocator, atomic_call);
             }
         }
@@ -180,34 +180,39 @@ pub const Compilation = struct {
         return atomic_calls.toOwnedSlice(allocator);
     }
 
-    fn compile_atomic_call(allocator: std.mem.Allocator, call: parser.IrDefinitionCall, parameters: []parser.IrDefinitionParameter, arguments: []parser.IrDescriptionArgument) !AtomicCall {
-        var argument_columns: std.ArrayList(usize) = .empty;
-        errdefer argument_columns.deinit(allocator);
+    fn compile_atomic_call(allocator: std.mem.Allocator, call: parser.IrDefinitionCall, parameters: []parser.IrDefinitionParameter, arguments: []parser.IrDescriptionArgument, table_builder: table.TableBuilder(symbols.DescriptionSymbol, chess.Bitboard)) !AtomicCall {
+        var argument_symbols: std.ArrayList(AtomicArgument) = .empty;
+        errdefer argument_symbols.deinit(allocator);
 
         for (call.arguments) |argument| {
-            const argument_column = try Compilation.find_argument_column(argument, parameters, arguments);
-            try argument_columns.append(allocator, argument_column);
+            const argument2 = try Compilation.find_argument(argument, parameters, arguments, table_builder);
+            try argument_symbols.append(allocator, argument2);
         }
 
         return .{
             .action = call.action,
-            .argument_columns = try argument_columns.toOwnedSlice(allocator),
+            .arguments = try argument_symbols.toOwnedSlice(allocator),
         };
     }
 
-    fn find_argument_column(argument: parser.IrDefinitionCallArgumentId, parameters: []parser.IrDefinitionParameter, arguments: []parser.IrDescriptionArgument) !usize {
+    fn find_argument(argument: parser.IrDefinitionCallArgumentId, parameters: []parser.IrDefinitionParameter, arguments: []parser.IrDescriptionArgument, table_builder: table.TableBuilder(symbols.DescriptionSymbol, chess.Bitboard)) !AtomicArgument {
+        const symbol = try Compilation.find_argument_symbol(argument, parameters, arguments);
+        return .{ .symbol = symbol, .column = try table_builder.findColumn(symbol) };
+    }
+
+    fn find_argument_symbol(argument: parser.IrDefinitionCallArgumentId, parameters: []parser.IrDefinitionParameter, arguments: []parser.IrDescriptionArgument) !symbols.DescriptionSymbol {
         if (parameters.len != arguments.len) {
             // diagnostics
             return errors.UnmatchedParameterList;
         }
         for (parameters, arguments) |candidate, parameter| {
             if (candidate.one == argument) {
-                return try Compilation.find_column_for_symbol(parameter.one);
+                return parameter.one;
             }
             if (candidate.two) |two| {
                 if (two == argument) {
                     if (parameter.two) |ptwo| {
-                        return try Compilation.find_column_for_symbol(ptwo);
+                        return ptwo;
                     } else {
                         // diagnostics
                         return errors.NoSecondParameterFound;
@@ -219,22 +224,20 @@ pub const Compilation = struct {
         return errors.NoParameterFoundForArgument;
     }
 
-    fn find_column_for_symbol(symbol: symbols.DescriptionSymbol) !usize {
-        return symbol.id;
-    }
-
     pub fn deinit(self: *Compilation) void {
         self.definitions_by_id.deinit(self.parsification.arena.allocator());
         self.parsification.deinit();
     }
 };
 
+pub const AtomicArgument = struct { symbol: symbols.DescriptionSymbol, column: usize };
+
 pub const AtomicCall = struct {
     action: atomic.DefinitionCallAction,
-    argument_columns: []usize,
+    arguments: []AtomicArgument,
 
     pub fn deinit(self: AtomicCall, allocator: std.mem.Allocator) void {
-        allocator.free(self.argument_columns);
+        allocator.free(self.arguments);
     }
 };
 

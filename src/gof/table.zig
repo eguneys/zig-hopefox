@@ -2,6 +2,8 @@ const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 
+const errors = error{NoSuchColumn};
+
 pub fn TableBuilder(comptime K: type, comptime T: type) type {
     return struct {
         columns: std.AutoHashMapUnmanaged(K, bool),
@@ -14,6 +16,19 @@ pub fn TableBuilder(comptime K: type, comptime T: type) type {
 
         pub fn addColumn(self: *Self, allocator: std.mem.Allocator, key: K) !void {
             try self.columns.put(allocator, key, true);
+        }
+
+        pub fn findColumn(self: Self, key: K) !usize {
+            var iterator = self.columns.iterator();
+            var i: usize = 0;
+            while (iterator.next()) |seek| {
+                if (seek.key_ptr.equals(key)) {
+                    return i;
+                }
+                i += 1;
+            }
+            //std.debug.print("asdf{t} {t}", .{ key.kind, key.kind });
+            return errors.NoSuchColumn;
         }
 
         pub fn toTable(self: *Self, allocator: Allocator, capacity: usize) !Table(T) {
