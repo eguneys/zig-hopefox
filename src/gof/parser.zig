@@ -1145,8 +1145,22 @@ const SemanticParser = struct {
         var semantic_parameters: std.ArrayList(SemanticDefinitionParameter) = .empty;
         errdefer semantic_parameters.deinit(self.allocator);
 
-        for (header.parameters) |parameter| {
-            try semantic_parameters.append(self.allocator, try SemanticParser.parse_semantic_definition_parameter(parameter));
+        var i: usize = 0;
+        while (i < header.parameters.len) {
+            const parameter = header.parameters[i];
+            const name = try SemanticParser.parse_semantic_definition_parameter(parameter);
+            if (i < header.parameters.len - 1) {
+                const param2 = header.parameters[i + 1];
+                if (param2.kind == TokenType.Underscore) {
+                    const name2 = try SemanticParser.parse_semantic_definition_parameter(param2);
+                    try semantic_parameters.append(self.allocator, .{ .name = name, .name2 = name2 });
+
+                    i += 2;
+                    continue;
+                }
+            }
+            try semantic_parameters.append(self.allocator, .{ .name = name, .name2 = null });
+            i += 1;
         }
 
         var semantic_tags: std.ArrayList(SemanticDefinitionTag) = .empty;
@@ -1174,11 +1188,8 @@ const SemanticParser = struct {
         return null;
     }
 
-    fn parse_semantic_definition_parameter(parameter: Token) !SemanticDefinitionParameter {
-        return .{
-            .name = parameter.value,
-            .name2 = parameter.value,
-        };
+    fn parse_semantic_definition_parameter(parameter: Token) ![]const u8 {
+        return parameter.value;
     }
 };
 
@@ -1531,4 +1542,23 @@ test "regression 1" {
 
     try std.testing.expectEqual(2, ir_program.blocks[0].definitions[0].header.parameters.len);
     try std.testing.expectEqual(2, ir_program.blocks[0].descriptions[0].lines[0].arguments.len);
+}
+
+test "regression 2" {
+    const allocator = std.testing.allocator;
+
+    var compilation = Parsification.init(allocator);
+    defer compilation.deinit();
+
+    _ = try compilation.parse(
+        \\ ###
+        \\
+        \\ def hello(From, To_Captured)
+        \\   captures(From)
+    );
+
+    _ = try compilation.parse_semantics();
+    const ir_program = try compilation.parse_ir();
+
+    try std.testing.expectEqual(3, ir_program.blocks[0].definitions[0].header.parameters.len);
 }

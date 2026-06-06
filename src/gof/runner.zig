@@ -185,3 +185,23 @@ test "basic usage" {
 
     try std.testing.expectEqual(3, node.depth);
 }
+
+test "check 1" {
+    const ally = std.testing.allocator;
+
+    const script =
+        \\ ###
+        \\
+        \\if captures(king, queen_king2)
+        \\
+        \\ def captures(From, Captured_To)
+        \\   captures(From, To, Captured)
+        \\
+    ;
+    var runner = try Runner.init(ally, script);
+    defer runner.deinit(ally);
+
+    const node = try runner.runOnPosition(ally, chess.Position.empty());
+
+    try std.testing.expectEqual(3, node.depth);
+}
