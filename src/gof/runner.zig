@@ -39,57 +39,118 @@ const Runner = struct {
     const RunputNodeBuilder = struct {
         depth: usize,
         children: ?std.ArrayList(RunputNodeBuilder),
-        nodes: std.ArrayList(RunputNode),
+        runput: Runput,
 
-        fn init(allocator: std.mem.Allocator, depth: usize, node: RunputNode) !RunputNodeBuilder {
-            var nodes = try std.ArrayList(RunputNode).initCapacity(allocator, 1);
-            errdefer nodes.deinit(allocator);
-
-            try nodes.append(allocator, node);
-
+        fn init(depth: usize, runput: Runput) !RunputNodeBuilder {
             return .{
                 .depth = depth,
-                .nodes = nodes,
+                .runput = runput,
                 .children = null,
             };
         }
 
-        fn toOwnedPut() !?RunputNode {
-            return null;
+        fn getParentRangeForDepth(self: RunputNodeBuilder, depth: usize) Range {
+            if (self.children) |children| {
+                const last = children.getLast();
+                if (last.depth < depth) {
+                    return last.getParentRangeForDepth(depth);
+                }
+            }
+            return self.runput.range;
         }
 
-        fn deinit() void {}
+        fn appendAtDepth(self: *RunputNodeBuilder, allocator: std.mem.Allocator, depth: usize, runput: Runput) !void {
+            if (self.children) |*children| {
+                var last = children.getLast();
+
+                if (last.depth == depth) {
+                    try children.append(allocator, try RunputNodeBuilder.init(depth, runput));
+                } else {
+                    try last.appendAtDepth(allocator, depth, runput);
+                }
+            } else {
+                self.children = try std.ArrayList(RunputNodeBuilder).initCapacity(allocator, 1);
+                try self.children.?.append(allocator, try RunputNodeBuilder.init(depth, runput));
+            }
+        }
+
+        const MapBuilder = struct {
+            pub fn mapAllocator(allocator: std.mem.Allocator, builder: *RunputNodeBuilder) !?RunputNode {
+                const children =
+                    if (builder.children) |list| here: {
+                        var result = try std.ArrayList(RunputNode).initCapacity(allocator, list.items.len);
+                        for (list.items) |*item| {
+                            if (try MapBuilder.mapAllocator(allocator, item)) |result_item|
+                                try result.append(allocator, result_item);
+                        }
+                        break :here try result.toOwnedSlice(allocator);
+                    } else null;
+
+                return .{
+                    .depth = builder.depth,
+                    .put = builder.runput,
+                    .children = children,
+                };
+            }
+        };
+
+        fn toOwnedPut(self: RunputNodeBuilder, allocator: std.mem.Allocator) !RunputNode {
+            const children =
+                if (self.children) |list| here: {
+                    var result = try std.ArrayList(RunputNode).initCapacity(allocator, list.items.len);
+                    for (list.items) |*item| {
+                        if (try MapBuilder.mapAllocator(allocator, item)) |result_item|
+                            try result.append(allocator, result_item);
+                    }
+                    break :here try result.toOwnedSlice(allocator);
+                } else null;
+            return .{
+                .depth = self.depth,
+                .put = self.runput,
+                .children = children,
+            };
+        }
+
+        fn deinit(self: RunputNodeBuilder) void {
+            _ = self;
+        }
     };
 
     fn runOnPosition(self: *Runner, allocator: std.mem.Allocator, position: chess.Position) !RunputNode {
         self.history.clearAndFree(allocator);
         self.compiled.table.clearAndFree(allocator);
 
-        self.history.append(allocator, position);
+        try self.history.append(allocator, position);
         try self.compiled.table.appendRow(allocator, self.empty_row);
 
-        const runput_builder = RunputNodeBuilder.init(allocator);
+        var runput_builder = try RunputNodeBuilder.init(0, .{ .range = .{ .start = 0, .end = 1 } });
         errdefer runput_builder.deinit();
 
-        var range = .{ .start = 0, .end = 1 };
         for (self.compiled.blocks) |block| {
             for (block.descriptions) |description| {
-                range = try self.run_lines_on_range(allocator, description.bound_lines, range);
+                const range = runput_builder.getParentRangeForDepth(description.depth);
+                const new_range = try self.run_lines_on_range(allocator, description.bound_lines, range);
 
-                if (range.start == range.end) {
+                if (new_range.start == new_range.end) {
                     break;
                 }
+                // 0 1
+                // if aasdf 1 5
+                //   if aflksaf
+                //   if asldfkj
+                // if asldkf
+                try runput_builder.appendAtDepth(allocator, description.depth, .{ .range = range });
             }
         }
 
-        return runput_builder.toOwnedPut();
+        return try runput_builder.toOwnedPut(allocator);
     }
 
-    fn run_lines_on_range(self: *Runner, allocator: std.mem.Allocator, bound_lines: [][]const atomic.AtomicCall, range: Range) !Range {
+    fn run_lines_on_range(self: *Runner, allocator: std.mem.Allocator, bound_lines: [][]const cp.AtomicCall, range: Range) !Range {
         const start = self.history.items.len;
         for (bound_lines) |line| {
             for (line) |call| {
-                try atomic.CallRunner.call(allocator, self.history, self.table, range, call);
+                try atomic.CallRunner.atomic_call(allocator, self.history.items, self.compiled.table, range, call);
             }
         }
         const end = self.history.items.len;
@@ -97,7 +158,7 @@ const Runner = struct {
     }
 };
 
-const Range = struct { start: usize, end: usize };
+pub const Range = struct { start: usize, end: usize };
 
 const RunputNode = struct { depth: usize, put: Runput, children: ?[]RunputNode };
 
@@ -119,4 +180,8 @@ test "basic usage" {
     ;
     var runner = try Runner.init(ally, script);
     defer runner.deinit(ally);
+
+    const node = try runner.runOnPosition(ally, chess.Position.empty());
+
+    try std.testing.expectEqual(3, node.depth);
 }

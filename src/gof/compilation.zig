@@ -41,7 +41,7 @@ pub const Compilation = struct {
         errdefer blocks.deinit(allocator);
 
         for (self.parsification.ir_program.?.blocks) |block| {
-            const compiled_block = try self.compile_block(block);
+            const compiled_block = try self.compile_block(allocator, block);
             try blocks.append(allocator, compiled_block);
         }
 
@@ -128,66 +128,70 @@ pub const Compilation = struct {
 
         fn toOwnedSlice(self: *CompiledDescriptionBuilder, allocator: std.mem.Allocator) !?[]CompiledDescription {
             const result =
-                if (self.children) |list| here: {
+                if (self.children) |*list| here: {
                     var result = try std.ArrayList(CompiledDescription).initCapacity(allocator, list.items.len);
+                    errdefer result.deinit(allocator);
+
                     for (list.items) |*item| {
                         if (try MapBuilder.mapAllocator(allocator, item)) |result_item|
                             try result.append(allocator, result_item);
                     }
+                    list.deinit(allocator);
                     break :here try result.toOwnedSlice(allocator);
                 } else null;
+            self.bound_lines.deinit(allocator);
             return result;
         }
     };
 
-    fn compile_block(self: *Compilation, block: parser.IrBlock) !CompiledDescriptionBlock {
+    fn compile_block(self: *Compilation, allocator: std.mem.Allocator, block: parser.IrBlock) !CompiledDescriptionBlock {
         const lines = [0]AtomicCall{};
-        var builder = try CompiledDescriptionBuilder.init(self.parsification.arena.allocator(), 0, &lines);
-        errdefer builder.deinit(self.parsification.arena.allocator());
+        var builder = try CompiledDescriptionBuilder.init(allocator, 0, &lines);
+        errdefer builder.deinit(allocator);
 
         var last_depth: usize = 0;
         for (block.descriptions) |desc| {
             for (desc.lines) |line| {
-                const compiled_definition = try self.compile_definition(line);
+                const compiled_definition = try self.compile_definition(allocator, line);
 
                 if (line.binding == .desc_if) {
                     last_depth = line.indent;
                 }
-                try builder.appendAtDepth(self.parsification.arena.allocator(), last_depth, compiled_definition);
+                try builder.appendAtDepth(allocator, last_depth, compiled_definition);
             }
         }
 
         return .{
-            .descriptions = (try builder.toOwnedSlice(self.parsification.arena.allocator())).?,
+            .descriptions = (try builder.toOwnedSlice(allocator)).?,
         };
     }
 
-    fn compile_definition(self: *Compilation, line: parser.IrDescriptionLine) !CompiledDefinition {
+    fn compile_definition(self: *Compilation, allocator: std.mem.Allocator, line: parser.IrDescriptionLine) !CompiledDefinition {
         var atomic_calls: std.ArrayList(AtomicCall) = .empty;
-        errdefer atomic_calls.deinit(self.parsification.arena.allocator());
+        errdefer atomic_calls.deinit(allocator);
 
         if (self.definitions_by_id.get(line.definition_call_id)) |definition| {
             for (definition.calls) |call| {
-                const atomic_call = try self.compile_atomic_call(call, definition.header.parameters, line.arguments);
-                try atomic_calls.append(self.parsification.arena.allocator(), atomic_call);
+                const atomic_call = try Compilation.compile_atomic_call(allocator, call, definition.header.parameters, line.arguments);
+                try atomic_calls.append(allocator, atomic_call);
             }
         }
 
-        return atomic_calls.toOwnedSlice(self.parsification.arena.allocator());
+        return atomic_calls.toOwnedSlice(allocator);
     }
 
-    fn compile_atomic_call(self: *Compilation, call: parser.IrDefinitionCall, parameters: []parser.IrDefinitionParameter, arguments: []parser.IrDescriptionArgument) !AtomicCall {
+    fn compile_atomic_call(allocator: std.mem.Allocator, call: parser.IrDefinitionCall, parameters: []parser.IrDefinitionParameter, arguments: []parser.IrDescriptionArgument) !AtomicCall {
         var argument_columns: std.ArrayList(usize) = .empty;
-        errdefer argument_columns.deinit(self.parsification.arena.allocator());
+        errdefer argument_columns.deinit(allocator);
 
         for (call.arguments) |argument| {
             const argument_column = try Compilation.find_argument_column(argument, parameters, arguments);
-            try argument_columns.append(self.parsification.arena.allocator(), argument_column);
+            try argument_columns.append(allocator, argument_column);
         }
 
         return .{
             .action = call.action,
-            .argument_columns = try argument_columns.toOwnedSlice(self.parsification.arena.allocator()),
+            .argument_columns = try argument_columns.toOwnedSlice(allocator),
         };
     }
 
@@ -220,13 +224,18 @@ pub const Compilation = struct {
     }
 
     pub fn deinit(self: *Compilation) void {
+        self.definitions_by_id.deinit(self.parsification.arena.allocator());
         self.parsification.deinit();
     }
 };
 
-const AtomicCall = struct {
+pub const AtomicCall = struct {
     action: atomic.DefinitionCallAction,
     argument_columns: []usize,
+
+    pub fn deinit(self: AtomicCall, allocator: std.mem.Allocator) void {
+        allocator.free(self.argument_columns);
+    }
 };
 
 const CompiledDefinition = []const AtomicCall;
@@ -237,10 +246,30 @@ const CompiledDescription = struct {
     depth: usize,
     bound_lines: []CompiledDefinition,
     children: ?[]CompiledDescription,
+
+    pub fn deinit(self: *CompiledDescription, allocator: std.mem.Allocator) void {
+        for (self.bound_lines) |calls| {
+            for (calls) |*call| call.deinit(allocator);
+            allocator.free(calls);
+        }
+        allocator.free(self.bound_lines);
+        if (self.children) |children| {
+            for (children) |*child| {
+                child.deinit(allocator);
+            }
+            allocator.free(children);
+        }
+    }
 };
 
 const CompiledDescriptionBlock = struct {
     descriptions: []CompiledDescription,
+    pub fn deinit(self: *CompiledDescriptionBlock, allocator: std.mem.Allocator) void {
+        for (self.descriptions) |*description| {
+            description.deinit(allocator);
+        }
+        allocator.free(self.descriptions);
+    }
 };
 
 pub const CompiledProgram = struct {
@@ -248,6 +277,9 @@ pub const CompiledProgram = struct {
     table: table.Table(chess.Bitboard),
 
     pub fn deinit(self: *CompiledProgram, allocator: std.mem.Allocator) void {
+        for (self.blocks) |*block| {
+            block.deinit(allocator);
+        }
         allocator.free(self.blocks);
         self.table.deinit(allocator);
     }
