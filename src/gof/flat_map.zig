@@ -2,12 +2,21 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
-fn ArrayListFlatMaps(map: type, T: type, U: type) type {
+pub fn ArrayListFlatMaps(map: type, T: type, U: type) type {
     return struct {
-        fn flatMap(allocator: Allocator, list: []T) !ArrayList(U) {
+        pub fn flatMap(allocator: Allocator, list: []T) !ArrayList(U) {
             var result = try ArrayList(U).initCapacity(allocator, list.len);
             for (list) |item| {
                 if (map.flatMap(item)) |result_item|
+                    try result.append(allocator, result_item);
+            }
+            return result;
+        }
+
+        pub fn mapAllocator(allocator: Allocator, list: []T) !ArrayList(U) {
+            var result = try ArrayList(U).initCapacity(allocator, list.len);
+            for (list) |item| {
+                if (try map.mapAllocator(allocator, item)) |result_item|
                     try result.append(allocator, result_item);
             }
             return result;

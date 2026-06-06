@@ -3,24 +3,25 @@ const atomic = @import("atomic_filters.zig");
 const parser = @import("parser.zig");
 const symbols = @import("symbols.zig");
 const table = @import("table.zig");
+const flat_map = @import("flat_map.zig");
+const chess = @import("chess/types.zig");
 
 const errors = error{
+    UnmatchedParameterList,
     NoSecondParameterFound,
     NoParameterFoundForArgument,
 };
 
 const Compilation = struct {
     parsification: parser.Parsification,
-    definitions_by_id: std.AutoHashMap(parser.IrDefinitionId, parser.IrDefinition),
+    definitions_by_id: std.AutoHashMapUnmanaged(parser.IrDefinitionId, parser.IrDefinition),
 
     fn init(allocator: std.mem.Allocator) Compilation {
-        var parsification = parser.Parsification.init(allocator);
-        var definitions_by_id: std.AutoHashMap(parser.IrDefinitionId, parser.IrDefinition) = .init(parsification.arena.allocator());
-        errdefer definitions_by_id.deinit();
-        return Compilation{
-            .parsification = parsification,
-            .definitions_by_id = definitions_by_id,
-        };
+        var res = Compilation{ .parsification = parser.Parsification.init(allocator), .definitions_by_id = undefined };
+
+        res.definitions_by_id = .{};
+        errdefer res.definitions_by_id.deinit();
+        return res;
     }
 
     fn parse(self: *Compilation, text: []const u8) !void {
@@ -30,7 +31,7 @@ const Compilation = struct {
 
         for (ir_program.blocks) |block| {
             for (block.definitions) |def| {
-                try self.definitions_by_id.put(def.header.id, def);
+                try self.definitions_by_id.put(self.parsification.arena.allocator(), def.header.id, def);
             }
         }
     }
@@ -44,20 +45,37 @@ const Compilation = struct {
             try blocks.append(self.parsification.arena.allocator(), compiled_block);
         }
 
-        const mytable = try table.Table(symbols.DescriptionSymbol).initCapacity(self.parsification.arena.allocator(), 256, 2048);
+        var table_builder = table.TableBuilder(symbols.DescriptionSymbol, chess.Bitboard).init();
+
+        for (self.parsification.ir_program.?.blocks) |block| {
+            for (block.descriptions) |desc| {
+                for (desc.lines) |line| {
+                    for (line.arguments) |argument| {
+                        try table_builder.addColumn(self.parsification.arena.allocator(), argument.one);
+                        if (argument.two) |two|
+                            try table_builder.addColumn(self.parsification.arena.allocator(), two);
+                    }
+                }
+            }
+        }
 
         return .{
             .blocks = try blocks.toOwnedSlice(self.parsification.arena.allocator()),
-            .table = mytable,
+            .table = try table_builder.toTable(self.parsification.arena.allocator(), 1024),
         };
     }
 
     const CompiledDescriptionBuilder = struct {
         depth: usize,
         children: ?std.ArrayList(CompiledDescriptionBuilder),
-        bound_lines: [][]AtomicCall,
+        bound_lines: std.ArrayList([]const AtomicCall),
 
-        fn init(depth: usize, bound_lines: [][]AtomicCall) CompiledDescriptionBuilder {
+        fn init(allocator: std.mem.Allocator, depth: usize, line: []const AtomicCall) !CompiledDescriptionBuilder {
+            var bound_lines = try std.ArrayList([]const AtomicCall).initCapacity(allocator, 1);
+            errdefer bound_lines.deinit(allocator);
+
+            try bound_lines.append(allocator, line);
+
             return .{
                 .depth = depth,
                 .bound_lines = bound_lines,
@@ -65,34 +83,58 @@ const Compilation = struct {
             };
         }
 
-        fn appendAtDepth(self: *CompiledDescriptionBuilder, allocator: std.mem.Allocator, depth: usize, bound_lines: []AtomicCall) !void {
+        fn appendAtDepth(self: *CompiledDescriptionBuilder, allocator: std.mem.Allocator, depth: usize, bound_lines: []const AtomicCall) !void {
             if (self.depth < depth) {
                 if (self.children) |children| {
-                    try children.getLast().appendAtDepth(allocator, depth, bound_lines);
+                    try children.items[children.items.len - 1].appendAtDepth(allocator, depth, bound_lines);
                 } else {
-                    self.children = std.ArrayList(CompiledDescriptionBuilder).initCapacity(allocator, 1);
-                    try self.children.?.append(allocator, CompiledDescriptionBuilder.init(depth, bound_lines));
+                    self.children = try std.ArrayList(CompiledDescriptionBuilder).initCapacity(allocator, 1);
+                    try self.children.?.append(allocator, try CompiledDescriptionBuilder.init(allocator, depth, bound_lines));
                 }
             } else if (self.depth == depth) {
-                try self.bound_lines.appendSlice(allocator, bound_lines);
+                try self.bound_lines.append(allocator, bound_lines);
             }
         }
 
-        fn toOwnedSlice(self: *CompiledDescriptionBuilder, allocator: std.mem.Allocator) ![]CompiledDescription {
+        const MapBuilder = struct {
+            pub fn mapAllocator(allocator: std.mem.Allocator, builder: *CompiledDescriptionBuilder) !?CompiledDescription {
+                const children =
+                    if (builder.children) |list| here: {
+                        var result = try std.ArrayList(CompiledDescription).initCapacity(allocator, list.items.len);
+                        for (list.items) |*item| {
+                            if (try MapBuilder.mapAllocator(allocator, item)) |result_item|
+                                try result.append(allocator, result_item);
+                        }
+                        break :here try result.toOwnedSlice(allocator);
+                    } else null;
 
-            self.bound_lines
-            if (self.children) |children| {
-                for (children) |child| {}
-            } else {
-                return .empty;
+                return .{
+                    .depth = builder.depth,
+                    .bound_lines = try builder.bound_lines.toOwnedSlice(allocator),
+                    .children = children,
+                };
             }
+        };
+
+        fn toOwnedSlice(self: *CompiledDescriptionBuilder, allocator: std.mem.Allocator) !?[]CompiledDescription {
+            const result =
+                if (self.children) |list| here: {
+                    var result = try std.ArrayList(CompiledDescription).initCapacity(allocator, list.items.len);
+                    for (list.items) |*item| {
+                        if (try MapBuilder.mapAllocator(allocator, item)) |result_item|
+                            try result.append(allocator, result_item);
+                    }
+                    break :here try result.toOwnedSlice(allocator);
+                } else null;
+            return result;
         }
     };
 
     fn compile_block(self: *Compilation, block: parser.IrBlock) !CompiledDescriptionBlock {
-        var builder = CompiledDescriptionBuilder.init();
+        const lines = [0]AtomicCall{};
+        var builder = try CompiledDescriptionBuilder.init(self.parsification.arena.allocator(), 0, &lines);
 
-        var last_depth = 0;
+        var last_depth: usize = 0;
         for (block.descriptions) |desc| {
             for (desc.lines) |line| {
                 const compiled_definition = try self.compile_definition(line);
@@ -100,12 +142,12 @@ const Compilation = struct {
                 if (line.binding == .desc_if) {
                     last_depth = line.indent;
                 }
-                builder.appendAtDepth(self.parsification.arena.allocator(), last_depth, compiled_definition);
+                try builder.appendAtDepth(self.parsification.arena.allocator(), last_depth, compiled_definition);
             }
         }
 
         return .{
-            .descriptions = try builder.toOwnedSlice(self.parsification.arena.allocator()),
+            .descriptions = (try builder.toOwnedSlice(self.parsification.arena.allocator())).?,
         };
     }
 
@@ -139,6 +181,10 @@ const Compilation = struct {
     }
 
     fn find_argument_column(argument: parser.IrDefinitionCallArgumentId, parameters: []parser.IrDefinitionParameter, arguments: []parser.IrDescriptionArgument) !usize {
+        if (parameters.len != arguments.len) {
+            // diagnostics
+            return errors.UnmatchedParameterList;
+        }
         for (parameters, arguments) |candidate, parameter| {
             if (candidate.one == argument) {
                 return try Compilation.find_column_for_symbol(parameter.one);
@@ -172,14 +218,14 @@ const AtomicCall = struct {
     argument_columns: []usize,
 };
 
-const CompiledDefinition = []AtomicCall;
+const CompiledDefinition = []const AtomicCall;
 
 const DescriptionBinding = parser.IrDescriptionBinding;
 
 const CompiledDescription = struct {
     depth: usize,
     bound_lines: []CompiledDefinition,
-    children: []CompiledDescription,
+    children: ?[]CompiledDescription,
 };
 
 const CompiledDescriptionBlock = struct {
@@ -188,13 +234,14 @@ const CompiledDescriptionBlock = struct {
 
 const CompiledProgram = struct {
     blocks: []CompiledDescriptionBlock,
-    table: table.Table(symbols.DescriptionSymbol),
+    table: table.Table(chess.Bitboard),
 };
 
 test "basic usage" {
     const ally = std.testing.allocator;
 
     var compilation = Compilation.init(ally);
+    defer compilation.deinit();
 
     try compilation.parse(
         \\ ###
@@ -207,5 +254,5 @@ test "basic usage" {
 
     const program = try compilation.compile();
 
-    try std.testing.expectEqual(program.table.columns.len, 2);
+    try std.testing.expectEqual(2, program.table.columns.len);
 }

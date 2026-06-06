@@ -139,7 +139,7 @@ test "piece" {
     try std.testing.expect(Piece.Black_King.roleOf() == Role.King);
 }
 
-const Bitboard = packed struct(u64) {
+pub const Bitboard = packed struct(u64) {
     bits: u64,
 
     pub const All = Bitboard{ .bits = 0xffff_ffff_ffff_ffff };

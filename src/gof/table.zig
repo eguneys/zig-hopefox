@@ -2,6 +2,29 @@ const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 
+pub fn TableBuilder(comptime K: type, comptime T: type) type {
+    return struct {
+        columns: std.AutoHashMapUnmanaged(K, bool),
+
+        const Self = @This();
+
+        pub fn init() Self {
+            return .{ .columns = .{} };
+        }
+
+        pub fn addColumn(self: *Self, allocator: std.mem.Allocator, key: K) !void {
+            try self.columns.put(allocator, key, true);
+        }
+
+        pub fn toTable(self: *Self, allocator: Allocator, capacity: usize) !Table(T) {
+            const res = try Table(T).initCapacity(allocator, self.columns.size, capacity);
+
+            self.columns.deinit(allocator);
+            return res;
+        }
+    };
+}
+
 pub fn Table(comptime T: type) type {
     return struct {
         columns: []std.ArrayList(T),

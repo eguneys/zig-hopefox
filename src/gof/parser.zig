@@ -1510,3 +1510,25 @@ test "ir parser" {
 
     try std.testing.expectEqual(1, ir_program.blocks.len);
 }
+
+test "regression 1" {
+    const allocator = std.testing.allocator;
+
+    var compilation = Parsification.init(allocator);
+    defer compilation.deinit();
+
+    _ = try compilation.parse(
+        \\ ###
+        \\
+        \\if hello(king, queen)
+        \\
+        \\ def hello(From, To)
+        \\   captures(From)
+    );
+
+    _ = try compilation.parse_semantics();
+    const ir_program = try compilation.parse_ir();
+
+    try std.testing.expectEqual(2, ir_program.blocks[0].definitions[0].header.parameters.len);
+    try std.testing.expectEqual(2, ir_program.blocks[0].descriptions[0].lines[0].arguments.len);
+}

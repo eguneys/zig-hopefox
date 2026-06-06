@@ -1,5 +1,5 @@
 const std = @import("std");
-const chess = @import("chess/types.zig");
+const chess = @import("chess");
 const file = @import("file.zig");
 const parser = @import("gof/parser.zig");
 
@@ -10,7 +10,8 @@ pub fn main(init: std.process.Init) !void {
 }
 
 test "imports" {
-    _ = @import("chess/types.zig");
+    _ = @import("chess");
     //_ = @import("file.zig");
     _ = @import("gof/parser.zig");
+    _ = @import("gof/compilation.zig");
 }

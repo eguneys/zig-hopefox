@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("chess/types.zig");
+const types = @import("chess");
 
 const PuzzleMeta = packed struct(u1096) {
     id: u40,
