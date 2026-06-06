@@ -730,3 +730,80 @@ pub const Uci = struct {
         return res;
     }
 };
+
+pub const Parses = struct {
+    pub fn bitboard(string: *const [71:0]u8) Bitboard {
+        var result = Bitboard.Zero;
+
+        for (0..8) |rank| {
+            for (0..8) |file| {
+                const char = string[(7 - rank) * 9 + file];
+                switch (char) {
+                    'o' => {
+                        result = result.set(Square.fromCoord(@enumFromInt(file), @enumFromInt(rank)));
+                    },
+                    else => {},
+                }
+            }
+        }
+        return result;
+    }
+
+    pub fn white(string: *const [71:0]u8) Position {
+        var result = Position.empty();
+
+        for (0..8) |rank| {
+            for (0..8) |file| {
+                const char = string[(7 - rank) * 9 + file];
+                if (Fen.parsePiece(char)) |piece| {
+                    const square = Square.fromCoord(@enumFromInt(file), @enumFromInt(rank));
+                    result.put_piece(square, piece);
+                }
+            }
+        }
+        return result;
+    }
+
+    pub fn black(string: *const [71:0]u8) Position {
+        var res = white(string);
+        res.flipTurn();
+        return res;
+    }
+};
+
+test "parses bitboard" {
+    try std.testing.expectEqual(Bitboard.A1, Parses.bitboard(
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\o.......
+    ));
+
+    try std.testing.expectEqual(Bitboard.D4.bitor(Bitboard.D5).bitor(Bitboard.H8), Parses.bitboard(
+        \\.......o
+        \\........
+        \\........
+        \\...o....
+        \\...o....
+        \\........
+        \\........
+        \\........
+    ));
+}
+
+test "parses position" {
+    try std.testing.expectEqual(Fen.parse(Fen.Initial), Parses.white(
+        \\rnbqkbnr
+        \\pppppppp
+        \\........
+        \\........
+        \\........
+        \\........
+        \\PPPPPPPP
+        \\RNBQKBNR
+    ));
+}
