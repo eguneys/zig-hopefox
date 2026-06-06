@@ -71,7 +71,8 @@ const Atomic_action_dispatchers = struct {
                     //const aa_from = chess.Attacks.ray_attacks(sq_from, p.occupied(), chess.Direction.Up_Right);
 
                     for (To) |bb_to| {
-                        var bb_to2 = bb_symbol_to.bitand(bb_to);
+                        var bb_to2 = bb_to;
+                        _ = bb_symbol_to;
                         while (bb_to2.next()) |sq_to| {
                             for (Captured) |bb_captured| {
                                 var bb_captured2 = bb_symbol_captured.bitand(bb_captured);

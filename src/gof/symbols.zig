@@ -62,8 +62,10 @@ test "fromSlice" {
 
 pub const SymbolPosition = struct {
     pub fn bitboardFrom(symbol: DescriptionSymbol, position: chess.Position) chess.Bitboard {
-        _ = symbol;
-        _ = position;
-        return chess.Bitboard.Zero;
+        return switch (symbol.kind) {
+            DescriptionSymbolType.King => position.bb_king,
+            DescriptionSymbolType.Queen => position.bb_queen,
+            else => chess.Bitboard.Zero,
+        };
     }
 };

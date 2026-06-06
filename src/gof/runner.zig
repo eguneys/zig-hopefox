@@ -94,14 +94,15 @@ const Runner = struct {
             }
         };
 
-        fn toOwnedPut(self: RunputNodeBuilder, allocator: std.mem.Allocator) !RunputNode {
+        fn toOwnedPut(self: *RunputNodeBuilder, allocator: std.mem.Allocator) !RunputNode {
             const children =
-                if (self.children) |list| here: {
+                if (self.children) |*list| here: {
                     var result = try std.ArrayList(RunputNode).initCapacity(allocator, list.items.len);
                     for (list.items) |*item| {
                         if (try MapBuilder.mapAllocator(allocator, item)) |result_item|
                             try result.append(allocator, result_item);
                     }
+                    list.deinit(allocator);
                     break :here try result.toOwnedSlice(allocator);
                 } else null;
             return .{
@@ -130,7 +131,6 @@ const Runner = struct {
             for (block.descriptions) |description| {
                 const range = runput_builder.getParentRangeForDepth(description.depth);
                 const new_range = try self.run_lines_on_range(allocator, description.bound_lines, range);
-
                 if (new_range.start == new_range.end) {
                     break;
                 }
@@ -139,7 +139,7 @@ const Runner = struct {
                 //   if aflksaf
                 //   if asldfkj
                 // if asldkf
-                try runput_builder.appendAtDepth(allocator, description.depth, .{ .range = range });
+                try runput_builder.appendAtDepth(allocator, description.depth, .{ .range = new_range });
             }
         }
 
@@ -160,7 +160,18 @@ const Runner = struct {
 
 pub const Range = struct { start: usize, end: usize };
 
-const RunputNode = struct { depth: usize, put: Runput, children: ?[]RunputNode };
+const RunputNode = struct {
+    depth: usize,
+    put: Runput,
+    children: ?[]RunputNode,
+
+    pub fn deinit(self: RunputNode, allocator: std.mem.Allocator) void {
+        if (self.children) |children| {
+            for (children) |child| child.deinit(allocator);
+            allocator.free(children);
+        }
+    }
+};
 
 const Runput = struct { range: Range };
 
@@ -209,9 +220,10 @@ test "check 1" {
         \\........
         \\kq......
     ));
+    defer res.deinit(ally);
 
     try std.testing.expect(res.children != null);
     try std.testing.expectEqual(1, res.children.?.len);
-    try std.testing.expectEqual(1, res.put.range.start);
-    try std.testing.expectEqual(2, res.put.range.end);
+    try std.testing.expectEqual(1, res.children.?[0].put.range.start);
+    try std.testing.expectEqual(2, res.children.?[0].put.range.end);
 }
