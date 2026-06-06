@@ -12,11 +12,11 @@ const errors = error{
     NoParameterFoundForArgument,
 };
 
-const Compilation = struct {
+pub const Compilation = struct {
     parsification: parser.Parsification,
     definitions_by_id: std.AutoHashMapUnmanaged(parser.IrDefinitionId, parser.IrDefinition),
 
-    fn init(allocator: std.mem.Allocator) Compilation {
+    pub fn init(allocator: std.mem.Allocator) Compilation {
         var res = Compilation{ .parsification = parser.Parsification.init(allocator), .definitions_by_id = undefined };
 
         res.definitions_by_id = .{};
@@ -24,7 +24,7 @@ const Compilation = struct {
         return res;
     }
 
-    fn parse(self: *Compilation, text: []const u8) !void {
+    pub fn parse(self: *Compilation, text: []const u8) !void {
         _ = try self.parsification.parse(text);
         _ = try self.parsification.parse_semantics();
         const ir_program = try self.parsification.parse_ir();
@@ -36,13 +36,13 @@ const Compilation = struct {
         }
     }
 
-    fn compile(self: *Compilation) !CompiledProgram {
+    pub fn compile(self: *Compilation, allocator: std.mem.Allocator) !CompiledProgram {
         var blocks: std.ArrayList(CompiledDescriptionBlock) = .empty;
-        errdefer blocks.deinit(self.parsification.arena.allocator());
+        errdefer blocks.deinit(allocator);
 
         for (self.parsification.ir_program.?.blocks) |block| {
             const compiled_block = try self.compile_block(block);
-            try blocks.append(self.parsification.arena.allocator(), compiled_block);
+            try blocks.append(allocator, compiled_block);
         }
 
         var table_builder = table.TableBuilder(symbols.DescriptionSymbol, chess.Bitboard).init();
@@ -51,17 +51,17 @@ const Compilation = struct {
             for (block.descriptions) |desc| {
                 for (desc.lines) |line| {
                     for (line.arguments) |argument| {
-                        try table_builder.addColumn(self.parsification.arena.allocator(), argument.one);
+                        try table_builder.addColumn(allocator, argument.one);
                         if (argument.two) |two|
-                            try table_builder.addColumn(self.parsification.arena.allocator(), two);
+                            try table_builder.addColumn(allocator, two);
                     }
                 }
             }
         }
 
         return .{
-            .blocks = try blocks.toOwnedSlice(self.parsification.arena.allocator()),
-            .table = try table_builder.toTable(self.parsification.arena.allocator(), 1024),
+            .blocks = try blocks.toOwnedSlice(allocator),
+            .table = try table_builder.toTable(allocator, 2048),
         };
     }
 
@@ -116,6 +116,16 @@ const Compilation = struct {
             }
         };
 
+        fn deinit(self: *CompiledDescriptionBuilder, allocator: std.mem.Allocator) void {
+            if (self.children) |*children| {
+                for (children.items) |*child| {
+                    child.deinit(allocator);
+                }
+                children.deinit(allocator);
+            }
+            self.bound_lines.deinit(allocator);
+        }
+
         fn toOwnedSlice(self: *CompiledDescriptionBuilder, allocator: std.mem.Allocator) !?[]CompiledDescription {
             const result =
                 if (self.children) |list| here: {
@@ -133,6 +143,7 @@ const Compilation = struct {
     fn compile_block(self: *Compilation, block: parser.IrBlock) !CompiledDescriptionBlock {
         const lines = [0]AtomicCall{};
         var builder = try CompiledDescriptionBuilder.init(self.parsification.arena.allocator(), 0, &lines);
+        errdefer builder.deinit(self.parsification.arena.allocator());
 
         var last_depth: usize = 0;
         for (block.descriptions) |desc| {
@@ -208,7 +219,7 @@ const Compilation = struct {
         return symbol.id;
     }
 
-    fn deinit(self: *Compilation) void {
+    pub fn deinit(self: *Compilation) void {
         self.parsification.deinit();
     }
 };
@@ -232,9 +243,14 @@ const CompiledDescriptionBlock = struct {
     descriptions: []CompiledDescription,
 };
 
-const CompiledProgram = struct {
+pub const CompiledProgram = struct {
     blocks: []CompiledDescriptionBlock,
     table: table.Table(chess.Bitboard),
+
+    pub fn deinit(self: *CompiledProgram, allocator: std.mem.Allocator) void {
+        allocator.free(self.blocks);
+        self.table.deinit(allocator);
+    }
 };
 
 test "basic usage" {
@@ -252,7 +268,32 @@ test "basic usage" {
         \\   captures(From)
     );
 
-    const program = try compilation.compile();
+    var program = try compilation.compile(ally);
+    defer program.deinit(ally);
 
     try std.testing.expectEqual(2, program.table.columns.len);
+}
+
+test "more table " {
+    const ally = std.testing.allocator;
+
+    var compilation = Compilation.init(ally);
+    defer compilation.deinit();
+
+    try compilation.parse(
+        \\ ###
+        \\
+        \\if hello(king, queen)
+        \\ve hello2(king, queen, bishop_rook)
+        \\
+        \\ def hello(From, To)
+        \\   captures(From)
+        \\
+        \\def hello2(From, To, Captured_X)
+    );
+
+    var program = try compilation.compile(ally);
+    defer program.deinit(ally);
+
+    try std.testing.expectEqual(4, program.table.columns.len);
 }

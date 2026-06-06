@@ -72,6 +72,12 @@ pub fn Table(comptime T: type) type {
             }
             allocator.free(self.columns);
         }
+
+        pub fn clearAndFree(self: *Self, allocator: Allocator) void {
+            for (self.columns) |*column| {
+                column.clearAndFree(allocator);
+            }
+        }
     };
 }
 
