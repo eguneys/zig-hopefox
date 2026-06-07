@@ -50,7 +50,7 @@ const Diagnostics = struct {
     }
 };
 
-const TokenType = enum {
+pub const TokenType = enum {
     Def,
     If,
     Ve,
@@ -291,7 +291,7 @@ const Definition = struct {
     calls: []const DefinitionCall,
 };
 
-const DescriptionLine = struct {
+pub const DescriptionLine = struct {
     binding: Token,
     name: Token,
     arguments: []Token,

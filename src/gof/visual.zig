@@ -21,16 +21,13 @@ const VisualNode = struct {
 
 const Visual: type = struct {
     tags: []parser.SemanticDescriptionTag,
-    line: []parser.Token,
-    lines: ?[]tre.Line,
+    line: parser.DescriptionLine,
+    lines: []tre.Line,
 
     pub fn deinit(self: Visual, allocator: std.mem.Allocator) void {
         allocator.free(self.tags);
-        allocator.free(self.line);
-        if (self.lines) |lines| {
-            for (lines) |line| line.deinit(allocator);
-            allocator.free(lines);
-        }
+        for (self.lines) |line| line.deinit(allocator);
+        allocator.free(self.lines);
     }
 };
 
@@ -72,7 +69,7 @@ const VisualBuilder = struct {
             const lines = try runner.movesFor(allocator, put.range);
             return .{
                 .tags = runner.compilation.tagsFor(put.line_no),
-                .line = try runner.compilation.linesFor(allocator, put.line_no),
+                .line = runner.compilation.linesFor(put.line_no),
                 .lines = lines,
             };
         }
@@ -137,6 +134,70 @@ const VisualBuilder = struct {
     };
 };
 
+pub const Prints = struct {
+    pub fn fromVisualNode(allocator: std.mem.Allocator, visual_node: VisualNode) ![]const u8 {
+        var list = try std.ArrayList(u8).initCapacity(allocator, 300);
+        errdefer list.deinit(allocator);
+        const visual = try Prints.fromVisual(allocator, visual_node.visual);
+        defer allocator.free(visual);
+
+        try list.appendSlice(allocator, visual);
+
+        return try list.toOwnedSlice(allocator);
+    }
+
+    pub fn fromVisual(allocator: std.mem.Allocator, visual: Visual) ![]const u8 {
+        var list = try std.ArrayList(u8).initCapacity(allocator, 300);
+        errdefer list.deinit(allocator);
+        const dline = try Prints.fromDescriptionLine(allocator, visual.line);
+        defer allocator.free(dline);
+        try list.appendSlice(allocator, dline);
+
+        if (visual.lines.len > 0) {
+            try list.appendSlice(allocator, " { ");
+        }
+        var sep: []const u8 = "";
+        for (visual.lines) |line| {
+            const str_line = try tre.Prints.fromLine(allocator, line);
+            defer allocator.free(str_line);
+
+            try list.appendSlice(allocator, sep);
+            try list.appendSlice(allocator, str_line);
+            sep = " ";
+        }
+        if (visual.lines.len > 0) {
+            try list.appendSlice(allocator, " }");
+        }
+
+        return try list.toOwnedSlice(allocator);
+    }
+
+    pub fn fromDescriptionLine(allocator: std.mem.Allocator, line: parser.DescriptionLine) ![]const u8 {
+        var list = try std.ArrayList(u8).initCapacity(allocator, 300);
+        errdefer list.deinit(allocator);
+
+        // if
+        try list.appendSlice(allocator, line.binding.value);
+        try list.append(allocator, ' ');
+        try list.appendSlice(allocator, line.name.value);
+        try list.append(allocator, '(');
+        var sep: []const u8 = "";
+        for (line.arguments) |argument| {
+            if (argument.kind == parser.TokenType.Underscore) {
+                try list.append(allocator, '_');
+                sep = "";
+                continue;
+            }
+            try list.appendSlice(allocator, sep);
+            try list.appendSlice(allocator, argument.value);
+            sep = ", ";
+        }
+        try list.append(allocator, ')');
+
+        return try list.toOwnedSlice(allocator);
+    }
+};
+
 test "hello" {
     const ally = std.testing.allocator;
 
@@ -167,4 +228,10 @@ test "hello" {
     try std.testing.expect(runput.children != null);
     const node = try VisualBuilder.build(ally, runner, runput.children.?[0]);
     defer node.deinit(ally);
+
+    const res = try Prints.fromVisualNode(ally, node);
+    defer ally.free(res);
+    try std.testing.expectEqualStrings(
+        \\if captures(pawn, pawn2_pawn3) { dxe4 exd3 }
+    , res);
 }

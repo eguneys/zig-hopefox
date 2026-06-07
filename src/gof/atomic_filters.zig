@@ -90,7 +90,7 @@ const Atomic_action_dispatchers = struct {
                                     p.put_piece(sq_to, from_piece);
                                     p.flipTurn();
 
-                                    std.debug.print("\n\nFrom:{s}To:{s}\n {s}\n\n{s}", .{ chess.Prints.fromSquare(sq_from), chess.Prints.fromSquare(sq_to), chess.Prints.position(history.items[i].position), chess.Prints.position(p) });
+                                    //std.debug.print("\n\nFrom:{s}To:{s}\n {s}\n\n{s}", .{ chess.Prints.fromSquare(sq_from), chess.Prints.fromSquare(sq_to), chess.Prints.position(history.items[i].position), chess.Prints.position(p) });
                                     try history.append(allocator, try history.items[i].addChild(allocator, p));
                                 }
                             }

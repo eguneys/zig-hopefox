@@ -70,14 +70,9 @@ pub const Compilation = struct {
         return line.tags;
     }
 
-    pub fn linesFor(self: Compilation, allocator: std.mem.Allocator, line_no: usize) ![]parser.Token {
+    pub fn linesFor(self: Compilation, line_no: usize) parser.DescriptionLine {
         const line = self.parsification.program.?.find_line(line_no).?;
-
-        var list = try std.ArrayList(parser.Token).initCapacity(allocator, line.arguments.len + 2);
-        try list.append(allocator, line.binding);
-        try list.append(allocator, line.name);
-        try list.appendSlice(allocator, line.arguments);
-        return try list.toOwnedSlice(allocator);
+        return line;
     }
 
     const CompiledDescriptionBuilder = struct {

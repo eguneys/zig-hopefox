@@ -378,3 +378,13 @@ test "moves up to root" {
     try expectMovesUptoRoot("e4", "e2e4");
     try expectMovesUptoRoot("e4 e5 Nc3 Nc6", "e2e4 e7e5 b1c3 b8c6");
 }
+
+pub const Prints = struct {
+    pub fn fromLine(allocator: std.mem.Allocator, line: Line) ![]const u8 {
+        var position = line.position;
+        const sans = try SansFromMoves.ReduceSlice(allocator, &position, line.moves);
+        defer allocator.free(sans);
+        const sans_string = try san.Prints.fromSans(allocator, sans);
+        return sans_string;
+    }
+};
