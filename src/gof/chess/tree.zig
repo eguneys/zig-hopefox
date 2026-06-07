@@ -4,43 +4,65 @@ const flat_map = @import("flat_map.zig");
 const san = @import("san.zig");
 
 pub const PositionNode = struct {
-    depth: usize,
     position: types.Position,
-    children: ?std.ArrayList(PositionNode),
+    parent: ?*PositionNode,
+    children: std.ArrayList(*PositionNode),
 
-    pub fn init(depth: usize, position: types.Position) PositionNode {
-        return .{ .depth = depth, .position = position, .children = null };
+    pub fn root(position: types.Position) PositionNode {
+        return PositionNode.init(position, null);
     }
 
-    pub fn addChild(self: *PositionNode, allocator: std.mem.Allocator, position: types.Position) !void {
-        if (self.children == null) {
-            self.children = .empty;
-            errdefer self.children.?.deinit(allocator);
+    pub fn init(position: types.Position, parent: ?*PositionNode) PositionNode {
+        return .{ .position = position, .parent = parent, .children = .empty };
+    }
+
+    pub fn deinit(self: *PositionNode, allocator: std.mem.Allocator) void {
+        for (self.children.items) |child| {
+            child.deinit(allocator);
+            allocator.destroy(child);
         }
-        try self.children.?.append(allocator, PositionNode.init(self.depth + 1, position));
+        self.children.deinit(allocator);
+    }
+
+    pub fn addChild(self: *PositionNode, allocator: std.mem.Allocator, position: types.Position) !*PositionNode {
+        const child_ptr = try allocator.create(PositionNode);
+        child_ptr.* = PositionNode.init(position, self);
+        try self.children.append(allocator, child_ptr);
+        return child_ptr;
     }
 
     const NodePositionToMove = struct {
-        pub fn flatMapContext(context: types.Position, child: PositionNode) ?types.Move {
+        pub fn flatMapContext(context: types.Position, child: *PositionNode) ?types.Move {
             return PositionsToMove.move(context, child.position);
         }
     };
 
     pub fn childMoves(self: PositionNode, allocator: std.mem.Allocator) ![]types.Move {
-        const mapMoves = flat_map.ArrayListMapContext(NodePositionToMove, types.Position, PositionNode, types.Move);
-        if (self.children) |children| {
-            var res = try mapMoves.flatMapContext(allocator, self.position, children.items);
-            return res.toOwnedSlice(allocator);
-        } else {
-            return &[0]types.Move{};
-        }
+        const mapMoves = flat_map.ArrayListMapContext(NodePositionToMove, types.Position, *PositionNode, types.Move);
+        var res = try mapMoves.flatMapContext(allocator, self.position, self.children.items);
+        return res.toOwnedSlice(allocator);
     }
 
-    pub fn deinit(self: *PositionNode, allocator: std.mem.Allocator) void {
-        if (self.children) |*children| {
-            for (children.items) |*child| child.deinit(allocator);
-            children.deinit(allocator);
+    pub fn depth(self: PositionNode) usize {
+        var i: usize = 1;
+        var pchild = self.parent;
+        while (pchild) |child| {
+            pchild = child.parent;
+            i += 1;
         }
+        return i;
+    }
+
+    pub fn movesToRoot(self: PositionNode, allocator: std.mem.Allocator) ![]types.Move {
+        var list = try std.ArrayList(types.Move).initCapacity(allocator, self.depth());
+        var child = self;
+        while (child.parent) |parent| {
+            const move = PositionsToMove.move(parent.position, child.position);
+            try list.append(allocator, move);
+            child = parent.*;
+        }
+        std.mem.reverse(types.Move, list.items);
+        return try list.toOwnedSlice(allocator);
     }
 };
 
@@ -111,7 +133,7 @@ const PositionsToMove = struct {
 test "basic usage" {
     const ally = std.testing.allocator;
 
-    var root = PositionNode.init(0, types.Parses.white(
+    var root = PositionNode.root(types.Parses.white(
         \\........
         \\........
         \\........
@@ -123,7 +145,7 @@ test "basic usage" {
     ));
     defer root.deinit(ally);
 
-    try root.addChild(ally, types.Parses.black(
+    _ = try root.addChild(ally, types.Parses.black(
         \\........
         \\........
         \\........
@@ -150,7 +172,7 @@ pub const SansFromMoves = struct {
 
     pub fn reduce(position: *types.Position, move: types.Move) san.San {
         const res = san.San.fromMove(position.*, move);
-        _ = position.make_move(move);
+        _ = position.make_move_and_flip_turn(move);
         return res;
     }
 };
@@ -236,14 +258,35 @@ test "captures and promotions" {
         \\........
     );
 }
+test "e2e4" {
+    try testPositionSequence("e4",
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\....P...
+        \\....K...
+    ,
+        \\........
+        \\........
+        \\........
+        \\........
+        \\....P...
+        \\........
+        \\........
+        \\....K...
+    );
+}
 
 fn testPositionSequence(expected: []const u8, before: *const [71:0]u8, after: *const [71:0]u8) !void {
     const ally = std.testing.allocator;
 
-    var root = PositionNode.init(0, types.Parses.white(before));
+    var root = PositionNode.init(types.Parses.white(before), null);
     defer root.deinit(ally);
 
-    try root.addChild(ally, types.Parses.black(after));
+    _ = try root.addChild(ally, types.Parses.black(after));
 
     const moves = try root.childMoves(ally);
     defer ally.free(moves);
@@ -253,4 +296,35 @@ fn testPositionSequence(expected: []const u8, before: *const [71:0]u8, after: *c
     defer ally.free(sans_string);
 
     try std.testing.expectEqualStrings(expected, sans_string);
+}
+
+fn expectMovesUptoRoot(expected: []const u8, ucis: []const u8) !void {
+    const ally = std.testing.allocator;
+
+    var iterator = std.mem.splitScalar(u8, ucis, ' ');
+
+    var root = PositionNode.init(types.Fen.parse(types.Fen.Initial), null);
+    defer root.deinit(ally);
+
+    var child = &root;
+    while (iterator.next()) |uci| {
+        const move = san.Uci.toMove(san.Uci.move(uci), child.position);
+        var position = child.position;
+        _ = position.make_move_and_flip_turn(move);
+        child = try child.addChild(ally, position);
+    }
+
+    const moves = try child.movesToRoot(ally);
+    defer ally.free(moves);
+    const sans = try SansFromMoves.ReduceSlice(ally, &root.position, moves);
+    defer ally.free(sans);
+    const sans_string = try san.Prints.fromSans(ally, sans);
+    defer ally.free(sans_string);
+
+    try std.testing.expectEqualStrings(expected, sans_string);
+}
+
+test "moves up to root" {
+    try expectMovesUptoRoot("e4", "e2e4");
+    try expectMovesUptoRoot("e4 e5 Nc3 Nc6", "e2e4 e7e5 b1c3 b8c6");
 }

@@ -703,6 +703,12 @@ pub const Position = packed struct(u512) {
             },
         }
     }
+
+    pub fn make_move_and_flip_turn(self: *Position, move: Move) ?Piece {
+        const res = self.make_move(move);
+        self.flipTurn();
+        return res;
+    }
 };
 
 pub const Fen = struct {

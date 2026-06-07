@@ -11,8 +11,11 @@ pub fn main(init: std.process.Init) !void {
 
 test "imports" {
     _ = @import("gof/chess/types.zig");
+    _ = @import("gof/chess/san.zig");
+    _ = @import("gof/chess/tree.zig");
     //_ = @import("file.zig");
     _ = @import("gof/parser.zig");
     _ = @import("gof/compilation.zig");
     _ = @import("gof/runner.zig");
+    _ = @import("gof/visual.zig");
 }
