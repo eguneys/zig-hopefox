@@ -536,6 +536,64 @@ pub const Position = packed struct(u512) {
     padding1: u7,
     padding7: u56,
 
+    pub fn bb_black(self: Position) Bitboard {
+        return self.occupied().bitdiff(self.bb_white);
+    }
+
+    pub fn bb_turn(self: Position) Bitboard {
+        return if (self.turn == Color.White) self.bb_white else self.bb_black();
+    }
+    pub fn bb_turn_pawn(self: Position) Bitboard {
+        return self.bb_turn().bitand(self.bb_pawn);
+    }
+
+    pub fn bb_turn_bishop(self: Position) Bitboard {
+        return self.bb_turn().bitand(self.bb_bishop);
+    }
+
+    pub fn bb_turn_rook(self: Position) Bitboard {
+        return self.bb_turn().bitand(self.bb_rook);
+    }
+
+    pub fn bb_turn_knight(self: Position) Bitboard {
+        return self.bb_turn().bitand(self.bb_knight);
+    }
+
+    pub fn bb_turn_queen(self: Position) Bitboard {
+        return self.bb_turn().bitand(self.bb_queen);
+    }
+
+    pub fn bb_turn_king(self: Position) Bitboard {
+        return self.bb_turn().bitand(self.bb_king);
+    }
+
+    pub fn bb_opponent(self: Position) Bitboard {
+        return if (self.turn == Color.Black) self.bb_white else self.bb_black();
+    }
+    pub fn bb_opponent_pawn(self: Position) Bitboard {
+        return self.bb_opponent().bitand(self.bb_pawn);
+    }
+
+    pub fn bb_opponent_bishop(self: Position) Bitboard {
+        return self.bb_opponent().bitand(self.bb_bishop);
+    }
+
+    pub fn bb_opponent_rook(self: Position) Bitboard {
+        return self.bb_opponent().bitand(self.bb_rook);
+    }
+
+    pub fn bb_opponent_knight(self: Position) Bitboard {
+        return self.bb_opponent().bitand(self.bb_knight);
+    }
+
+    pub fn bb_opponent_queen(self: Position) Bitboard {
+        return self.bb_opponent().bitand(self.bb_queen);
+    }
+
+    pub fn bb_opponent_king(self: Position) Bitboard {
+        return self.bb_opponent().bitand(self.bb_king);
+    }
+
     pub fn empty() Position {
         return std.mem.zeroes(Position);
     }

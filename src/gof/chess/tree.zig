@@ -46,32 +46,33 @@ pub const PositionNode = struct {
 
 const PositionsToMove = struct {
     pub fn move(p_from: types.Position, p_to: types.Position) types.Move {
-        var from: types.Square = undefined;
-        var to: types.Square = undefined;
-        if (bit_diff(p_from.bb_king, p_to.bb_king)) |diff| {
-            from = diff.from;
-            to = diff.to orelse to;
-        }
-        if (bit_diff(p_from.bb_pawn, p_to.bb_pawn)) |diff| {
-            from = diff.from;
-            to = diff.to orelse to;
-        }
+        const diff =
+            bit_diff(p_from.bb_turn_king(), p_to.bb_opponent_king()) orelse
+            bit_diff(p_from.bb_turn_pawn(), p_to.bb_opponent_pawn()) orelse
+            bit_diff(p_from.bb_turn_bishop(), p_to.bb_opponent_bishop()) orelse
+            bit_diff(p_from.bb_turn_rook(), p_to.bb_opponent_rook()) orelse
+            bit_diff(p_from.bb_turn_knight(), p_to.bb_opponent_knight()) orelse
+            bit_diff(p_from.bb_turn_queen(), p_to.bb_opponent_queen()) orelse
+            unreachable;
 
         return .{
-            .from = @truncate(@intFromEnum(from)),
-            .to = @truncate(@intFromEnum(to)),
+            .from = @truncate(@intFromEnum(diff.from)),
+            .to = @truncate(@intFromEnum(diff.to)),
             .kind = types.MoveType.Normal,
             .promotion = types.MovePromotionRole.Knight,
         };
     }
 
-    const Diff = struct { from: types.Square, to: ?types.Square };
+    const Diff = struct { from: types.Square, to: types.Square };
 
     fn bit_diff(bb_from: types.Bitboard, bb_to: types.Bitboard) ?Diff {
-        return if (bb_from.bitdiff(bb_to).single()) |from|
-            .{ .from = from, .to = bb_to.bitdiff(bb_from).single() }
-        else
-            null;
+        if (bb_from.bitdiff(bb_to).single()) |from| {
+            if (bb_to.bitdiff(bb_from).single()) |to| {
+                return .{ .from = from, .to = to };
+            }
+        }
+
+        return null;
     }
 };
 
@@ -85,7 +86,7 @@ test "basic usage" {
         \\........
         \\........
         \\........
-        \\..p.....
+        \\..P.....
         \\........
     ));
     defer root.deinit(ally);
@@ -95,7 +96,7 @@ test "basic usage" {
         \\........
         \\........
         \\........
-        \\..p.....
+        \\..P.....
         \\........
         \\........
         \\........
@@ -121,3 +122,47 @@ pub const SansFromMoves = struct {
         return res;
     }
 };
+
+test "captures and promotions" {
+    const before =
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\...p....
+        \\..P.....
+        \\........
+    ;
+
+    const after =
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\...P....
+        \\........
+        \\........
+    ;
+
+    try testPositionSequence(before, after, "cxd3");
+}
+
+fn testPositionSequence(before: *const [71:0]u8, after: *const [71:0]u8, expected: []const u8) !void {
+    const ally = std.testing.allocator;
+
+    var root = PositionNode.init(0, types.Parses.white(before));
+    defer root.deinit(ally);
+
+    try root.addChild(ally, types.Parses.black(after));
+
+    const moves = try root.childMoves(ally);
+    defer ally.free(moves);
+    const sans = try SansFromMoves.ReduceSlice(ally, &root.position, moves);
+    defer ally.free(sans);
+    const sans_string = try san.Prints.fromSans(ally, sans);
+    defer ally.free(sans_string);
+
+    try std.testing.expectEqualStrings(expected, sans_string);
+}
