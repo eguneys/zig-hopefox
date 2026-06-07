@@ -311,6 +311,19 @@ const Block = struct {
 const Program = struct {
     blocks: []Block,
     configurations: ?[]Configuration,
+
+    pub fn find_line(self: Program, line_no: usize) ?DescriptionLine {
+        for (self.blocks) |block| {
+            for (block.descriptions) |description| {
+                for (description.lines) |line| {
+                    if (line.line_no == line_no) {
+                        return line;
+                    }
+                }
+            }
+        }
+        return null;
+    }
 };
 
 const Parser = struct {
@@ -893,7 +906,7 @@ test "configurations block" {
 const SemanticDefinitionName = []const u8;
 const SemanticDefinitionParameter = struct { name: []const u8, name2: ?[]const u8 };
 
-const SemanticDefinitionTag = enum { Win, Cond };
+pub const SemanticDefinitionTag = enum { Win, Cond };
 
 const SemanticDefinitionHeader = struct {
     name: SemanticDefinitionName,
@@ -920,6 +933,7 @@ const SemanticDescriptionArgument = struct { name: []const u8, name2: ?[]const u
 const SemanticDescriptionTag = enum {};
 
 const SemanticDescriptionLine = struct {
+    line_no: usize,
     binding: SemanticDescriptionBinding,
     name: SemanticDefinitionName,
     arguments: []SemanticDescriptionArgument,
@@ -943,6 +957,19 @@ const SemanticBlock = struct {
 const SemanticProgram = struct {
     blocks: []SemanticBlock,
     configurations: ?[]SemanticConfiguration,
+
+    pub fn find_line(self: SemanticProgram, line_no: usize) ?SemanticDescriptionLine {
+        for (self.blocks) |block| {
+            for (block.descriptions) |description| {
+                for (description.lines) |line| {
+                    if (line.line_no == line_no) {
+                        return line;
+                    }
+                }
+            }
+        }
+        return null;
+    }
 };
 
 const SemanticParser = struct {
@@ -1052,6 +1079,7 @@ const SemanticParser = struct {
         }
 
         return .{
+            .line_no = line.name.line_no,
             .binding = binding.?,
             .name = line.name.value,
             .arguments = try self.parse_semantic_description_arguments(line.arguments),
@@ -1313,6 +1341,7 @@ pub const IrDescriptionArgument = struct {
 };
 
 pub const IrDescriptionLine = struct {
+    line_no: usize,
     definition_call_id: IrDefinitionId,
     binding: IrDescriptionBinding,
     arguments: []IrDescriptionArgument,
@@ -1396,7 +1425,7 @@ const IrParser = struct {
     }
 
     fn parse_ir_description_line(self: *IrParser, line: SemanticDescriptionLine) !?IrDescriptionLine {
-        return .{ .definition_call_id = IrParser.hash_definition_id(line.name), .binding = line.binding, .tags = line.tags, .arguments = try self.parse_ir_description_arguments(line.arguments), .indent = line.indent };
+        return .{ .line_no = line.line_no, .definition_call_id = IrParser.hash_definition_id(line.name), .binding = line.binding, .tags = line.tags, .arguments = try self.parse_ir_description_arguments(line.arguments), .indent = line.indent };
     }
 
     fn parse_ir_description_arguments(self: *IrParser, arguments: []SemanticDescriptionArgument) ![]IrDescriptionArgument {

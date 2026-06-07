@@ -4,15 +4,13 @@ const chess = @import("chess/types.zig");
 const atomic = @import("atomic_filters.zig");
 
 const Runner = struct {
+    compilation: cp.Compilation,
     compiled: cp.CompiledProgram,
-
     history: std.ArrayList(chess.Position),
-
     empty_row: []const chess.Bitboard,
 
     fn init(allocator: std.mem.Allocator, text: []const u8) !Runner {
         var compilation = cp.Compilation.init(allocator);
-        defer compilation.deinit();
         try compilation.parse(text);
         const compiled = try compilation.compile(allocator);
         var empty_row_list = try std.ArrayList(chess.Bitboard)
@@ -24,6 +22,7 @@ const Runner = struct {
         }
         const empty_row = try empty_row_list.toOwnedSlice(allocator);
         return .{
+            .compilation = compilation,
             .compiled = compiled,
             .history = .empty,
             .empty_row = empty_row,
@@ -31,6 +30,7 @@ const Runner = struct {
     }
 
     fn deinit(self: *Runner, allocator: std.mem.Allocator) void {
+        self.compilation.deinit();
         self.history.deinit(allocator);
         allocator.free(self.empty_row);
         self.compiled.deinit(allocator);
@@ -124,7 +124,7 @@ const Runner = struct {
         try self.history.append(allocator, position);
         try self.compiled.table.appendRow(allocator, self.empty_row);
 
-        var runput_builder = try RunputNodeBuilder.init(0, .{ .range = .{ .start = 0, .end = 1 } });
+        var runput_builder = try RunputNodeBuilder.init(0, .{ .range = .{ .start = 0, .end = 1 }, .line_no = 0 });
         errdefer runput_builder.deinit();
 
         for (self.compiled.blocks) |block| {
@@ -139,7 +139,7 @@ const Runner = struct {
                 //   if aflksaf
                 //   if asldfkj
                 // if asldkf
-                try runput_builder.appendAtDepth(allocator, description.depth, .{ .range = new_range });
+                try runput_builder.appendAtDepth(allocator, description.depth, .{ .range = new_range, .line_no = description.line_no });
             }
         }
 
@@ -173,7 +173,7 @@ const RunputNode = struct {
     }
 };
 
-const Runput = struct { range: Range };
+const Runput = struct { range: Range, line_no: usize };
 
 test "basic usage" {
     const ally = std.testing.allocator;
@@ -226,4 +226,15 @@ test "check 1" {
     try std.testing.expectEqual(1, res.children.?.len);
     try std.testing.expectEqual(1, res.children.?[0].put.range.start);
     try std.testing.expectEqual(2, res.children.?[0].put.range.end);
+
+    try std.testing.expectEqualStrings(
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\.k......
+    , &chess.Prints.position(runner.history.items[1]));
 }

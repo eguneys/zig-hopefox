@@ -65,12 +65,28 @@ pub const Compilation = struct {
         };
     }
 
+    pub fn tagsFor(self: Compilation, line_no: usize) []parser.SemanticDefinitionTag {
+        const line = self.parsification.semantic_program.?.find_line(line_no).?;
+        return line.tags;
+    }
+
+    pub fn linesFor(self: Compilation, line_no: usize) []parser.Token {
+        const line = self.parsification.program.?.find_line(line_no).?;
+
+        const list = try std.ArrayList(parser.Token).initCapacity(self.parsification.arena.allocator(), line.arguments.len + 2);
+        list.append(line.binding);
+        list.append(line.name);
+        list.appendSlice(line.arguments);
+        return try list.toOwnedSlice(self.parsification.arena.allocator());
+    }
+
     const CompiledDescriptionBuilder = struct {
         depth: usize,
         children: ?std.ArrayList(CompiledDescriptionBuilder),
         bound_lines: std.ArrayList([]const AtomicCall),
+        line_no: usize,
 
-        fn init(allocator: std.mem.Allocator, depth: usize, line: []const AtomicCall) !CompiledDescriptionBuilder {
+        fn init(allocator: std.mem.Allocator, depth: usize, line_no: usize, line: []const AtomicCall) !CompiledDescriptionBuilder {
             var bound_lines = try std.ArrayList([]const AtomicCall).initCapacity(allocator, 1);
             errdefer bound_lines.deinit(allocator);
 
@@ -78,18 +94,19 @@ pub const Compilation = struct {
 
             return .{
                 .depth = depth,
+                .line_no = line_no,
                 .bound_lines = bound_lines,
                 .children = null,
             };
         }
 
-        fn appendAtDepth(self: *CompiledDescriptionBuilder, allocator: std.mem.Allocator, depth: usize, bound_lines: []const AtomicCall) !void {
+        fn appendAtDepth(self: *CompiledDescriptionBuilder, allocator: std.mem.Allocator, depth: usize, line_no: usize, bound_lines: []const AtomicCall) !void {
             if (self.depth < depth) {
                 if (self.children) |children| {
-                    try children.items[children.items.len - 1].appendAtDepth(allocator, depth, bound_lines);
+                    try children.items[children.items.len - 1].appendAtDepth(allocator, depth, line_no, bound_lines);
                 } else {
                     self.children = try std.ArrayList(CompiledDescriptionBuilder).initCapacity(allocator, 1);
-                    try self.children.?.append(allocator, try CompiledDescriptionBuilder.init(allocator, depth, bound_lines));
+                    try self.children.?.append(allocator, try CompiledDescriptionBuilder.init(allocator, depth, line_no, bound_lines));
                 }
             } else if (self.depth == depth) {
                 try self.bound_lines.append(allocator, bound_lines);
@@ -112,6 +129,7 @@ pub const Compilation = struct {
                     .depth = builder.depth,
                     .bound_lines = try builder.bound_lines.toOwnedSlice(allocator),
                     .children = children,
+                    .line_no = builder.line_no,
                 };
             }
         };
@@ -146,7 +164,7 @@ pub const Compilation = struct {
 
     fn compile_block(self: *Compilation, allocator: std.mem.Allocator, block: parser.IrBlock, table_builder: table.TableBuilder(symbols.DescriptionSymbol, chess.Bitboard)) !CompiledDescriptionBlock {
         const lines = [0]AtomicCall{};
-        var builder = try CompiledDescriptionBuilder.init(allocator, 0, &lines);
+        var builder = try CompiledDescriptionBuilder.init(allocator, 0, 0, &lines);
         errdefer builder.deinit(allocator);
 
         var last_depth: usize = 0;
@@ -157,7 +175,7 @@ pub const Compilation = struct {
                 if (line.binding == .desc_if) {
                     last_depth = line.indent;
                 }
-                try builder.appendAtDepth(allocator, last_depth, compiled_definition);
+                try builder.appendAtDepth(allocator, last_depth, line.line_no, compiled_definition);
             }
         }
 
@@ -225,7 +243,6 @@ pub const Compilation = struct {
     }
 
     pub fn deinit(self: *Compilation) void {
-        self.definitions_by_id.deinit(self.parsification.arena.allocator());
         self.parsification.deinit();
     }
 };
@@ -249,6 +266,7 @@ const CompiledDescription = struct {
     depth: usize,
     bound_lines: []CompiledDefinition,
     children: ?[]CompiledDescription,
+    line_no: usize,
 
     pub fn deinit(self: *CompiledDescription, allocator: std.mem.Allocator) void {
         for (self.bound_lines) |calls| {
