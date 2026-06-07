@@ -72,7 +72,7 @@ const TokenType = enum {
     Eof,
 };
 
-const Token = struct { kind: TokenType, value: []const u8, line_no: usize, column_no: usize };
+pub const Token = struct { kind: TokenType, value: []const u8, line_no: usize, column_no: usize };
 
 const Lexer = struct {
     i_next: usize = 0,
@@ -316,7 +316,7 @@ const Program = struct {
         for (self.blocks) |block| {
             for (block.descriptions) |description| {
                 for (description.lines) |line| {
-                    if (line.line_no == line_no) {
+                    if (line.name.line_no == line_no) {
                         return line;
                     }
                 }
@@ -930,7 +930,7 @@ const SemanticDescriptionBinding = enum { desc_if, desc_ve };
 
 const SemanticDescriptionArgument = struct { name: []const u8, name2: ?[]const u8 };
 
-const SemanticDescriptionTag = enum {};
+pub const SemanticDescriptionTag = enum {};
 
 const SemanticDescriptionLine = struct {
     line_no: usize,

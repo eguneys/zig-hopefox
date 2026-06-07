@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const chess = @import("chess/types.zig");
+const tre = @import("chess/tree.zig");
 const rr = @import("runner.zig");
 const cc = @import("compilation.zig");
 const sym = @import("symbols.zig");
@@ -24,7 +25,7 @@ pub const Parser = struct {
 };
 
 pub const CallRunner = struct {
-    pub fn atomic_call(allocator: Allocator, history: *ArrayList(chess.Position), table: *Table, range: rr.Range, call: AtomicCall) !void {
+    pub fn atomic_call(allocator: Allocator, history: *ArrayList(*tre.PositionNode), table: *Table, range: rr.Range, call: AtomicCall) !void {
         try switch (call.action) {
             .action => Atomic_action_dispatchers.dispatch(allocator, history, table, range, call),
             .filter => Atomic_filter_dispatchers.dispatch(allocator, history, table, range, call),
@@ -39,13 +40,13 @@ pub const Atomic_action = enum {
 pub const Atomic_filter = enum {};
 
 const Atomic_action_dispatchers = struct {
-    fn dispatch(allocator: Allocator, history: *ArrayList(chess.Position), table: *Table, range: rr.Range, call: AtomicCall) !void {
+    fn dispatch(allocator: Allocator, history: *ArrayList(*tre.PositionNode), table: *Table, range: rr.Range, call: AtomicCall) !void {
         try switch (call.action.action) {
             Atomic_action.Captures => dispatch_capture(allocator, history, table, range, call.arguments),
         };
     }
 
-    fn dispatch_capture(allocator: Allocator, history: *ArrayList(chess.Position), table: *Table, range: rr.Range, arguments: []cc.AtomicArgument) !void {
+    fn dispatch_capture(allocator: Allocator, history: *ArrayList(*tre.PositionNode), table: *Table, range: rr.Range, arguments: []cc.AtomicArgument) !void {
         if (arguments.len != 3) {
             return errors.InvalidParity;
         }
@@ -59,7 +60,7 @@ const Atomic_action_dispatchers = struct {
         const Captured = table.getColumn(captured.column);
 
         for (range.start..range.end) |i| {
-            var p = history.items[i];
+            var p = history.items[i].position;
             const bb_symbol_from = sym.SymbolPosition.bitboardFrom(from.symbol, p);
             const bb_symbol_to = sym.SymbolPosition.bitboardFrom(to.symbol, p);
             const bb_symbol_captured = sym.SymbolPosition.bitboardFrom(captured.symbol, p);
@@ -87,7 +88,8 @@ const Atomic_action_dispatchers = struct {
                                     p.remove_piece(sq_to);
                                     p.remove_piece(sq_from);
                                     p.put_piece(sq_to, from_piece);
-                                    try history.append(allocator, p);
+
+                                    try history.append(allocator, try history.items[i].addChild(allocator, p));
                                 }
                             }
                         }
@@ -99,7 +101,7 @@ const Atomic_action_dispatchers = struct {
 };
 
 const Atomic_filter_dispatchers = struct {
-    fn dispatch(allocator: Allocator, history: *ArrayList(chess.Position), table: *Table, range: rr.Range, call: AtomicCall) !void {
+    fn dispatch(allocator: Allocator, history: *ArrayList(*tre.PositionNode), table: *Table, range: rr.Range, call: AtomicCall) !void {
         _ = allocator;
         _ = history;
         _ = table;

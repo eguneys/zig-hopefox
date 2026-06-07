@@ -2,14 +2,15 @@ const std = @import("std");
 const cp = @import("compilation.zig");
 const chess = @import("chess/types.zig");
 const atomic = @import("atomic_filters.zig");
+const tre = @import("chess/tree.zig");
 
-const Runner = struct {
+pub const Runner = struct {
     compilation: cp.Compilation,
     compiled: cp.CompiledProgram,
-    history: std.ArrayList(chess.Position),
+    history: std.ArrayList(*tre.PositionNode),
     empty_row: []const chess.Bitboard,
 
-    fn init(allocator: std.mem.Allocator, text: []const u8) !Runner {
+    pub fn init(allocator: std.mem.Allocator, text: []const u8) !Runner {
         var compilation = cp.Compilation.init(allocator);
         try compilation.parse(text);
         const compiled = try compilation.compile(allocator);
@@ -29,11 +30,25 @@ const Runner = struct {
         };
     }
 
-    fn deinit(self: *Runner, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *Runner, allocator: std.mem.Allocator) void {
         self.compilation.deinit();
+        if (self.history.items.len > 0) {
+            self.history.items[0].deinit(allocator);
+        }
         self.history.deinit(allocator);
         allocator.free(self.empty_row);
         self.compiled.deinit(allocator);
+    }
+
+    pub fn movesFor(self: Runner, allocator: std.mem.Allocator, range: Range) ![]tre.Line {
+        var lines = try std.ArrayList(tre.Line).initCapacity(allocator, range.end - range.start);
+        errdefer lines.deinit(allocator);
+
+        for (range.start..range.end) |i| {
+            try lines.append(allocator, try self.history.items[i].movesToRoot(allocator));
+        }
+
+        return try lines.toOwnedSlice(allocator);
     }
 
     const RunputNodeBuilder = struct {
@@ -117,11 +132,16 @@ const Runner = struct {
         }
     };
 
-    fn runOnPosition(self: *Runner, allocator: std.mem.Allocator, position: chess.Position) !RunputNode {
+    pub fn runOnPosition(self: *Runner, allocator: std.mem.Allocator, position: chess.Position) !RunputNode {
+        if (self.history.items.len > 0) {
+            self.history.items[0].deinit(allocator);
+        }
         self.history.clearAndFree(allocator);
         self.compiled.table.clearAndFree(allocator);
 
-        try self.history.append(allocator, position);
+        const root = try tre.PositionNode.root(allocator, position);
+        errdefer root.deinit(allocator);
+        try self.history.append(allocator, root);
         try self.compiled.table.appendRow(allocator, self.empty_row);
 
         var runput_builder = try RunputNodeBuilder.init(0, .{ .range = .{ .start = 0, .end = 1 }, .line_no = 0 });
@@ -160,7 +180,7 @@ const Runner = struct {
 
 pub const Range = struct { start: usize, end: usize };
 
-const RunputNode = struct {
+pub const RunputNode = struct {
     depth: usize,
     put: Runput,
     children: ?[]RunputNode,
@@ -173,7 +193,7 @@ const RunputNode = struct {
     }
 };
 
-const Runput = struct { range: Range, line_no: usize };
+pub const Runput = struct { range: Range, line_no: usize };
 
 test "basic usage" {
     const ally = std.testing.allocator;
@@ -192,7 +212,8 @@ test "basic usage" {
     var runner = try Runner.init(ally, script);
     defer runner.deinit(ally);
 
-    _ = try runner.runOnPosition(ally, chess.Position.empty());
+    const res = try runner.runOnPosition(ally, chess.Position.empty());
+    defer res.deinit(ally);
 }
 
 test "check 1" {
@@ -236,5 +257,5 @@ test "check 1" {
         \\........
         \\........
         \\.k......
-    , &chess.Prints.position(runner.history.items[1]));
+    , &chess.Prints.position(runner.history.items[1].position));
 }

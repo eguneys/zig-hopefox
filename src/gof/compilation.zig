@@ -65,19 +65,19 @@ pub const Compilation = struct {
         };
     }
 
-    pub fn tagsFor(self: Compilation, line_no: usize) []parser.SemanticDefinitionTag {
+    pub fn tagsFor(self: Compilation, line_no: usize) []parser.SemanticDescriptionTag {
         const line = self.parsification.semantic_program.?.find_line(line_no).?;
         return line.tags;
     }
 
-    pub fn linesFor(self: Compilation, line_no: usize) []parser.Token {
+    pub fn linesFor(self: Compilation, allocator: std.mem.Allocator, line_no: usize) ![]parser.Token {
         const line = self.parsification.program.?.find_line(line_no).?;
 
-        const list = try std.ArrayList(parser.Token).initCapacity(self.parsification.arena.allocator(), line.arguments.len + 2);
-        list.append(line.binding);
-        list.append(line.name);
-        list.appendSlice(line.arguments);
-        return try list.toOwnedSlice(self.parsification.arena.allocator());
+        var list = try std.ArrayList(parser.Token).initCapacity(allocator, line.arguments.len + 2);
+        try list.append(allocator, line.binding);
+        try list.append(allocator, line.name);
+        try list.appendSlice(allocator, line.arguments);
+        return try list.toOwnedSlice(allocator);
     }
 
     const CompiledDescriptionBuilder = struct {

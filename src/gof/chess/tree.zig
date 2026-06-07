@@ -3,25 +3,36 @@ const types = @import("types.zig");
 const flat_map = @import("flat_map.zig");
 const san = @import("san.zig");
 
+pub const Line = struct {
+    position: types.Position,
+    moves: []types.Move,
+
+    pub fn deinit(self: Line, allocator: std.mem.Allocator) void {
+        allocator.free(self.moves);
+    }
+};
+
 pub const PositionNode = struct {
     position: types.Position,
     parent: ?*PositionNode,
     children: std.ArrayList(*PositionNode),
 
-    pub fn root(position: types.Position) PositionNode {
-        return PositionNode.init(position, null);
+    pub fn root(allocator: std.mem.Allocator, position: types.Position) !*PositionNode {
+        const child_ptr = try allocator.create(PositionNode);
+        child_ptr.* = PositionNode.init(position, null);
+        return child_ptr;
     }
 
-    pub fn init(position: types.Position, parent: ?*PositionNode) PositionNode {
+    fn init(position: types.Position, parent: ?*PositionNode) PositionNode {
         return .{ .position = position, .parent = parent, .children = .empty };
     }
 
     pub fn deinit(self: *PositionNode, allocator: std.mem.Allocator) void {
         for (self.children.items) |child| {
             child.deinit(allocator);
-            allocator.destroy(child);
         }
         self.children.deinit(allocator);
+        allocator.destroy(self);
     }
 
     pub fn addChild(self: *PositionNode, allocator: std.mem.Allocator, position: types.Position) !*PositionNode {
@@ -53,8 +64,9 @@ pub const PositionNode = struct {
         return i;
     }
 
-    pub fn movesToRoot(self: PositionNode, allocator: std.mem.Allocator) ![]types.Move {
+    pub fn movesToRoot(self: PositionNode, allocator: std.mem.Allocator) !Line {
         var list = try std.ArrayList(types.Move).initCapacity(allocator, self.depth());
+        errdefer list.deinit(allocator);
         var child = self;
         while (child.parent) |parent| {
             const move = PositionsToMove.move(parent.position, child.position);
@@ -62,7 +74,7 @@ pub const PositionNode = struct {
             child = parent.*;
         }
         std.mem.reverse(types.Move, list.items);
-        return try list.toOwnedSlice(allocator);
+        return .{ .moves = try list.toOwnedSlice(allocator), .position = child.position };
     }
 };
 
@@ -133,7 +145,7 @@ const PositionsToMove = struct {
 test "basic usage" {
     const ally = std.testing.allocator;
 
-    var root = PositionNode.root(types.Parses.white(
+    var root = try PositionNode.root(ally, types.Parses.white(
         \\........
         \\........
         \\........
@@ -283,7 +295,7 @@ test "e2e4" {
 fn testPositionSequence(expected: []const u8, before: *const [71:0]u8, after: *const [71:0]u8) !void {
     const ally = std.testing.allocator;
 
-    var root = PositionNode.init(types.Parses.white(before), null);
+    var root = try PositionNode.root(ally, types.Parses.white(before));
     defer root.deinit(ally);
 
     _ = try root.addChild(ally, types.Parses.black(after));
@@ -303,10 +315,10 @@ fn expectMovesUptoRoot(expected: []const u8, ucis: []const u8) !void {
 
     var iterator = std.mem.splitScalar(u8, ucis, ' ');
 
-    var root = PositionNode.init(types.Fen.parse(types.Fen.Initial), null);
+    var root = try PositionNode.root(ally, types.Fen.parse(types.Fen.Initial));
     defer root.deinit(ally);
 
-    var child = &root;
+    var child = root;
     while (iterator.next()) |uci| {
         const move = san.Uci.toMove(san.Uci.move(uci), child.position);
         var position = child.position;
@@ -314,9 +326,9 @@ fn expectMovesUptoRoot(expected: []const u8, ucis: []const u8) !void {
         child = try child.addChild(ally, position);
     }
 
-    const moves = try child.movesToRoot(ally);
-    defer ally.free(moves);
-    const sans = try SansFromMoves.ReduceSlice(ally, &root.position, moves);
+    const line = try child.movesToRoot(ally);
+    defer line.deinit(ally);
+    const sans = try SansFromMoves.ReduceSlice(ally, &root.position, line.moves);
     defer ally.free(sans);
     const sans_string = try san.Prints.fromSans(ally, sans);
     defer ally.free(sans_string);

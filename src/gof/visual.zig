@@ -1,7 +1,10 @@
 const std = @import("std");
 const chess = @import("chess/types.zig");
+const tre = @import("chess/tree.zig");
+const san = @import("chess/san.zig");
+
 const parser = @import("parser.zig");
-const runner = @import("runner.zig");
+const rr = @import("runner.zig");
 const cc = @import("compilation.zig");
 
 const VisualNode = struct {
@@ -11,36 +14,21 @@ const VisualNode = struct {
 };
 
 const Visual: type = struct {
-    tags: []parser.SemanticDefinitionTag,
+    tags: []parser.SemanticDescriptionTag,
     line: []parser.Token,
-    position: chess.Position,
-    moves: ?[][]chess.SAN,
+    lines: ?[]tre.Line,
 };
 
 const VisualBuilder = struct {
-    pub fn build(allocator: std.mem.Allocator, compilation: cc.Compilation, node: runner.RunputNode) !VisualBuilder {
-        var builder = VisualNodeBuilder.init(0, VisualBuilder.visual_for(cc, node.put, null));
-        for (node.children) |child| {
-            add_runput(allocator, builder, compilation, child);
+    pub fn build(allocator: std.mem.Allocator, runner: rr.Runner, node: rr.RunputNode) !VisualNode {
+        var builder = VisualNodeBuilder.init(0, try VisualNodeBuilder.visual_for(allocator, runner, node.put));
+        errdefer builder.deinit(allocator);
+        if (node.children) |children| {
+            for (children) |child| {
+                try builder.add_runput(allocator, runner, child);
+            }
         }
-        return builder.toOwnedVisual(allocator);
-    }
-
-    fn add_runput(builder: *VisualNodeBuilder, allocator: std.mem.Allocator, compilation: cc.Compilation, node: runner.RunputNode) void {
-        try builder.appendAtDepth(allocator, node.depth, VisualBuilder.visual_for(compilation, node.put));
-        for (node.children) |child| {
-            add_runput(allocator, builder, child);
-        }
-    }
-
-    fn visual_for(compilation: cc.Compilation, put: runner.Runput, position: ?chess.Position) Visual {
-        const moves = compilation.movesFor(position, put.range);
-        return .{
-            .tags = compilation.tagsFor(put.line_no),
-            .line = compilation.linesFor(put.line_no),
-            .position = position,
-            .moves = moves,
-        };
+        return try builder.toOwnedVisual(allocator);
     }
 
     const VisualNodeBuilder = struct {
@@ -56,18 +44,36 @@ const VisualBuilder = struct {
             };
         }
 
+        fn add_runput(self: *VisualNodeBuilder, allocator: std.mem.Allocator, runner: rr.Runner, node: rr.RunputNode) !void {
+            try self.appendAtDepth(allocator, node.depth, try VisualNodeBuilder.visual_for(allocator, runner, node.put));
+            if (node.children) |children| {
+                for (children) |child| {
+                    try self.add_runput(allocator, runner, child);
+                }
+            }
+        }
+
+        fn visual_for(allocator: std.mem.Allocator, runner: rr.Runner, put: rr.Runput) !Visual {
+            const lines = try runner.movesFor(allocator, put.range);
+            return .{
+                .tags = runner.compilation.tagsFor(put.line_no),
+                .line = try runner.compilation.linesFor(allocator, put.line_no),
+                .lines = lines,
+            };
+        }
+
         fn appendAtDepth(self: *VisualNodeBuilder, allocator: std.mem.Allocator, depth: usize, visual: Visual) !void {
             if (self.children) |*children| {
                 var last = children.getLast();
 
                 if (last.depth == depth) {
-                    try children.append(allocator, try VisualNodeBuilder.init(depth, visual));
+                    try children.append(allocator, VisualNodeBuilder.init(depth, visual));
                 } else {
                     try last.appendAtDepth(allocator, depth, visual);
                 }
             } else {
                 self.children = try std.ArrayList(VisualNodeBuilder).initCapacity(allocator, 1);
-                try self.children.?.append(allocator, try VisualNodeBuilder.init(depth, visual));
+                try self.children.?.append(allocator, VisualNodeBuilder.init(depth, visual));
             }
         }
 
@@ -116,4 +122,27 @@ const VisualBuilder = struct {
     };
 };
 
-test "hello" {}
+test "hello" {
+    const ally = std.testing.allocator;
+
+    const script =
+        \\ ###
+        \\
+        \\if hello(king, queen)
+        \\ve hello2(king, queen, bishop_rook)
+        \\
+        \\ def hello(From, To)
+        \\   captures(From)
+        \\
+        \\def hello2(From, To, Captured_X)
+    ;
+    var runner = try rr.Runner.init(ally, script);
+    defer runner.deinit(ally);
+
+    const runput = try runner.runOnPosition(ally, chess.Position.empty());
+
+    try std.testing.expect(runput.children != null);
+    const node = try VisualBuilder.build(ally, runner, runput.children.?[0]);
+
+    _ = node;
+}
