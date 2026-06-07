@@ -72,7 +72,7 @@ const Atomic_action_dispatchers = struct {
                     //const aa_from = chess.Attacks.ray_attacks(sq_from, p.occupied(), chess.Direction.Up_Right);
 
                     for (To) |bb_to| {
-                        var bb_to2 = bb_to;
+                        var bb_to2 = bb_to.unset(sq_from);
                         _ = bb_symbol_to;
                         while (bb_to2.next()) |sq_to| {
                             for (Captured) |bb_captured| {
@@ -88,7 +88,9 @@ const Atomic_action_dispatchers = struct {
                                     p.remove_piece(sq_to);
                                     p.remove_piece(sq_from);
                                     p.put_piece(sq_to, from_piece);
+                                    p.flipTurn();
 
+                                    std.debug.print("\n\nFrom:{s}To:{s}\n {s}\n\n{s}", .{ chess.Prints.fromSquare(sq_from), chess.Prints.fromSquare(sq_to), chess.Prints.position(history.items[i].position), chess.Prints.position(p) });
                                     try history.append(allocator, try history.items[i].addChild(allocator, p));
                                 }
                             }

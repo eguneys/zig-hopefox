@@ -64,6 +64,7 @@ pub const SymbolPosition = struct {
     pub fn bitboardFrom(symbol: DescriptionSymbol, position: chess.Position) chess.Bitboard {
         return switch (symbol.kind) {
             DescriptionSymbolType.King => position.bb_king,
+            DescriptionSymbolType.Pawn => position.bb_pawn,
             DescriptionSymbolType.Queen => position.bb_queen,
             else => chess.Bitboard.Zero,
         };

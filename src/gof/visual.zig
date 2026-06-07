@@ -11,12 +11,27 @@ const VisualNode = struct {
     depth: usize,
     visual: Visual,
     children: ?[]VisualNode,
+
+    pub fn deinit(self: VisualNode, allocator: std.mem.Allocator) void {
+        if (self.children) |children|
+            allocator.free(children);
+        self.visual.deinit(allocator);
+    }
 };
 
 const Visual: type = struct {
     tags: []parser.SemanticDescriptionTag,
     line: []parser.Token,
     lines: ?[]tre.Line,
+
+    pub fn deinit(self: Visual, allocator: std.mem.Allocator) void {
+        allocator.free(self.tags);
+        allocator.free(self.line);
+        if (self.lines) |lines| {
+            for (lines) |line| line.deinit(allocator);
+            allocator.free(lines);
+        }
+    }
 };
 
 const VisualBuilder = struct {
@@ -128,21 +143,28 @@ test "hello" {
     const script =
         \\ ###
         \\
-        \\if hello(king, queen)
-        \\ve hello2(king, queen, bishop_rook)
+        \\if captures(pawn, pawn2_pawn3)
         \\
-        \\ def hello(From, To)
-        \\   captures(From)
+        \\ def captures(From, Captured_To)
+        \\   captures(From, To, Captured)
         \\
-        \\def hello2(From, To, Captured_X)
     ;
     var runner = try rr.Runner.init(ally, script);
     defer runner.deinit(ally);
 
-    const runput = try runner.runOnPosition(ally, chess.Position.empty());
+    const runput = try runner.runOnPosition(ally, chess.Parses.white(
+        \\........
+        \\........
+        \\........
+        \\........
+        \\....p...
+        \\...P....
+        \\........
+        \\........
+    ));
+    defer runput.deinit(ally);
 
     try std.testing.expect(runput.children != null);
     const node = try VisualBuilder.build(ally, runner, runput.children.?[0]);
-
-    _ = node;
+    defer node.deinit(ally);
 }

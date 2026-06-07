@@ -80,29 +80,61 @@ pub const PositionNode = struct {
 
 const PositionsToMove = struct {
     pub fn move(p_from: types.Position, p_to: types.Position) types.Move {
-        if (p_from.bb_turn_pawn().bitdiff(p_to.bb_opponent_pawn()).single()) |from| {
-            if (p_to.bb_opponent_queen().bitdiff(p_from.bb_turn_queen()).single()) |to| {
+        if (p_from.bb_black_pawn().bitdiff(p_to.bb_white_pawn()).single()) |from| {
+            if (p_to.bb_white_queen().bitdiff(p_from.bb_black_queen()).single()) |to| {
                 return .{
                     .from = @truncate(@intFromEnum(from)),
                     .to = @truncate(@intFromEnum(to)),
                     .kind = types.MoveType.Promotion,
                     .promotion = types.MovePromotionRole.Queen,
                 };
-            } else if (p_to.bb_opponent_rook().bitdiff(p_from.bb_turn_rook()).single()) |to| {
+            } else if (p_to.bb_white_rook().bitdiff(p_from.bb_black_rook()).single()) |to| {
                 return .{
                     .from = @truncate(@intFromEnum(from)),
                     .to = @truncate(@intFromEnum(to)),
                     .kind = types.MoveType.Promotion,
                     .promotion = types.MovePromotionRole.Rook,
                 };
-            } else if (p_to.bb_opponent_knight().bitdiff(p_from.bb_turn_knight()).single()) |to| {
+            } else if (p_to.bb_white_knight().bitdiff(p_from.bb_black_knight()).single()) |to| {
                 return .{
                     .from = @truncate(@intFromEnum(from)),
                     .to = @truncate(@intFromEnum(to)),
                     .kind = types.MoveType.Promotion,
                     .promotion = types.MovePromotionRole.Knight,
                 };
-            } else if (p_to.bb_opponent_bishop().bitdiff(p_from.bb_turn_bishop()).single()) |to| {
+            } else if (p_to.bb_white_bishop().bitdiff(p_from.bb_black_bishop()).single()) |to| {
+                return .{
+                    .from = @truncate(@intFromEnum(from)),
+                    .to = @truncate(@intFromEnum(to)),
+                    .kind = types.MoveType.Promotion,
+                    .promotion = types.MovePromotionRole.Bishop,
+                };
+            }
+        }
+
+        if (p_from.bb_white_pawn().bitdiff(p_to.bb_black_pawn()).single()) |from| {
+            if (p_to.bb_black_queen().bitdiff(p_from.bb_white_queen()).single()) |to| {
+                return .{
+                    .from = @truncate(@intFromEnum(from)),
+                    .to = @truncate(@intFromEnum(to)),
+                    .kind = types.MoveType.Promotion,
+                    .promotion = types.MovePromotionRole.Queen,
+                };
+            } else if (p_to.bb_black_rook().bitdiff(p_from.bb_white_rook()).single()) |to| {
+                return .{
+                    .from = @truncate(@intFromEnum(from)),
+                    .to = @truncate(@intFromEnum(to)),
+                    .kind = types.MoveType.Promotion,
+                    .promotion = types.MovePromotionRole.Rook,
+                };
+            } else if (p_to.bb_black_knight().bitdiff(p_from.bb_white_knight()).single()) |to| {
+                return .{
+                    .from = @truncate(@intFromEnum(from)),
+                    .to = @truncate(@intFromEnum(to)),
+                    .kind = types.MoveType.Promotion,
+                    .promotion = types.MovePromotionRole.Knight,
+                };
+            } else if (p_to.bb_black_bishop().bitdiff(p_from.bb_white_bishop()).single()) |to| {
                 return .{
                     .from = @truncate(@intFromEnum(from)),
                     .to = @truncate(@intFromEnum(to)),
@@ -113,12 +145,18 @@ const PositionsToMove = struct {
         }
 
         const diff =
-            bit_diff(p_from.bb_turn_king(), p_to.bb_opponent_king()) orelse
-            bit_diff(p_from.bb_turn_pawn(), p_to.bb_opponent_pawn()) orelse
-            bit_diff(p_from.bb_turn_bishop(), p_to.bb_opponent_bishop()) orelse
-            bit_diff(p_from.bb_turn_rook(), p_to.bb_opponent_rook()) orelse
-            bit_diff(p_from.bb_turn_knight(), p_to.bb_opponent_knight()) orelse
-            bit_diff(p_from.bb_turn_queen(), p_to.bb_opponent_queen()) orelse
+            bit_diff(p_from.bb_white_king(), p_to.bb_opponent_king()) orelse
+            bit_diff(p_from.bb_white_pawn(), p_to.bb_opponent_pawn()) orelse
+            bit_diff(p_from.bb_white_bishop(), p_to.bb_opponent_bishop()) orelse
+            bit_diff(p_from.bb_white_rook(), p_to.bb_opponent_rook()) orelse
+            bit_diff(p_from.bb_white_knight(), p_to.bb_opponent_knight()) orelse
+            bit_diff(p_from.bb_white_queen(), p_to.bb_opponent_queen()) orelse
+            bit_diff(p_from.bb_black_king(), p_to.bb_white_king()) orelse
+            bit_diff(p_from.bb_black_pawn(), p_to.bb_white_pawn()) orelse
+            bit_diff(p_from.bb_black_bishop(), p_to.bb_white_bishop()) orelse
+            bit_diff(p_from.bb_black_rook(), p_to.bb_white_rook()) orelse
+            bit_diff(p_from.bb_black_knight(), p_to.bb_white_knight()) orelse
+            bit_diff(p_from.bb_black_queen(), p_to.bb_white_queen()) orelse
             unreachable;
 
         return .{
