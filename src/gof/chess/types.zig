@@ -1,12 +1,12 @@
 const std = @import("std");
 
-const File = enum(u8) { A, B, C, D, E, F, G, H };
-const Rank = enum(u8) { R1, R2, R3, R4, R5, R6, R7, R8 };
+pub const File = enum(u8) { A, B, C, D, E, F, G, H };
+pub const Rank = enum(u8) { R1, R2, R3, R4, R5, R6, R7, R8 };
 
-const Files = [8]File{ File.A, File.B, File.C, File.D, File.E, File.F, File.G, File.H };
-const Ranks = [8]Rank{ Rank.R1, Rank.R2, Rank.R3, Rank.R4, Rank.R5, Rank.R6, Rank.R7, Rank.R8 };
+pub const Files = [8]File{ File.A, File.B, File.C, File.D, File.E, File.F, File.G, File.H };
+pub const Ranks = [8]Rank{ Rank.R1, Rank.R2, Rank.R3, Rank.R4, Rank.R5, Rank.R6, Rank.R7, Rank.R8 };
 
-const Square = enum(u8) {
+pub const Square = enum(u8) {
     A1,
     B1,
     C1,
@@ -85,18 +85,18 @@ const Square = enum(u8) {
     }
 };
 
-const Squares = [64]Square{ Square.A1, Square.B1, Square.C1, Square.D1, Square.E1, Square.F1, Square.G1, Square.H1, Square.A2, Square.B2, Square.C2, Square.D2, Square.E2, Square.F2, Square.G2, Square.H2, Square.A3, Square.B3, Square.C3, Square.D3, Square.E3, Square.F3, Square.G3, Square.H3, Square.A4, Square.B4, Square.C4, Square.D4, Square.E4, Square.F4, Square.G4, Square.H4, Square.A5, Square.B5, Square.C5, Square.D5, Square.E5, Square.F5, Square.G5, Square.H5, Square.A6, Square.B6, Square.C6, Square.D6, Square.E6, Square.F6, Square.G6, Square.H6, Square.A7, Square.B7, Square.C7, Square.D7, Square.E7, Square.F7, Square.G7, Square.H7, Square.A8, Square.B8, Square.C8, Square.D8, Square.E8, Square.F8, Square.G8, Square.H8 };
+pub const Squares = [64]Square{ Square.A1, Square.B1, Square.C1, Square.D1, Square.E1, Square.F1, Square.G1, Square.H1, Square.A2, Square.B2, Square.C2, Square.D2, Square.E2, Square.F2, Square.G2, Square.H2, Square.A3, Square.B3, Square.C3, Square.D3, Square.E3, Square.F3, Square.G3, Square.H3, Square.A4, Square.B4, Square.C4, Square.D4, Square.E4, Square.F4, Square.G4, Square.H4, Square.A5, Square.B5, Square.C5, Square.D5, Square.E5, Square.F5, Square.G5, Square.H5, Square.A6, Square.B6, Square.C6, Square.D6, Square.E6, Square.F6, Square.G6, Square.H6, Square.A7, Square.B7, Square.C7, Square.D7, Square.E7, Square.F7, Square.G7, Square.H7, Square.A8, Square.B8, Square.C8, Square.D8, Square.E8, Square.F8, Square.G8, Square.H8 };
 
-const Color = enum(u1) {
+pub const Color = enum(u1) {
     White,
     Black,
     pub fn opposite(self: Color) Color {
         return if (self == Color.White) Color.Black else Color.White;
     }
 };
-const Role = enum(u8) { King, Queen, Rook, Bishop, Knight, Pawn };
+pub const Role = enum(u8) { King, Queen, Rook, Bishop, Knight, Pawn };
 
-const Piece = enum(u8) {
+pub const Piece = enum(u8) {
     White_King,
     White_Queen,
     White_Rook,
@@ -218,7 +218,7 @@ pub const Bitboard = packed struct(u64) {
     }
 
     pub fn single(self: Bitboard) ?Square {
-        return if (self.bits & (self.bits -% 1) == 0)
+        return if ((self.bits & (self.bits -% 1) == 0) and self.isNotEmpty())
             @enumFromInt(@ctz(self.bits))
         else
             null;
@@ -302,6 +302,7 @@ test "square" {
     try std.testing.expect(Square.A7.toRank() == Rank.R7);
     try std.testing.expect(Square.A8.toRank() == Rank.R8);
 
+    try std.testing.expect(Bitboard.Zero.single() == null);
     try std.testing.expect(Bitboard.fromSquare(Square.A1).single() == Square.A1);
 
     try std.testing.expect(Bitboard.fromSquare(Square.A1).single() == Square.A1);
@@ -355,6 +356,30 @@ const Attacks = struct {
 };
 
 pub const Prints = struct {
+    const FileNames = [8]u8{ 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h' };
+    const RankNames = [8]u8{ '1', '2', '3', '4', '5', '6', '7', '8' };
+
+    pub fn file(self: File) u8 {
+        return FileNames[@intFromEnum(self)];
+    }
+
+    pub fn rank(self: Rank) u8 {
+        return RankNames[@intFromEnum(self)];
+    }
+
+    pub fn fromSquare(self: Square) [2]u8 {
+        return .{ Prints.file(self.toFile()), Prints.rank(self.toRank()) };
+    }
+
+    pub fn fromPromotionRole(self: MovePromotionRole) u8 {
+        return switch (self) {
+            MovePromotionRole.Bishop => 'B',
+            MovePromotionRole.Knight => 'N',
+            MovePromotionRole.Rook => 'R',
+            MovePromotionRole.Queen => 'Q',
+        };
+    }
+
     pub fn bitboard(self: Bitboard) [71]u8 {
         var string: [71]u8 = undefined;
         for (&string, 0..) |*val, i| {
@@ -388,6 +413,17 @@ pub const Prints = struct {
             }
         }
         return string;
+    }
+
+    pub fn role(self: Role) u8 {
+        return switch (self) {
+            Role.Bishop => 'B',
+            Role.Knight => 'N',
+            Role.Rook => 'R',
+            Role.Queen => 'Q',
+            Role.King => 'K',
+            Role.Pawn => 'P',
+        };
     }
 
     pub fn piece(self: Piece) u8 {
@@ -730,19 +766,11 @@ pub const MoveType = enum(u2) { Normal, Castling, Promotion, EnPassant };
 
 pub const MovePromotionRole = enum(u2) { Queen, Knight, Rook, Bishop };
 
-pub const Move = packed struct(u16) { from: u6, to: u6, kind: MoveType, promotion: MovePromotionRole };
-
-pub const Uci = struct {
-    pub fn parse(uci: []const u8) Move {
-        _ = uci;
-
-        var res: Move = undefined;
-
-        res.from = 0;
-        res.to = 0;
-
-        return res;
-    }
+pub const Move = packed struct(u16) {
+    from: u6,
+    to: u6,
+    kind: MoveType,
+    promotion: MovePromotionRole,
 };
 
 pub const Parses = struct {
@@ -821,3 +849,10 @@ test "parses position" {
         \\RNBQKBNR
     ));
 }
+
+pub const Castling = packed struct(u4) {
+    white_kingside: bool,
+    white_queenside: bool,
+    black_kingside: bool,
+    black_queenside: bool,
+};
