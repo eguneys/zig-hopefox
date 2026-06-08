@@ -317,6 +317,8 @@ test "square" {
 
 pub const Direction = enum { Up, Down, Left, Right, Up_Left, Up_Right, Down_Left, Down_Right };
 
+pub const DirectionPlus = enum { Forward, Backward, KingSide, QueenSide };
+
 const Attacks = struct {
     const ray_masks = generate_ray_masks();
 
@@ -350,10 +352,97 @@ const Attacks = struct {
         return res;
     }
 
-    fn ray_attacks(square: Square, occupied: Bitboard, direction: Direction) Bitboard {
+    const king_masks = generate_king_masks();
+
+    fn generate_king_masks() [8][64]Bitboard {
+        var res: [8][64]Bitboard = undefined;
+
+        const df = [8]i8{ 0, 0, -1, 1, -1, 1, -1, 1 };
+        const dr = [8]i8{ 1, -1, 0, 0, 1, 1, -1, -1 };
+
+        for (Squares) |square| {
+            const start_file = @intFromEnum(square.toFile());
+            const start_rank = @intFromEnum(square.toRank());
+
+            for (0..8) |dir| {
+                var mask = Bitboard.Zero;
+                const f = @as(i8, start_file) + df[dir];
+                const r = @as(i8, start_rank) + dr[dir];
+
+                if (f >= 0 and f < 8 and r >= 0 and r < 8) {
+                    @setEvalBranchQuota(10000);
+                    const target_square = Square.fromCoord(@enumFromInt(f), @enumFromInt(r));
+                    mask = mask.bitor(Bitboard.fromSquare(target_square));
+                }
+
+                res[dir][@intFromEnum(square)] = mask;
+            }
+        }
+        return res;
+    }
+
+    fn ray(square: Square, occupied: Bitboard, direction: Direction) Bitboard {
         return ray_masks[@intFromEnum(direction)][@intFromEnum(square)].bitand(occupied);
     }
+
+    fn pawn(square: Square, direction: Direction) Bitboard {
+        return king(square, direction);
+    }
+
+    fn pawn_plus(square: Square, plus: DirectionPlus) Bitboard {
+        return switch (plus) {
+            DirectionPlus.Forward => Attacks.pawn(square, Direction.Up_Left).bitor(Attacks.pawn(square, Direction.Up_Right)),
+            DirectionPlus.Backward => Attacks.pawn(square, Direction.Down_Left).bitor(Attacks.pawn(square, Direction.Down_Right)),
+            DirectionPlus.KingSide => Attacks.pawn(square, Direction.Up_Right).bitor(Attacks.pawn(square, Direction.Down_Right)),
+            DirectionPlus.QueenSide => Attacks.pawn(square, Direction.Up_Left).bitor(Attacks.pawn(square, Direction.Down_Left)),
+        };
+    }
+
+    fn king(square: Square, direction: Direction) Bitboard {
+        return king_masks[@intFromEnum(direction)][@intFromEnum(square)];
+    }
+
+    fn king_plus(square: Square, plus: DirectionPlus) Bitboard {
+        return switch (plus) {
+            DirectionPlus.Forward => Attacks.king(square, Direction.Up)
+                .bitor(Attacks.pawn(square, Direction.Up_Right))
+                .bitor(Attacks.king(square, Direction.Up_Left)),
+            DirectionPlus.Backward => Attacks.king(square, Direction.Down)
+                .bitor(Attacks.king(square, Direction.Down_Left))
+                .bitor(Attacks.pawn(square, Direction.Down_Right)),
+            DirectionPlus.KingSide => Attacks.king(square, Direction.Right)
+                .bitor(Attacks.king(square, Direction.Up_Right))
+                .bitor(Attacks.king(square, Direction.Down_Right)),
+            DirectionPlus.QueenSide => Attacks.king(square, Direction.Left)
+                .bitor(Attacks.king(square, Direction.Up_Left))
+                .bitor(Attacks.king(square, Direction.Down_Left)),
+        };
+    }
 };
+
+test "piece attacks" {
+    try expectBitboard(
+        \\........
+        \\........
+        \\........
+        \\..o.o...
+        \\........
+        \\........
+        \\........
+        \\........
+    , Attacks.pawn_plus(Square.D4, DirectionPlus.Forward));
+
+    try expectBitboard(
+        \\........
+        \\........
+        \\........
+        \\..ooo...
+        \\........
+        \\........
+        \\........
+        \\........
+    , Attacks.king_plus(Square.D4, DirectionPlus.Forward));
+}
 
 pub const Prints = struct {
     const FileNames = [8]u8{ 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h' };
@@ -479,7 +568,7 @@ test "bitboards" {
     );
 }
 
-test "attacks" {
+test "basic attacks" {
     try expectBitboard(
         \\........
         \\........
@@ -489,7 +578,7 @@ test "attacks" {
         \\..o.....
         \\.o......
         \\........
-    , Attacks.ray_attacks(Square.A1, Bitboard.C3.bitor(Bitboard.B2), Direction.Up_Right));
+    , Attacks.ray(Square.A1, Bitboard.C3.bitor(Bitboard.B2), Direction.Up_Right));
 
     try expectBitboard(
         \\....o...
@@ -500,10 +589,10 @@ test "attacks" {
         \\....o...
         \\....o...
         \\....o...
-    , Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Up)
-        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Down))
-        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Left))
-        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Right)));
+    , Attacks.ray(Square.E4, Bitboard.All, Direction.Up)
+        .bitor(Attacks.ray(Square.E4, Bitboard.All, Direction.Down))
+        .bitor(Attacks.ray(Square.E4, Bitboard.All, Direction.Left))
+        .bitor(Attacks.ray(Square.E4, Bitboard.All, Direction.Right)));
 
     try expectBitboard(
         \\o.......
@@ -514,10 +603,10 @@ test "attacks" {
         \\...o.o..
         \\..o...o.
         \\.o.....o
-    , Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Up_Left)
-        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Down_Right))
-        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Down_Left))
-        .bitor(Attacks.ray_attacks(Square.E4, Bitboard.All, Direction.Up_Right)));
+    , Attacks.ray(Square.E4, Bitboard.All, Direction.Up_Left)
+        .bitor(Attacks.ray(Square.E4, Bitboard.All, Direction.Down_Right))
+        .bitor(Attacks.ray(Square.E4, Bitboard.All, Direction.Down_Left))
+        .bitor(Attacks.ray(Square.E4, Bitboard.All, Direction.Up_Right)));
 }
 
 fn expectBitboard(expected: []const u8, actual: Bitboard) !void {

@@ -138,7 +138,16 @@ pub const Prints = struct {
         const visual = try Prints.fromVisual(allocator, visual_node.visual);
         defer allocator.free(visual);
 
+        if (visual_node.depth > 0) {
+            try list.appendNTimes(allocator, ' ', visual_node.depth - 1);
+        }
         try list.appendSlice(allocator, visual);
+        for (visual_node.children) |child| {
+            try list.append(allocator, '\n');
+            const nested = try Prints.fromVisualNode(allocator, child);
+            defer allocator.free(nested);
+            try list.appendSlice(allocator, nested);
+        }
 
         return try list.toOwnedSlice(allocator);
     }

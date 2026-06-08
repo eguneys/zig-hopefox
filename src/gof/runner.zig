@@ -81,9 +81,6 @@ pub const Runner = struct {
                     try self.children.append(allocator, try RunputNodeBuilder.init(depth, runput));
                 } else {
                     try last.appendAtDepth(allocator, depth, runput);
-                    std.debug.print("After last append {d}", .{last.children.items.len});
-                    std.debug.print("After last append self.children {d}", .{self.children.items.len});
-                    std.debug.print("After last append self.children[0] {d}", .{self.children.items[0].children.items.len});
                 }
             } else {
                 try self.children.append(allocator, try RunputNodeBuilder.init(depth, runput));
@@ -169,9 +166,7 @@ pub const Runner = struct {
         //   if aflksaf
         //   if asldfkj
         // if asldkf
-        std.debug.print("\nAppend at depth: {d}\n", .{description.depth});
         try runput_builder.appendAtDepth(allocator, description.depth, .{ .range = new_range, .line_no = description.line_no });
-        std.debug.print("\n{d} nb children {d}\n", .{ runput_builder.children.items[0].depth, runput_builder.children.items[0].children.items.len });
 
         if (description.children) |children| {
             for (children) |child| {
