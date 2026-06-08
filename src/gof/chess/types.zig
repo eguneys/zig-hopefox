@@ -317,9 +317,9 @@ test "square" {
 
 pub const Direction = enum { Up, Down, Left, Right, Up_Left, Up_Right, Down_Left, Down_Right };
 
-pub const DirectionPlus = enum { Forward, Backward, KingSide, QueenSide };
+pub const DirectionPlus = enum { Forward, Backward, KingSide, QueenSide, Diagonal };
 
-const Attacks = struct {
+pub const Attacks = struct {
     const ray_masks = generate_ray_masks();
 
     fn generate_ray_masks() [8][64]Bitboard {
@@ -381,20 +381,49 @@ const Attacks = struct {
         return res;
     }
 
-    fn ray(square: Square, occupied: Bitboard, direction: Direction) Bitboard {
+    pub fn ray(square: Square, occupied: Bitboard, direction: Direction) Bitboard {
         return ray_masks[@intFromEnum(direction)][@intFromEnum(square)].bitand(occupied);
     }
 
-    fn pawn(square: Square, direction: Direction) Bitboard {
+    pub fn ray_plus(square: Square, occupied: Bitboard, plus: DirectionPlus) Bitboard {
+        return switch (plus) {
+            DirectionPlus.Forward => Attacks.ray(square, occupied, Direction.Up)
+                .bitor(Attacks.ray(square, occupied, Direction.Up_Right))
+                .bitor(Attacks.ray(square, occupied, Direction.Up_Left)),
+            DirectionPlus.Backward => Attacks.ray(square, occupied, Direction.Down)
+                .bitor(Attacks.ray(square, occupied, Direction.Down_Right))
+                .bitor(Attacks.ray(square, occupied, Direction.Down_Left)),
+            DirectionPlus.KingSide => Attacks.ray(square, occupied, Direction.Right)
+                .bitor(Attacks.ray(square, occupied, Direction.Up_Right))
+                .bitor(Attacks.ray(square, occupied, Direction.Down_Right)),
+            DirectionPlus.QueenSide => Attacks.ray(square, occupied, Direction.Left)
+                .bitor(Attacks.ray(square, occupied, Direction.Up_Left))
+                .bitor(Attacks.ray(square, occupied, Direction.Down_Left)),
+            DirectionPlus.Diagonal => Attacks.ray(square, occupied, Direction.Up_Left)
+                .bitor(Attacks.ray(square, occupied, Direction.Up_Right))
+                .bitor(Attacks.ray(square, occupied, Direction.Down_Left))
+                .bitor(Attacks.ray(square, occupied, Direction.Down_Right)),
+        };
+    }
+
+    pub fn pawn(square: Square, direction: Direction) Bitboard {
         return king(square, direction);
     }
 
-    fn pawn_plus(square: Square, plus: DirectionPlus) Bitboard {
+    pub fn pawn_plus(square: Square, plus: DirectionPlus) Bitboard {
         return switch (plus) {
-            DirectionPlus.Forward => Attacks.pawn(square, Direction.Up_Left).bitor(Attacks.pawn(square, Direction.Up_Right)),
-            DirectionPlus.Backward => Attacks.pawn(square, Direction.Down_Left).bitor(Attacks.pawn(square, Direction.Down_Right)),
-            DirectionPlus.KingSide => Attacks.pawn(square, Direction.Up_Right).bitor(Attacks.pawn(square, Direction.Down_Right)),
-            DirectionPlus.QueenSide => Attacks.pawn(square, Direction.Up_Left).bitor(Attacks.pawn(square, Direction.Down_Left)),
+            DirectionPlus.Forward => Attacks.pawn(square, Direction.Up_Left)
+                .bitor(Attacks.pawn(square, Direction.Up_Right)),
+            DirectionPlus.Backward => Attacks.pawn(square, Direction.Down_Left)
+                .bitor(Attacks.pawn(square, Direction.Down_Right)),
+            DirectionPlus.KingSide => Attacks.pawn(square, Direction.Up_Right)
+                .bitor(Attacks.pawn(square, Direction.Down_Right)),
+            DirectionPlus.QueenSide => Attacks.pawn(square, Direction.Up_Left)
+                .bitor(Attacks.pawn(square, Direction.Down_Left)),
+            DirectionPlus.Diagonal => Attacks.pawn(square, Direction.Up_Left)
+                .bitor(Attacks.pawn(square, Direction.Down_Left))
+                .bitor(Attacks.pawn(square, Direction.Up_Right))
+                .bitor(Attacks.pawn(square, Direction.Down_Right)),
         };
     }
 
@@ -754,6 +783,10 @@ pub const Position = packed struct(u512) {
             return Piece.fromColors(self.colorOnFast(square), role);
         }
         return null;
+    }
+
+    pub fn getPiece(self: Position, square: Square) Piece {
+        return self.pieceOn(square) orelse unreachable;
     }
 
     pub fn colorOnFast(self: Position, square: Square) Color {

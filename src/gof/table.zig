@@ -27,7 +27,6 @@ pub fn TableBuilder(comptime K: type, comptime T: type) type {
                 }
                 i += 1;
             }
-            //std.debug.print("asdf{t} {t}", .{ key.kind, key.kind });
             return errors.NoSuchColumn;
         }
 

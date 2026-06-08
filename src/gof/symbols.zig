@@ -61,12 +61,41 @@ test "fromSlice" {
 }
 
 pub const SymbolPosition = struct {
-    pub fn bitboardFrom(symbol: DescriptionSymbol, position: chess.Position) chess.Bitboard {
-        return switch (symbol.kind) {
-            DescriptionSymbolType.King => position.bb_king,
-            DescriptionSymbolType.Pawn => position.bb_pawn,
-            DescriptionSymbolType.Queen => position.bb_queen,
+    position: chess.Position,
+    symbol: DescriptionSymbol,
+
+    pub fn init(symbol: DescriptionSymbol, position: chess.Position) SymbolPosition {
+        return .{ .symbol = symbol, .position = position };
+    }
+
+    pub fn bitboard(self: SymbolPosition) chess.Bitboard {
+        return switch (self.symbol.kind) {
+            DescriptionSymbolType.King => self.position.bb_king,
+            DescriptionSymbolType.Pawn => self.position.bb_pawn,
+            DescriptionSymbolType.Queen => self.position.bb_queen,
+            DescriptionSymbolType.Bishop => self.position.bb_bishop,
+            DescriptionSymbolType.Rook => self.position.bb_rook,
+            DescriptionSymbolType.Knight => self.position.bb_knight,
             else => chess.Bitboard.Zero,
         };
+    }
+
+    pub fn captures(self: SymbolPosition, from: chess.Square) chess.Bitboard {
+        switch (self.symbol.kind) {
+            DescriptionSymbolType.Pawn => {
+                const piece = self.position.getPiece(from);
+                const direction = if (piece.colorOf() == chess.Color.White)
+                    chess.DirectionPlus.Forward
+                else
+                    chess.DirectionPlus.Backward;
+                return chess.Attacks.pawn_plus(from, direction);
+            },
+            DescriptionSymbolType.Bishop => {
+                return chess.Attacks.ray_plus(from, self.position.occupied(), chess.DirectionPlus.Diagonal);
+            },
+            else => {
+                return chess.Bitboard.Zero;
+            },
+        }
     }
 };

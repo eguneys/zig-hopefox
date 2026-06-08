@@ -253,7 +253,7 @@ test "captures" {
     ;
 
     try expectVisuals(
-        \\if captures(pawn, pawn2_pawn3) { dxe4 }{ exd3 }{ exf5 }{ fxe4 }
+        \\if captures(pawn, pawn2_pawn3) { dxe4 }{ exd3 }
         \\ if captures(pawn4, pawn3_pawn5)
     , script,
         \\........
@@ -266,6 +266,34 @@ test "captures" {
         \\........
     );
 }
+
+test "nested" {
+    const script =
+        \\ ###
+        \\
+        \\if captures(bishop, pawn_bishop2)
+        \\ if captures(pawn2, bishop2_pawn3)
+        \\
+        \\ def captures(From, Captured_To)
+        \\   captures(From, To, Captured)
+        \\
+    ;
+
+    try expectVisuals(
+        \\if captures(bishop, pawn_bishop2) { Bxf5 }
+        \\ if captures(pawn2, bishop2_pawn3) { Bxf5 exf5 }
+    , script,
+        \\........
+        \\...B....
+        \\........
+        \\.....p..
+        \\....P...
+        \\...p....
+        \\........
+        \\........
+    );
+}
+
 fn expectVisuals(expected: []const u8, script: []const u8, position: *const [71:0]u8) !void {
     const ally = std.testing.allocator;
 
@@ -275,6 +303,7 @@ fn expectVisuals(expected: []const u8, script: []const u8, position: *const [71:
     const runput = try runner.runOnPosition(ally, chess.Parses.white(position));
     defer runput.deinit(ally);
 
+    try std.testing.expect(runput.children.len > 0);
     const node = try VisualBuilder.build(ally, runner, runput.children[0]);
     defer node.deinit(ally);
 

@@ -61,42 +61,39 @@ const Atomic_action_dispatchers = struct {
 
         for (range.start..range.end) |i| {
             const position = history.items[i].position;
-            const bb_symbol_from = sym.SymbolPosition.bitboardFrom(from.symbol, position);
-            const bb_symbol_to = sym.SymbolPosition.bitboardFrom(to.symbol, position);
-            const bb_symbol_captured = sym.SymbolPosition.bitboardFrom(captured.symbol, position);
+            const from_symbol_position = sym.SymbolPosition.init(from.symbol, position);
+            const to_symbol_position = sym.SymbolPosition.init(to.symbol, position);
+            const captured_symbol_position = sym.SymbolPosition.init(captured.symbol, position);
+            const bb_symbol_from = from_symbol_position.bitboard();
+            const bb_symbol_to = to_symbol_position.bitboard();
+            const bb_symbol_captured = captured_symbol_position.bitboard();
 
-            for (From) |bb_from| {
-                var bb_from2 = bb_symbol_from.bitand(bb_from);
-                while (bb_from2.next()) |sq_from| {
-                    const from_piece = position.pieceOn(sq_from).?;
-                    //const aa_from = chess.Attacks.ray_attacks(sq_from, p.occupied(), chess.Direction.Up_Right);
+            const bb_from = From[i];
+            var bb_from2 = bb_symbol_from.bitand(bb_from);
+            while (bb_from2.next()) |sq_from| {
+                const from_piece = position.pieceOn(sq_from) orelse break;
+                const aa_from = from_symbol_position.captures(sq_from);
 
-                    for (To) |bb_to| {
-                        var bb_to2 = bb_to.unset(sq_from);
-                        _ = bb_symbol_to;
-                        while (bb_to2.next()) |sq_to| {
-                            for (Captured) |bb_captured| {
-                                var bb_captured2 = bb_symbol_captured.bitand(bb_captured);
-                                bb_captured2 = bb_captured2.bitand(chess.Bitboard.fromSquare(sq_to));
-                                while (bb_captured2.next()) |sq_captured| {
-                                    try table.appendDuplicateLastRow(allocator);
+                const bb_to = To[i];
+                var bb_to2 = bb_to.bitand(aa_from);
+                _ = bb_symbol_to;
+                while (bb_to2.next()) |sq_to| {
+                    const bb_captured = Captured[i];
+                    var bb_captured2 = bb_symbol_captured.bitand(bb_captured);
+                    bb_captured2 = bb_captured2.bitand(chess.Bitboard.fromSquare(sq_to));
+                    while (bb_captured2.next()) |sq_captured| {
+                        try table.appendDuplicateLastRow(allocator);
 
-                                    table.setLastRow(from.column, chess.Bitboard.fromSquare(sq_from));
-                                    table.setLastRow(to.column, chess.Bitboard.fromSquare(sq_to));
-                                    table.setLastRow(captured.column, chess.Bitboard.fromSquare(sq_captured));
+                        table.setLastRow(from.column, chess.Bitboard.fromSquare(sq_from));
+                        table.setLastRow(to.column, chess.Bitboard.fromSquare(sq_to));
+                        table.setLastRow(captured.column, chess.Bitboard.fromSquare(sq_captured));
 
-                                    var p = position;
-                                    p.remove_piece(sq_to);
-                                    p.remove_piece(sq_from);
-                                    p.put_piece(sq_to, from_piece);
-                                    p.flipTurn();
-
-                                    //std.debug.print("\n\nFrom:{s}To:{s}\n {s}\n\n{s}", .{ chess.Prints.fromSquare(sq_from), chess.Prints.fromSquare(sq_to), chess.Prints.position(history.items[i].position), chess.Prints.position(p) });
-                                    //std.debug.print("\n\nFromPiece:{c}", .{chess.Prints.piece(from_piece)});
-                                    try history.append(allocator, try history.items[i].addChild(allocator, p));
-                                }
-                            }
-                        }
+                        var p = position;
+                        p.remove_piece(sq_to);
+                        p.remove_piece(sq_from);
+                        p.put_piece(sq_to, from_piece);
+                        p.flipTurn();
+                        try history.append(allocator, try history.items[i].addChild(allocator, p));
                     }
                 }
             }

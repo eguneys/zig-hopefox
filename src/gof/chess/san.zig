@@ -16,7 +16,7 @@ pub const San = struct {
     pub fn fromMove(position: types.Position, move: types.Move) San {
         const to: types.Square = @enumFromInt(move.to);
         return .{
-            .piece = position.pieceOn(@enumFromInt(move.from)).?,
+            .piece = position.getPiece(@enumFromInt(move.from)),
             .from = @enumFromInt(move.from),
             .to = to,
             .ambiguity = false,
