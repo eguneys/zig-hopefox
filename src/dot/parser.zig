@@ -9,7 +9,7 @@ const TokenKind = enum { Dot, Star, DotWord, SymbolWord, StarWord, Eof };
 const IdentityTag = enum { role, file, rank, direction, directionplus, square, char, dotword, starword };
 const TokenIdentity = union(IdentityTag) { role: RoleId, file: FileId, rank: RankId, direction: DirectionId, directionplus: DirectionPlusId, square: SquareId, char: CharId, dotword: DotWordId, starword: StarWordId };
 
-const SquareId = chess.Square;
+const SquareId = usize;
 const RoleId = struct { role: chess.Role, id: usize };
 const FileId = chess.File;
 const RankId = chess.Rank;
@@ -31,11 +31,21 @@ const DotWordId = enum {
     checks,
     cannotbecaptured,
     cannotbeblocked,
+    haslegalmoveto,
+    hasonelegalmoveto,
+    cancapture,
+    corner,
+    hanging,
 };
 
 const StarWordId = enum {
     Sacrificeson,
     becomes,
+    Captures,
+    forks,
+    and_,
+    Movesto,
+    withcheck,
 };
 
 const Token = struct { kind: TokenKind, line_no: usize, column_no: usize, identity: TokenIdentity };
@@ -117,6 +127,17 @@ const Lexer = struct {
                 };
             }
         }
+        if (std.mem.startsWith(u8, self.text.items[self.inext..], "and")) {
+            self.inext += 3;
+            self.column_no += 3;
+
+            return .{
+                .kind = TokenKind.StarWord,
+                .line_no = self.line_no,
+                .column_no = column_no,
+                .identity = .{ .starword = StarWordId.and_ },
+            };
+        }
 
         inline for (DotWordFields, 0..) |dotword, i| {
             if (std.mem.startsWith(u8, self.text.items[self.inext..], dotword.name)) {
@@ -153,7 +174,7 @@ const Lexer = struct {
                 };
 
                 return .{
-                    .kind = TokenKind.DotWord,
+                    .kind = TokenKind.SymbolWord,
                     .line_no = self.line_no,
                     .column_no = column_no,
                     .identity = .{
@@ -161,6 +182,35 @@ const Lexer = struct {
                     },
                 };
             }
+        }
+
+        if (std.mem.startsWith(u8, self.text.items[self.inext..], "sq")) {
+            self.inext += 2;
+            self.column_no += 2;
+            const id: usize = findid: {
+                var base: usize = 1;
+                var iid: usize = 0;
+                var char = self.text.items[self.inext];
+                while (std.ascii.isDigit(char)) {
+                    iid += (char - '0') * base;
+                    base *= 10;
+
+                    self.inext += 1;
+                    self.column_no += 1;
+                    char = self.text.items[self.inext];
+                }
+
+                break :findid iid;
+            };
+
+            return .{
+                .kind = TokenKind.SymbolWord,
+                .line_no = self.line_no,
+                .column_no = column_no,
+                .identity = .{
+                    .square = id,
+                },
+            };
         }
 
         return null;
@@ -264,4 +314,36 @@ test "star usage" {
     defer ally.free(tokens);
 
     try testing.expectEqual(15, tokens.len);
+}
+
+test "final form" {
+    const ally = testing.allocator;
+
+    var lexer: Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally,
+        \\
+        \\ king
+        \\     .haslegalmoveto sq
+        \\                       .corner
+        \\     .cancapture bishop
+        \\                       .hanging
+        \\ 
+        \\ king *Captures bishop2 *becomes king2
+        \\ 
+        \\ queen *forks king2  *and                       pawn4 *becomes queen2
+        \\                   .hasonelegalmoveto king           .hanging
+        \\ 
+        \\ king2 *Movesto king *becomes king3
+        \\ 
+        \\ queen2 *Captures pawn4 *withcheck *becomes queen3
+        \\
+        \\
+    );
+
+    const tokens = try lexer.toOwnedTokens(ally);
+    defer ally.free(tokens);
+
+    try testing.expectEqual(50, tokens.len);
 }
