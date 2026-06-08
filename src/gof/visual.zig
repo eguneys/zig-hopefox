@@ -293,7 +293,7 @@ test "nested" {
     );
 }
 
-fn expectVisuals(expected: []const u8, script: []const u8, position: *const [71:0]u8) !void {
+pub fn expectVisuals(expected: []const u8, script: []const u8, position: *const [71:0]u8) !void {
     const ally = std.testing.allocator;
 
     var runner = try rr.Runner.init(ally, script);
