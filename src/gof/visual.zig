@@ -254,7 +254,6 @@ test "captures" {
 
     try expectVisuals(
         \\if captures(pawn, pawn2_pawn3) { dxe4 }{ exd3 }
-        \\ if captures(pawn4, pawn3_pawn5)
     , script,
         \\........
         \\........

@@ -93,6 +93,9 @@ pub const SymbolPosition = struct {
             DescriptionSymbolType.Bishop => {
                 return chess.Attacks.ray_plus(from, self.position.occupied(), chess.DirectionPlus.Diagonal);
             },
+            DescriptionSymbolType.King => {
+                return chess.Attacks.king_plus(from, chess.DirectionPlus.All);
+            },
             else => {
                 return chess.Bitboard.Zero;
             },

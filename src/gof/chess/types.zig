@@ -317,7 +317,7 @@ test "square" {
 
 pub const Direction = enum { Up, Down, Left, Right, Up_Left, Up_Right, Down_Left, Down_Right };
 
-pub const DirectionPlus = enum { Forward, Backward, KingSide, QueenSide, Diagonal };
+pub const DirectionPlus = enum { Forward, Backward, KingSide, QueenSide, Diagonal, Horizontal, Vertical, All, Straight };
 
 pub const Attacks = struct {
     const ray_masks = generate_ray_masks();
@@ -403,6 +403,7 @@ pub const Attacks = struct {
                 .bitor(Attacks.ray(square, occupied, Direction.Up_Right))
                 .bitor(Attacks.ray(square, occupied, Direction.Down_Left))
                 .bitor(Attacks.ray(square, occupied, Direction.Down_Right)),
+            else => Bitboard.Zero,
         };
     }
 
@@ -424,14 +425,15 @@ pub const Attacks = struct {
                 .bitor(Attacks.pawn(square, Direction.Down_Left))
                 .bitor(Attacks.pawn(square, Direction.Up_Right))
                 .bitor(Attacks.pawn(square, Direction.Down_Right)),
+            else => Bitboard.Zero,
         };
     }
 
-    fn king(square: Square, direction: Direction) Bitboard {
+    pub fn king(square: Square, direction: Direction) Bitboard {
         return king_masks[@intFromEnum(direction)][@intFromEnum(square)];
     }
 
-    fn king_plus(square: Square, plus: DirectionPlus) Bitboard {
+    pub fn king_plus(square: Square, plus: DirectionPlus) Bitboard {
         return switch (plus) {
             DirectionPlus.Forward => Attacks.king(square, Direction.Up)
                 .bitor(Attacks.pawn(square, Direction.Up_Right))
@@ -445,6 +447,19 @@ pub const Attacks = struct {
             DirectionPlus.QueenSide => Attacks.king(square, Direction.Left)
                 .bitor(Attacks.king(square, Direction.Up_Left))
                 .bitor(Attacks.king(square, Direction.Down_Left)),
+            DirectionPlus.Diagonal => Attacks.king(square, Direction.Up_Left)
+                .bitor(Attacks.king(square, Direction.Up_Right))
+                .bitor(Attacks.king(square, Direction.Down_Left))
+                .bitor(Attacks.king(square, Direction.Down_Right)),
+
+            DirectionPlus.Horizontal => Attacks.king(square, Direction.Left)
+                .bitor(Attacks.king(square, Direction.Right)),
+            DirectionPlus.Vertical => Attacks.king(square, Direction.Up)
+                .bitor(Attacks.king(square, Direction.Down)),
+            DirectionPlus.Straight => Attacks.king_plus(square, DirectionPlus.Horizontal)
+                .bitor(Attacks.king_plus(square, DirectionPlus.Vertical)),
+            DirectionPlus.All => Attacks.king_plus(square, DirectionPlus.Straight)
+                .bitor(Attacks.king_plus(square, DirectionPlus.Diagonal)),
         };
     }
 };
