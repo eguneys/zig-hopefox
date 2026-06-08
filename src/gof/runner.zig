@@ -54,20 +54,19 @@ pub const Runner = struct {
 
     const RunputNodeBuilder = struct {
         depth: usize,
-        children: ?std.ArrayList(RunputNodeBuilder),
+        children: std.ArrayList(RunputNodeBuilder),
         runput: Runput,
 
         fn init(depth: usize, runput: Runput) !RunputNodeBuilder {
             return .{
                 .depth = depth,
                 .runput = runput,
-                .children = null,
+                .children = .empty,
             };
         }
 
         fn getParentRangeForDepth(self: RunputNodeBuilder, depth: usize) Range {
-            if (self.children) |children| {
-                const last = children.getLast();
+            if (self.children.getLastOrNull()) |last| {
                 if (last.depth < depth) {
                     return last.getParentRangeForDepth(depth);
                 }
@@ -76,31 +75,33 @@ pub const Runner = struct {
         }
 
         fn appendAtDepth(self: *RunputNodeBuilder, allocator: std.mem.Allocator, depth: usize, runput: Runput) !void {
-            if (self.children) |*children| {
-                var last = children.getLast();
-
+            if (self.children.items.len > 0) {
+                const last = &self.children.items[self.children.items.len - 1];
                 if (last.depth == depth) {
-                    try children.append(allocator, try RunputNodeBuilder.init(depth, runput));
+                    try self.children.append(allocator, try RunputNodeBuilder.init(depth, runput));
                 } else {
                     try last.appendAtDepth(allocator, depth, runput);
+                    std.debug.print("After last append {d}", .{last.children.items.len});
+                    std.debug.print("After last append self.children {d}", .{self.children.items.len});
+                    std.debug.print("After last append self.children[0] {d}", .{self.children.items[0].children.items.len});
                 }
             } else {
-                self.children = try std.ArrayList(RunputNodeBuilder).initCapacity(allocator, 1);
-                try self.children.?.append(allocator, try RunputNodeBuilder.init(depth, runput));
+                try self.children.append(allocator, try RunputNodeBuilder.init(depth, runput));
             }
         }
 
         const MapBuilder = struct {
             pub fn mapAllocator(allocator: std.mem.Allocator, builder: *RunputNodeBuilder) !?RunputNode {
-                const children =
-                    if (builder.children) |list| here: {
-                        var result = try std.ArrayList(RunputNode).initCapacity(allocator, list.items.len);
-                        for (list.items) |*item| {
-                            if (try MapBuilder.mapAllocator(allocator, item)) |result_item|
-                                try result.append(allocator, result_item);
-                        }
-                        break :here try result.toOwnedSlice(allocator);
-                    } else null;
+                const children = here: {
+                    var list = builder.children;
+                    var result = try std.ArrayList(RunputNode).initCapacity(allocator, list.items.len);
+                    for (list.items) |*item| {
+                        if (try MapBuilder.mapAllocator(allocator, item)) |result_item|
+                            try result.append(allocator, result_item);
+                    }
+                    list.deinit(allocator);
+                    break :here try result.toOwnedSlice(allocator);
+                };
 
                 return .{
                     .depth = builder.depth,
@@ -111,16 +112,16 @@ pub const Runner = struct {
         };
 
         fn toOwnedPut(self: *RunputNodeBuilder, allocator: std.mem.Allocator) !RunputNode {
-            const children =
-                if (self.children) |*list| here: {
-                    var result = try std.ArrayList(RunputNode).initCapacity(allocator, list.items.len);
-                    for (list.items) |*item| {
-                        if (try MapBuilder.mapAllocator(allocator, item)) |result_item|
-                            try result.append(allocator, result_item);
-                    }
-                    list.deinit(allocator);
-                    break :here try result.toOwnedSlice(allocator);
-                } else null;
+            const children = here: {
+                var list = &self.children;
+                var result = try std.ArrayList(RunputNode).initCapacity(allocator, list.items.len);
+                for (list.items) |*item| {
+                    if (try MapBuilder.mapAllocator(allocator, item)) |result_item|
+                        try result.append(allocator, result_item);
+                }
+                list.deinit(allocator);
+                break :here try result.toOwnedSlice(allocator);
+            };
             return .{
                 .depth = self.depth,
                 .put = self.runput,
@@ -150,21 +151,33 @@ pub const Runner = struct {
 
         for (self.compiled.blocks) |block| {
             for (block.descriptions) |description| {
-                const range = runput_builder.getParentRangeForDepth(description.depth);
-                const new_range = try self.run_lines_on_range(allocator, description.bound_lines, range);
-                if (new_range.start == new_range.end) {
-                    break;
-                }
-                // 0 1
-                // if aasdf 1 5
-                //   if aflksaf
-                //   if asldfkj
-                // if asldkf
-                try runput_builder.appendAtDepth(allocator, description.depth, .{ .range = new_range, .line_no = description.line_no });
+                try self.run_description(allocator, &runput_builder, description);
             }
         }
 
         return try runput_builder.toOwnedPut(allocator);
+    }
+
+    fn run_description(self: *Runner, allocator: std.mem.Allocator, runput_builder: *RunputNodeBuilder, description: cp.CompiledDescription) !void {
+        const range = runput_builder.getParentRangeForDepth(description.depth);
+        const new_range = try self.run_lines_on_range(allocator, description.bound_lines, range);
+        if (new_range.start == new_range.end) {
+            return;
+        }
+        // 0 1
+        // if aasdf 1 5
+        //   if aflksaf
+        //   if asldfkj
+        // if asldkf
+        std.debug.print("\nAppend at depth: {d}\n", .{description.depth});
+        try runput_builder.appendAtDepth(allocator, description.depth, .{ .range = new_range, .line_no = description.line_no });
+        std.debug.print("\n{d} nb children {d}\n", .{ runput_builder.children.items[0].depth, runput_builder.children.items[0].children.items.len });
+
+        if (description.children) |children| {
+            for (children) |child| {
+                try self.run_description(allocator, runput_builder, child);
+            }
+        }
     }
 
     fn run_lines_on_range(self: *Runner, allocator: std.mem.Allocator, bound_lines: [][]const cp.AtomicCall, range: Range) !Range {
@@ -184,13 +197,11 @@ pub const Range = struct { start: usize, end: usize };
 pub const RunputNode = struct {
     depth: usize,
     put: Runput,
-    children: ?[]RunputNode,
+    children: []RunputNode,
 
     pub fn deinit(self: RunputNode, allocator: std.mem.Allocator) void {
-        if (self.children) |children| {
-            for (children) |child| child.deinit(allocator);
-            allocator.free(children);
-        }
+        for (self.children) |child| child.deinit(allocator);
+        allocator.free(self.children);
     }
 };
 
@@ -244,10 +255,9 @@ test "check 1" {
     ));
     defer res.deinit(ally);
 
-    try std.testing.expect(res.children != null);
-    try std.testing.expectEqual(1, res.children.?.len);
-    try std.testing.expectEqual(1, res.children.?[0].put.range.start);
-    try std.testing.expectEqual(2, res.children.?[0].put.range.end);
+    try std.testing.expectEqual(1, res.children.len);
+    try std.testing.expectEqual(1, res.children[0].put.range.start);
+    try std.testing.expectEqual(2, res.children[0].put.range.end);
 
     try std.testing.expectEqualStrings(
         \\........

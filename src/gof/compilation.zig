@@ -148,6 +148,7 @@ pub const Compilation = struct {
                     for (list.items) |*item| {
                         if (try MapBuilder.mapAllocator(allocator, item)) |result_item|
                             try result.append(allocator, result_item);
+                        item.deinit(allocator);
                     }
                     list.deinit(allocator);
                     break :here try result.toOwnedSlice(allocator);
@@ -257,7 +258,7 @@ const CompiledDefinition = []const AtomicCall;
 
 const DescriptionBinding = parser.IrDescriptionBinding;
 
-const CompiledDescription = struct {
+pub const CompiledDescription = struct {
     depth: usize,
     bound_lines: []CompiledDefinition,
     children: ?[]CompiledDescription,

@@ -1084,7 +1084,7 @@ const SemanticParser = struct {
             .name = line.name.value,
             .arguments = try self.parse_semantic_description_arguments(line.arguments),
             .tags = try self.parse_semantic_description_tags(line.tags),
-            .indent = line.name.column_no,
+            .indent = line.binding.column_no,
         };
     }
 
@@ -1590,4 +1590,29 @@ test "regression 2" {
     const ir_program = try compilation.parse_ir();
 
     try std.testing.expectEqual(3, ir_program.blocks[0].definitions[0].header.parameters.len);
+}
+
+test "regression3 " {
+    const script =
+        \\ ###
+        \\
+        \\if captures(pawn, pawn2_pawn3)
+        \\ if captures(pawn4, pawn3_pawn5)
+        \\
+        \\ def captures(From, Captured_To)
+        \\   captures(From, To, Captured)
+        \\
+    ;
+
+    const allocator = std.testing.allocator;
+
+    var compilation = Parsification.init(allocator);
+    defer compilation.deinit();
+
+    _ = try compilation.parse(script);
+
+    _ = try compilation.parse_semantics();
+    const ir_program = try compilation.parse_ir();
+
+    try std.testing.expectEqual(2, ir_program.blocks[0].descriptions[0].lines.len);
 }
