@@ -60,15 +60,15 @@ const Atomic_action_dispatchers = struct {
         const Captured = table.getColumn(captured.column);
 
         for (range.start..range.end) |i| {
-            var p = history.items[i].position;
-            const bb_symbol_from = sym.SymbolPosition.bitboardFrom(from.symbol, p);
-            const bb_symbol_to = sym.SymbolPosition.bitboardFrom(to.symbol, p);
-            const bb_symbol_captured = sym.SymbolPosition.bitboardFrom(captured.symbol, p);
+            const position = history.items[i].position;
+            const bb_symbol_from = sym.SymbolPosition.bitboardFrom(from.symbol, position);
+            const bb_symbol_to = sym.SymbolPosition.bitboardFrom(to.symbol, position);
+            const bb_symbol_captured = sym.SymbolPosition.bitboardFrom(captured.symbol, position);
 
             for (From) |bb_from| {
                 var bb_from2 = bb_symbol_from.bitand(bb_from);
                 while (bb_from2.next()) |sq_from| {
-                    const from_piece = p.pieceOn(sq_from).?;
+                    const from_piece = position.pieceOn(sq_from).?;
                     //const aa_from = chess.Attacks.ray_attacks(sq_from, p.occupied(), chess.Direction.Up_Right);
 
                     for (To) |bb_to| {
@@ -85,12 +85,14 @@ const Atomic_action_dispatchers = struct {
                                     table.setLastRow(to.column, chess.Bitboard.fromSquare(sq_to));
                                     table.setLastRow(captured.column, chess.Bitboard.fromSquare(sq_captured));
 
+                                    var p = position;
                                     p.remove_piece(sq_to);
                                     p.remove_piece(sq_from);
                                     p.put_piece(sq_to, from_piece);
                                     p.flipTurn();
 
                                     //std.debug.print("\n\nFrom:{s}To:{s}\n {s}\n\n{s}", .{ chess.Prints.fromSquare(sq_from), chess.Prints.fromSquare(sq_to), chess.Prints.position(history.items[i].position), chess.Prints.position(p) });
+                                    //std.debug.print("\n\nFromPiece:{c}", .{chess.Prints.piece(from_piece)});
                                     try history.append(allocator, try history.items[i].addChild(allocator, p));
                                 }
                             }

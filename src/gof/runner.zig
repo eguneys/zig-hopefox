@@ -45,7 +45,8 @@ pub const Runner = struct {
         errdefer lines.deinit(allocator);
 
         for (range.start..range.end) |i| {
-            try lines.append(allocator, try self.history.items[i].movesToRoot(allocator));
+            if (try self.history.items[i].movesToRoot(allocator)) |line|
+                try lines.append(allocator, line);
         }
 
         return try lines.toOwnedSlice(allocator);

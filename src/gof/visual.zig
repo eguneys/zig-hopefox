@@ -163,7 +163,7 @@ pub const Prints = struct {
 
             try list.appendSlice(allocator, sep);
             try list.appendSlice(allocator, str_line);
-            sep = " ";
+            sep = " }{ ";
         }
         if (visual.lines.len > 0) {
             try list.appendSlice(allocator, " }");
@@ -198,7 +198,7 @@ pub const Prints = struct {
     }
 };
 
-test "hello" {
+test "basic usage" {
     const ally = std.testing.allocator;
 
     const script =
@@ -232,6 +232,6 @@ test "hello" {
     const res = try Prints.fromVisualNode(ally, node);
     defer ally.free(res);
     try std.testing.expectEqualStrings(
-        \\if captures(pawn, pawn2_pawn3) { dxe4 exd3 }
+        \\if captures(pawn, pawn2_pawn3) { dxe4 }{ exd3 }
     , res);
 }

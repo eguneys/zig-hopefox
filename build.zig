@@ -44,6 +44,8 @@ pub fn build(b: *std.Build) void {
         .root_module = exe.root_module,
     });
 
+    exe_tests.use_llvm = true;
+
     exe_tests.max_memory = 10000;
     mod_tests.max_memory = 10000;
 
