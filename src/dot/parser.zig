@@ -6,7 +6,15 @@ const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const chess = @import("chess/types.zig");
 const lx = @import("lexer.zig");
 
-const errors = error{ NoBecomesAfterAction, ExpectingStarOrDot, ExpectingStarWord, ExpectingDotWord, StarOwnerMustBeSymbol };
+const errors = error{
+    NoBecomesAfterSymbol,
+    ExpectingStarOrDot,
+    ExpectingStarWord,
+    ExpectingDotWord,
+    StarOwnerMustBeSymbol,
+    ExpectingStarBecomes,
+    NoSymbolAfterStar,
+};
 
 ///
 /// knight
@@ -33,13 +41,18 @@ const errors = error{ NoBecomesAfterAction, ExpectingStarOrDot, ExpectingStarWor
 ///
 ///
 ///
-pub const Ref = usize;
-pub const Symbol = Ref;
-pub const Dot = struct { owner: StarOrSymbol, extra: ?Symbol };
-pub const Star = struct { owner: Symbol, becomes: Symbol, extra: ?Symbol };
-pub const StarOrSymbolTag = enum { symbol, star };
-pub const StarOrSymbol = union(StarOrSymbolTag) { symbol: Symbol, star: Star };
-pub const DotOrStar = union { dot: Ref, star: Ref };
+pub const TokenRef = usize;
+pub const SymbolRef = usize;
+pub const StarRef = usize;
+pub const DotRef = usize;
+
+pub const Symbol = TokenRef;
+pub const OwnerTag = enum { symbol, dot, star };
+pub const Owner = union(OwnerTag) { symbol: SymbolRef, dot: DotRef, star: StarRef };
+pub const Dot = struct { dotword: TokenRef, owner: Owner, extra: ?Symbol };
+pub const Star = struct { starword: TokenRef, owner: Owner, becomes: Symbol, one: Symbol, two: ?Symbol };
+pub const InstructionTag = enum { dot, star };
+pub const DotOrStar = union(InstructionTag) { dot: DotRef, star: StarRef };
 
 pub const ProgramBuilder = struct {
     tokens: Tokens,
@@ -50,7 +63,10 @@ pub const ProgramBuilder = struct {
 
     const Slice = struct { off: usize, len: usize };
     const GetSlice = struct { token: []lx.Token, slice: Slice };
-    const Get = struct { token: lx.Token, ref: Ref };
+    const TokenGet = struct { token: lx.Token, ref: TokenRef };
+    const DotGet = struct { token: lx.Token, ref: DotRef };
+    const StarGet = struct { token: lx.Token, ref: StarRef };
+    const SymbolGet = struct { token: lx.Token, ref: SymbolRef };
     const Tokens = struct {
         by_line_flat: ArrayList(lx.Token),
         by_line: AutoHashMapUnmanaged(usize, Slice),
@@ -124,7 +140,7 @@ pub const ProgramBuilder = struct {
             if (result.tokens.get(line_no)) |get| {
                 for (get.token, get.slice.off..get.slice.off + get.slice.len) |token, ref| {
                     if (token.begin_column_no == 1 and token.kind != lx.TokenKind.Eof) {
-                        try result.addSymbol(allocator, token, ref, true);
+                        try result.addSymbol(allocator, token, ref);
                         break;
                     }
                 }
@@ -133,7 +149,7 @@ pub const ProgramBuilder = struct {
         return result;
     }
 
-    fn getFirstTokenBetween(self: *ProgramBuilder, begin_column_no: usize, end_column_no: usize, line_no: usize) ?Get {
+    fn getFirstTokenBetween(self: *ProgramBuilder, begin_column_no: usize, end_column_no: usize, line_no: usize) ?TokenGet {
         if (self.tokens.get(line_no)) |get| {
             for (get.token, get.slice.off..get.slice.off + get.slice.len) |token, ref| {
                 if (token.begin_column_no >= begin_column_no and token.begin_column_no <= end_column_no) {
@@ -144,7 +160,7 @@ pub const ProgramBuilder = struct {
         return null;
     }
 
-    fn getFirstTokenAfter(self: *ProgramBuilder, end_column_no: usize, line_no: usize) ?Get {
+    fn getFirstTokenAfter(self: *ProgramBuilder, end_column_no: usize, line_no: usize) ?TokenGet {
         if (self.tokens.get(line_no)) |get| {
             for (get.token, get.slice.off..get.slice.off + get.slice.len) |token, ref| {
                 if (token.begin_column_no >= end_column_no) {
@@ -155,75 +171,109 @@ pub const ProgramBuilder = struct {
         return null;
     }
 
-    fn addDotWord(self: *ProgramBuilder, allocator: Allocator, dot: Get, is_root_token: bool, owner: StarOrSymbol) !void {
+    fn addDotWord(self: *ProgramBuilder, allocator: Allocator, dot: TokenGet, owner: Owner) anyerror!void {
         if (dot.token.kind == lx.TokenKind.Dot) {
             if (self.getFirstTokenAfter(dot.token.end_column_no, dot.token.line_no)) |dotword| {
                 if (dotword.token.kind == lx.TokenKind.DotWord) {
-                    var extra: ?Ref = null;
+                    for (self.dots.items) |existing| if (existing.dotword == dotword.ref) return;
+                    var extra: ?Symbol = null;
                     if (self.getFirstTokenAfter(dotword.token.end_column_no, dotword.token.line_no)) |e| {
-                        try self.addSymbol(allocator, e.token, e.ref, false);
+                        try self.addSymbol(allocator, e.token, e.ref);
                         extra = e.ref;
                     }
-                    try self.dots.append(allocator, .{ .owner = owner, .extra = extra });
 
-                    if (is_root_token)
-                        try self.instructions.append(allocator, .{ .dot = dotword.ref });
+                    const dotref = self.dots.items.len;
+                    try self.dots.append(allocator, .{ .dotword = dotword.ref, .owner = owner, .extra = extra });
 
-                    if (self.getFirstTokenBetween(dot.token.begin_column_no, dotword.token.end_column_no, dotword.token.line_no + 1)) |get| {
-                        try self.addDotWord(allocator, get, false, owner);
-                        try self.addStarWord(allocator, get, false, owner);
+                    try self.instructions.append(allocator, .{ .dot = dotref });
+
+                    if (self.getFirstTokenAfter(0, dotword.token.line_no + 1)) |get| {
+                        try self.addDotWord(allocator, get, owner);
+                        try self.addStarWord(allocator, get, owner);
                     }
 
                     return;
                 }
             }
 
+            std.debug.print("{d} {d}", .{ dot.token.begin_column_no, dot.token.line_no });
+
             return errors.ExpectingDotWord;
         }
     }
 
-    fn addStarWord(self: *ProgramBuilder, allocator: Allocator, star: Get, is_root_token: bool, owner: StarOrSymbol) !void {
+    fn addStarWord(self: *ProgramBuilder, allocator: Allocator, star: TokenGet, owner: Owner) anyerror!void {
         switch (owner) {
-            .star => {
+            .symbol => {},
+            else => {
                 return errors.StarOwnerMustBeSymbol;
             },
-            else => {},
         }
-        if (star.token.kind == lx.TokenKind.Star) {
+        if (star.token.kind != lx.TokenKind.Star) {
+            return;
+        }
+
+        const starword = findstarword: {
             if (self.getFirstTokenAfter(star.token.end_column_no, star.token.line_no)) |starword| {
                 if (starword.token.kind == lx.TokenKind.StarWord) {
-                    if (self.getFirstTokenAfter(starword.token.end_column_no, starword.token.line_no)) |becomes| {
-                        if (becomes.token.kind == lx.TokenKind.StarWord and becomes.token.identity.starword == lx.StarWordId.becomes) {
-                            const extra =
-                                if (self.getFirstTokenAfter(starword.token.end_column_no, starword.token.line_no)) |e|
-                                    e.ref
-                                else
-                                    null;
-                            try self.stars.append(allocator, .{ .owner = owner.symbol, .becomes = becomes.ref, .extra = extra });
-
-                            if (is_root_token)
-                                try self.instructions.append(allocator, .{ .star = starword.ref });
-                            return;
-                        }
-                    }
-                    return errors.NoBecomesAfterAction;
+                    break :findstarword starword;
                 }
             }
             return errors.ExpectingStarWord;
+        };
+
+        const symbol = findsymbol: {
+            if (self.getFirstTokenAfter(starword.token.end_column_no, starword.token.line_no)) |symbol| {
+                if (symbol.token.kind == lx.TokenKind.SymbolWord) {
+                    break :findsymbol symbol;
+                }
+            }
+            return errors.ExpectingStarWord;
+        };
+
+        const starbecomes = findstar: {
+            if (self.getFirstTokenAfter(symbol.token.end_column_no, symbol.token.line_no)) |starbecomes| {
+                if (star.token.kind == lx.TokenKind.Star) {
+                    break :findstar starbecomes;
+                }
+            }
+            return errors.ExpectingStarBecomes;
+        };
+
+        if (self.getFirstTokenAfter(starbecomes.token.end_column_no, starbecomes.token.line_no)) |becomes| {
+            if (becomes.token.kind == lx.TokenKind.StarWord and becomes.token.identity.starword == lx.StarWordId.becomes) {
+                const extra =
+                    if (self.getFirstTokenAfter(starword.token.end_column_no, starword.token.line_no)) |e|
+                        e.ref
+                    else
+                        null;
+
+                const starref = self.stars.items.len;
+                try self.stars.append(allocator, .{ .starword = starword.ref, .owner = owner, .becomes = becomes.ref, .one = symbol.ref, .two = extra });
+
+                try self.instructions.append(allocator, .{ .star = starref });
+
+                if (self.getFirstTokenAfter(0, starword.token.line_no + 1)) |get| {
+                    try self.addDotWord(allocator, get, owner);
+                    try self.addStarWord(allocator, get, owner);
+                }
+
+                return;
+            }
         }
     }
 
-    fn addSymbol(self: *ProgramBuilder, allocator: Allocator, token: lx.Token, ref: Ref, is_root_token: bool) anyerror!void {
+    fn addSymbol(self: *ProgramBuilder, allocator: Allocator, token: lx.Token, ref: TokenRef) !void {
         if (token.kind == lx.TokenKind.SymbolWord) {
             try self.symbols.append(allocator, ref);
 
             if (self.getFirstTokenAfter(token.end_column_no, token.line_no)) |get| {
-                try self.addDotWord(allocator, get, is_root_token, StarOrSymbol{ .symbol = ref });
-                try self.addStarWord(allocator, get, is_root_token, StarOrSymbol{ .symbol = ref });
+                try self.addDotWord(allocator, get, Owner{ .symbol = ref });
+                try self.addStarWord(allocator, get, Owner{ .symbol = ref });
             }
             if (self.getFirstTokenBetween(token.begin_column_no, token.end_column_no, token.line_no + 1)) |get| {
-                try self.addDotWord(allocator, get, is_root_token, StarOrSymbol{ .symbol = ref });
-                try self.addStarWord(allocator, get, is_root_token, StarOrSymbol{ .symbol = ref });
+                try self.addDotWord(allocator, get, Owner{ .symbol = ref });
+                try self.addStarWord(allocator, get, Owner{ .symbol = ref });
             }
         }
     }
@@ -291,5 +341,95 @@ test "basic usage" {
 
     try std.testing.expectEqual(3, program.symbols.len);
     try std.testing.expectEqual(2, program.dots.len);
-    try std.testing.expectEqual(1, program.instructions.len);
+    try std.testing.expectEqual(2, program.instructions.len);
+}
+
+test "extended" {
+    const ally = testing.allocator;
+
+    var lexer: lx.Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally,
+        \\
+        \\
+        \\king
+        \\   .home .near rook
+        \\
+        \\queen
+        \\    .pins pawn2 .to king
+        \\
+    );
+
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    var builder = try ProgramBuilder.init(ally, tokens);
+    defer builder.deinit(ally);
+
+    const program = try builder.build(ally);
+    defer program.deinit(ally);
+}
+
+test "gaps" {
+    const ally = testing.allocator;
+
+    var lexer: lx.Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally,
+        \\
+        \\knight
+        \\     .center
+        \\     .attackedby pawn3
+        \\                     .ffile
+        \\     .blocksescapesquaresof king
+        \\
+    );
+
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    var builder = try ProgramBuilder.init(ally, tokens);
+    defer builder.deinit(ally);
+
+    const program = try builder.build(ally);
+    defer program.deinit(ally);
+
+    try std.testing.expectEqual(4, program.dots.len);
+}
+
+test "final" {
+    const ally = testing.allocator;
+
+    var lexer: lx.Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally,
+        \\
+        \\bishop
+        \\     *Sacrificeson pawn *becomes bishop2
+        \\     .checks king
+        \\           .cannotbecaptured
+        \\           .cannotbeblocked
+        \\
+        \\king
+        \\   .haslegalmoveto sq
+        \\                    .corner
+        \\    .cancapture bishop
+        \\                     .hanging
+        \\
+        \\king *Captures bishop2 *becomes king2
+        \\
+    );
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    var builder = try ProgramBuilder.init(ally, tokens);
+    defer builder.deinit(ally);
+
+    const program = try builder.build(ally);
+    defer program.deinit(ally);
+
+    try std.testing.expectEqual(9, program.instructions.len);
 }

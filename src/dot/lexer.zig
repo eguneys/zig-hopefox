@@ -101,7 +101,7 @@ pub const Lexer = struct {
             self.inext += 1;
             self.column_no += 1;
             return .{
-                .kind = TokenKind.Dot,
+                .kind = TokenKind.Star,
                 .line_no = self.line_no,
                 .begin_column_no = self.column_no - 1,
                 .end_column_no = self.column_no,
