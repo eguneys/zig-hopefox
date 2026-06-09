@@ -1,7 +1,5 @@
 const std = @import("std");
-const chess = @import("gof/chess/types.zig");
 const file = @import("file.zig");
-const parser = @import("gof/parser.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout = std.Io.File.stdout().writer(init.io, &.{});

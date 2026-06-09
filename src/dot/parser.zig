@@ -105,7 +105,7 @@ pub const ProgramBuilder = struct {
             if (len > 0) {
                 try result.by_line_flat.appendSlice(allocator, list.items);
 
-                try result.by_line.put(allocator, line_no, .{ .off = off, .len = len });
+                try result.by_line.put(allocator, list.items[0].line_no, .{ .off = off, .len = len });
             }
             list.deinit(allocator);
 
@@ -432,4 +432,27 @@ test "final" {
     defer program.deinit(ally);
 
     try std.testing.expectEqual(9, program.instructions.len);
+}
+
+test "regression 1" {
+    const ally = testing.allocator;
+
+    var lexer: lx.Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally,
+        \\
+        \\pawn *Captures pawn2 *becomes pawn3
+        \\
+    );
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    var builder = try ProgramBuilder.init(ally, tokens);
+    defer builder.deinit(ally);
+
+    const program = try builder.build(ally);
+    defer program.deinit(ally);
+
+    try std.testing.expectEqual(1, program.instructions.len);
 }

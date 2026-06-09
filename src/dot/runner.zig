@@ -19,9 +19,11 @@ pub const History = struct {
     position: chess.Position,
 
     pub fn deinit(self: *History, allocator: Allocator) void {
+        self.program.deinit(allocator);
         self.table.deinit(allocator);
         self.tree.deinit(allocator);
         self.nodes.deinit(allocator);
+        allocator.free(self.empty_row);
     }
 
     pub fn init(allocator: Allocator, program: par.Program, capacity: usize) !History {
@@ -90,6 +92,7 @@ pub const Runner = struct {
                     try Matcher.run_dot(allocator, self.history, dotorstar.dot);
                 },
                 .star => {
+                    std.debug.print("asf", .{});
                     var slice: Slice = undefined;
                     slice.off = self.history.nodes.items.len;
                     try Matcher.run_star(allocator, self.history, dotorstar.star);
@@ -104,7 +107,7 @@ pub const Runner = struct {
 };
 
 test "basic usage" {
-    const ally = std.testing.allocator;
+    const ally = testing.allocator;
 
     var lexer = lx.Lexer{};
     defer lexer.deinit(ally);
@@ -119,7 +122,7 @@ test "basic usage" {
     defer builder.deinit(ally);
 
     const program = try builder.build(ally);
-    defer program.deinit(ally);
+    errdefer program.deinit(ally);
 
     var runner = try Runner.init(
         ally,
@@ -128,7 +131,7 @@ test "basic usage" {
     );
     defer runner.deinit(ally);
 
-    const slice = try runner.runOnPosition(ally, chess.Parses.white(
+    const slices = try runner.runOnPosition(ally, chess.Parses.white(
         \\........
         \\........
         \\........
@@ -139,5 +142,5 @@ test "basic usage" {
         \\........
     ));
 
-    try std.testing.expectEqual(0, slice.len);
+    try std.testing.expectEqual(0, slices.len);
 }

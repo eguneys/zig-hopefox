@@ -43,8 +43,6 @@ pub fn Table(C: type, R: type) type {
         }
 
         pub fn appendRow(self: *Self, allocator: Allocator, row: []R) !void {
-            defer allocator.free(row);
-
             for (row, self.columns) |value, *column| {
                 try column.append(allocator, value);
             }
@@ -72,11 +70,13 @@ test "basic usage" {
     try std.testing.expectEqual(4, table.columns.len);
 
     var row = try ArrayList(usize).initCapacity(ally, 8);
+    defer row.deinit(ally);
+
     try row.append(ally, 50);
     try row.append(ally, 51);
     try row.append(ally, 52);
     try row.append(ally, 53);
-    try table.appendRow(ally, try row.toOwnedSlice(ally));
+    try table.appendRow(ally, row.items);
 
     try std.testing.expectEqual(1, table.columns[0].items.len);
     try std.testing.expectEqual(51, table.getValue(1, 0));
