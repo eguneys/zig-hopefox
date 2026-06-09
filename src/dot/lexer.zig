@@ -79,8 +79,8 @@ pub const Lexer = struct {
             return .{
                 .kind = TokenKind.Eof,
                 .line_no = self.line_no,
-                .begin_column_no = self.column_no - 1,
-                .end_column_no = self.column_no,
+                .begin_column_no = self.column_no - 2,
+                .end_column_no = self.column_no - 2,
                 .identity = .{ .char = 0 },
             };
         }

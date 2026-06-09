@@ -6,7 +6,7 @@ const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const chess = @import("chess/types.zig");
 const lx = @import("lexer.zig");
 
-const errors = error{ NoBecomesAfterAction, ExpectingStarOrDot };
+const errors = error{ NoBecomesAfterAction, ExpectingStarOrDot, ExpectingStarWord, ExpectingDotWord, StarOwnerMustBeSymbol };
 
 ///
 /// knight
@@ -35,10 +35,10 @@ const errors = error{ NoBecomesAfterAction, ExpectingStarOrDot };
 ///
 pub const Ref = usize;
 pub const Symbol = Ref;
-pub const Dot = struct { owner: SymbolOrStar, extra: ?Symbol };
+pub const Dot = struct { owner: StarOrSymbol, extra: ?Symbol };
 pub const Star = struct { owner: Symbol, becomes: Symbol, extra: ?Symbol };
-pub const SymbolOrStarTag = enum { symbol, star };
-pub const SymbolOrStar = union(SymbolOrStarTag) { symbol: Symbol, star: Star };
+pub const StarOrSymbolTag = enum { symbol, star };
+pub const StarOrSymbol = union(StarOrSymbolTag) { symbol: Symbol, star: Star };
 pub const DotOrStar = union { dot: Ref, star: Ref };
 
 pub const ProgramBuilder = struct {
@@ -65,7 +65,7 @@ pub const ProgramBuilder = struct {
             errdefer result.by_line_flat.deinit(allocator);
             errdefer result.by_line.deinit(allocator);
 
-            var line_no: usize = 1;
+            var line_no: usize = 0;
             var list: ArrayList(lx.Token) = .empty;
             errdefer list.deinit(allocator);
             for (tokens) |token| {
@@ -120,11 +120,11 @@ pub const ProgramBuilder = struct {
         var result: ProgramBuilder = .{ .tokens = try Tokens.init(allocator, tokens) };
         errdefer result.deinit(allocator);
 
-        for (0..tokens[tokens.len - 1].line_no) |line_no| {
+        for (1..tokens[tokens.len - 1].line_no + 1) |line_no| {
             if (result.tokens.get(line_no)) |get| {
                 for (get.token, get.slice.off..get.slice.off + get.slice.len) |token, ref| {
-                    if (token.begin_column_no == 1) {
-                        try result.addRootToken(allocator, token, ref);
+                    if (token.begin_column_no == 1 and token.kind != lx.TokenKind.Eof) {
+                        try result.addSymbol(allocator, token, ref, true);
                         break;
                     }
                 }
@@ -136,7 +136,7 @@ pub const ProgramBuilder = struct {
     fn getFirstTokenBetween(self: *ProgramBuilder, begin_column_no: usize, end_column_no: usize, line_no: usize) ?Get {
         if (self.tokens.get(line_no)) |get| {
             for (get.token, get.slice.off..get.slice.off + get.slice.len) |token, ref| {
-                if (token.begin_column_no <= begin_column_no and token.end_column_no <= end_column_no) {
+                if (token.begin_column_no >= begin_column_no and token.begin_column_no <= end_column_no) {
                     return .{ .token = token, .ref = ref };
                 }
             }
@@ -147,7 +147,7 @@ pub const ProgramBuilder = struct {
     fn getFirstTokenAfter(self: *ProgramBuilder, end_column_no: usize, line_no: usize) ?Get {
         if (self.tokens.get(line_no)) |get| {
             for (get.token, get.slice.off..get.slice.off + get.slice.len) |token, ref| {
-                if (token.begin_column_no > end_column_no) {
+                if (token.begin_column_no >= end_column_no) {
                     return .{ .token = token, .ref = ref };
                 }
             }
@@ -155,26 +155,75 @@ pub const ProgramBuilder = struct {
         return null;
     }
 
-    fn addRootToken(self: *ProgramBuilder, allocator: Allocator, token: lx.Token, ref: Ref) !void {
-        if (token.kind == lx.TokenKind.SymbolWord) {
-            try self.symbols.append(allocator, ref);
+    fn addDotWord(self: *ProgramBuilder, allocator: Allocator, dot: Get, is_root_token: bool, owner: StarOrSymbol) !void {
+        if (dot.token.kind == lx.TokenKind.Dot) {
+            if (self.getFirstTokenAfter(dot.token.end_column_no, dot.token.line_no)) |dotword| {
+                if (dotword.token.kind == lx.TokenKind.DotWord) {
+                    var extra: ?Ref = null;
+                    if (self.getFirstTokenAfter(dotword.token.end_column_no, dotword.token.line_no)) |e| {
+                        try self.addSymbol(allocator, e.token, e.ref, false);
+                        extra = e.ref;
+                    }
+                    try self.dots.append(allocator, .{ .owner = owner, .extra = extra });
 
-            if (self.getFirstTokenBetween(token.begin_column_no, token.end_column_no, token.line_no + 1)) |get| {
-                if (get.token.kind == lx.TokenKind.Dot) {
-                    const extra = if (self.getFirstTokenAfter(token.end_column_no, token.line_no)) |e| e.ref else null;
-                    try self.dots.append(allocator, .{ .owner = .{ .symbol = ref }, .extra = extra });
-                } else if (get.token.kind == lx.TokenKind.Star) {
-                    if (self.getFirstTokenAfter(token.end_column_no, token.line_no)) |becomes| {
+                    if (is_root_token)
+                        try self.instructions.append(allocator, .{ .dot = dotword.ref });
+
+                    if (self.getFirstTokenBetween(dot.token.begin_column_no, dotword.token.end_column_no, dotword.token.line_no + 1)) |get| {
+                        try self.addDotWord(allocator, get, false, owner);
+                        try self.addStarWord(allocator, get, false, owner);
+                    }
+
+                    return;
+                }
+            }
+
+            return errors.ExpectingDotWord;
+        }
+    }
+
+    fn addStarWord(self: *ProgramBuilder, allocator: Allocator, star: Get, is_root_token: bool, owner: StarOrSymbol) !void {
+        switch (owner) {
+            .star => {
+                return errors.StarOwnerMustBeSymbol;
+            },
+            else => {},
+        }
+        if (star.token.kind == lx.TokenKind.Star) {
+            if (self.getFirstTokenAfter(star.token.end_column_no, star.token.line_no)) |starword| {
+                if (starword.token.kind == lx.TokenKind.StarWord) {
+                    if (self.getFirstTokenAfter(starword.token.end_column_no, starword.token.line_no)) |becomes| {
                         if (becomes.token.kind == lx.TokenKind.StarWord and becomes.token.identity.starword == lx.StarWordId.becomes) {
-                            const extra = if (self.getFirstTokenAfter(token.end_column_no, token.line_no)) |e| e.ref else null;
-                            try self.stars.append(allocator, .{ .owner = ref, .becomes = becomes.ref, .extra = extra });
+                            const extra =
+                                if (self.getFirstTokenAfter(starword.token.end_column_no, starword.token.line_no)) |e|
+                                    e.ref
+                                else
+                                    null;
+                            try self.stars.append(allocator, .{ .owner = owner.symbol, .becomes = becomes.ref, .extra = extra });
+
+                            if (is_root_token)
+                                try self.instructions.append(allocator, .{ .star = starword.ref });
                             return;
                         }
                     }
                     return errors.NoBecomesAfterAction;
-                } else {
-                    return errors.ExpectingStarOrDot;
                 }
+            }
+            return errors.ExpectingStarWord;
+        }
+    }
+
+    fn addSymbol(self: *ProgramBuilder, allocator: Allocator, token: lx.Token, ref: Ref, is_root_token: bool) anyerror!void {
+        if (token.kind == lx.TokenKind.SymbolWord) {
+            try self.symbols.append(allocator, ref);
+
+            if (self.getFirstTokenAfter(token.end_column_no, token.line_no)) |get| {
+                try self.addDotWord(allocator, get, is_root_token, StarOrSymbol{ .symbol = ref });
+                try self.addStarWord(allocator, get, is_root_token, StarOrSymbol{ .symbol = ref });
+            }
+            if (self.getFirstTokenBetween(token.begin_column_no, token.end_column_no, token.line_no + 1)) |get| {
+                try self.addDotWord(allocator, get, is_root_token, StarOrSymbol{ .symbol = ref });
+                try self.addStarWord(allocator, get, is_root_token, StarOrSymbol{ .symbol = ref });
             }
         }
     }
@@ -239,4 +288,8 @@ test "basic usage" {
 
     const program = try builder.build(ally);
     defer program.deinit(ally);
+
+    try std.testing.expectEqual(3, program.symbols.len);
+    try std.testing.expectEqual(2, program.dots.len);
+    try std.testing.expectEqual(1, program.instructions.len);
 }
