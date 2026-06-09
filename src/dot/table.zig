@@ -49,6 +49,10 @@ pub fn Table(C: type, R: type) type {
                 try column.append(allocator, value);
             }
         }
+
+        pub fn clearRetainingCapacity(self: *Self) void {
+            for (self.columns) |*column| column.clearRetainingCapacity();
+        }
     };
 }
 
