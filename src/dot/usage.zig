@@ -45,7 +45,7 @@ test "basic usage" {
 
     defer usage.deinit(ally);
 
-    const slices = try usage.runner.runOnPosition(ally, chess.Parses.white(
+    try usage.runner.runOnPosition(ally, chess.Parses.white(
         \\........
         \\........
         \\........
@@ -56,5 +56,10 @@ test "basic usage" {
         \\........
     ));
 
+    const slices = usage.runner.slices.items;
     try testing.expectEqual(1, slices.len);
+
+    try testing.expectEqual(1, slices.len);
+    try testing.expectEqual(1, slices[0].len);
+    try testing.expectEqual(1, usage.runner.history.nodes.items[slices[0].off]);
 }

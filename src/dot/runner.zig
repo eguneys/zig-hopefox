@@ -81,7 +81,7 @@ pub const Runner = struct {
         };
     }
 
-    pub fn runOnPosition(self: *Runner, allocator: Allocator, position: chess.Position) ![]Slice {
+    pub fn runOnPosition(self: *Runner, allocator: Allocator, position: chess.Position) !void {
         try self.history.load_position(allocator, position);
 
         self.slices.clearRetainingCapacity();
@@ -92,7 +92,6 @@ pub const Runner = struct {
                     try Matcher.run_dot(allocator, self.history, dotorstar.dot);
                 },
                 .star => {
-                    std.debug.print("asf", .{});
                     var slice: Slice = undefined;
                     slice.off = self.history.nodes.items.len;
                     try Matcher.run_star(allocator, self.history, dotorstar.star);
@@ -102,7 +101,6 @@ pub const Runner = struct {
                 },
             }
         }
-        return self.slices.items;
     }
 };
 
@@ -131,7 +129,7 @@ test "basic usage" {
     );
     defer runner.deinit(ally);
 
-    const slices = try runner.runOnPosition(ally, chess.Parses.white(
+    try runner.runOnPosition(ally, chess.Parses.white(
         \\........
         \\........
         \\........
@@ -142,5 +140,6 @@ test "basic usage" {
         \\........
     ));
 
+    const slices = runner.slices.items;
     try std.testing.expectEqual(0, slices.len);
 }
