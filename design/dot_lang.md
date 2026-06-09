@@ -2,7 +2,6 @@
 bishop
       .eyes pawn
                 .defendedby king
-
 king
     .home .near rook
 
@@ -29,10 +28,11 @@ king
 
 king *Captures bishop2 *becomes king2
 
-queen *forks king2  *and                       pawn4 *becomes queen2
+queen *Forks king2  *and                       pawn4 *becomes queen2
                   .hasonelegalmoveto king           .hanging
 
 king2 *Movesto king *becomes king3
 
-queen2 *captures pawn4 *withcheck *becomes queen3
+queen2 *captures pawn4 *becomes queen3
+       .withcheck
 ```
