@@ -3,15 +3,15 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Table = @import("table.zig").Table;
+const Tree = @import("tree.zig").Tree;
+const chess = @import("chess/types.zig");
 const lx = @import("lexer.zig");
 const par = @import("parser.zig");
-const sym = @import("symbols.zig");
-const Tree = @import("tree.zig");
-const chess = @import("chess/types.zig");
+const Matcher = @import("matcher.zig").Matcher;
 
 pub const History = struct {
     program: par.Program,
-    table: Table(lx.Symbol),
+    table: Table(lx.Symbol, chess.Bitboard),
     tree: Tree(chess.Move),
     nodes: ArrayList(usize),
 
@@ -22,17 +22,17 @@ pub const History = struct {
     }
 
     pub fn init(allocator: Allocator, program: par.Program, capacity: usize) !History {
-        const symbols = try ArrayList(sym.DescriptionSymbol).initCapacity(10);
+        var symbols = try ArrayList(lx.Symbol).initCapacity(allocator, 10);
         errdefer symbols.deinit(allocator);
 
         for (program.symbols) |ref| {
             const symbol = program.tokens[ref];
-            symbols.append(allocator, symbol.identity.symbol);
+            try symbols.append(allocator, symbol.identity.symbol);
         }
 
         var self: History = undefined;
-        self.table = try Table(sym.DescriptionSymbol).init(allocator, try symbols.toOwnedSlice(allocator), capacity);
-        self.tree = .{};
+        self.table = try Table(lx.Symbol, chess.Bitboard).init(allocator, try symbols.toOwnedSlice(allocator), capacity);
+        self.tree = try Tree(chess.Move).init(allocator);
         self.nodes = try ArrayList(usize).initCapacity(allocator, capacity);
         self.program = program;
         return self;
@@ -50,8 +50,8 @@ pub const Runner = struct {
         self.history.deinit(allocator);
     }
 
-    pub fn init(allocator: Allocator, capacity: usize, program: par.Program) !Runner {
-        return .{ .history = History.init(allocator, program, capacity) };
+    pub fn init(allocator: Allocator, program: par.Program, capacity: usize) !Runner {
+        return .{ .history = try History.init(allocator, program, capacity) };
     }
 
     pub fn runOnPosition(self: *Runner, allocator: Allocator, position: chess.Position) !void {
@@ -70,4 +70,28 @@ pub const Runner = struct {
     }
 };
 
-test "basic usage" {}
+test "basic usage" {
+    const ally = std.testing.allocator;
+
+    var lexer = lx.Lexer{};
+    defer lexer.deinit(ally);
+    try lexer.appendScript(ally,
+        \\
+        \\
+        \\
+    );
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+    var builder = try par.ProgramBuilder.init(ally, tokens);
+    defer builder.deinit(ally);
+
+    const program = try builder.build(ally);
+    defer program.deinit(ally);
+
+    var runner = try Runner.init(
+        ally,
+        program,
+        1024,
+    );
+    defer runner.deinit(ally);
+}
