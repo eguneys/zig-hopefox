@@ -86,20 +86,21 @@ pub const Runner = struct {
 
         self.slices.clearRetainingCapacity();
 
+        var slice = Matcher.Slice{ .len = 1, .off = 0 };
         for (self.history.program.instructions, 0..self.history.program.instructions.len) |dotorstar, i| {
+            const begin_off = self.history.nodes.items.len;
             switch (dotorstar) {
                 .dot => {
-                    try Matcher.run_dot(allocator, self.history, dotorstar.dot);
+                    try Matcher.run_dot(allocator, self.history, slice, dotorstar.dot);
                 },
                 .star => {
-                    var slice: Slice = undefined;
-                    slice.off = self.history.nodes.items.len;
-                    try Matcher.run_star(allocator, self.history, dotorstar.star);
-                    slice.len = self.history.nodes.items.len - slice.off;
-                    slice.instruction = i;
-                    try self.slices.append(allocator, slice);
+                    try Matcher.run_star(allocator, self.history, slice, dotorstar.star);
+                    const end_off = self.history.nodes.items.len;
+                    try self.slices.append(allocator, .{ .off = begin_off, .len = end_off - begin_off, .instruction = i });
                 },
             }
+            slice.off = begin_off;
+            slice.len = self.history.nodes.items.len - begin_off;
         }
     }
 };

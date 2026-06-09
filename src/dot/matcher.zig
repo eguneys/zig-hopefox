@@ -9,14 +9,17 @@ const chess = @import("chess/types.zig");
 const par = @import("parser.zig");
 
 pub const Matcher = struct {
-    pub fn run_dot(allocator: Allocator, history: History, dot: par.DotRef) !void {
+    pub const Slice = struct { off: usize, len: usize };
+    pub fn run_dot(allocator: Allocator, history: History, slice: Slice, dot: par.DotRef) !void {
         _ = allocator;
         _ = history;
         _ = dot;
+        _ = slice;
     }
-    pub fn run_star(allocator: Allocator, history: History, star: par.StarRef) !void {
+    pub fn run_star(allocator: Allocator, history: History, slice: Slice, star: par.StarRef) !void {
         _ = allocator;
         _ = history;
+        _ = slice;
         _ = star;
     }
 };
