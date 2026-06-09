@@ -63,28 +63,43 @@ pub const History = struct {
 
 pub const Runner = struct {
     history: History,
+    slices: ArrayList(Slice),
+
+    pub const Slice = struct { off: usize, len: usize, instruction: usize };
 
     pub fn deinit(self: *Runner, allocator: Allocator) void {
         self.history.deinit(allocator);
+        self.slices.deinit(allocator);
     }
 
     pub fn init(allocator: Allocator, program: par.Program, capacity: usize) !Runner {
-        return .{ .history = try History.init(allocator, program, capacity) };
+        return .{
+            .slices = try ArrayList(Slice).initCapacity(allocator, 10),
+            .history = try History.init(allocator, program, capacity),
+        };
     }
 
-    pub fn runOnPosition(self: *Runner, allocator: Allocator, position: chess.Position) !void {
+    pub fn runOnPosition(self: *Runner, allocator: Allocator, position: chess.Position) ![]Slice {
         try self.history.load_position(allocator, position);
 
-        for (self.history.program.instructions) |dotorstar| {
+        self.slices.clearRetainingCapacity();
+
+        for (self.history.program.instructions, 0..self.history.program.instructions.len) |dotorstar, i| {
             switch (dotorstar) {
                 .dot => {
                     try Matcher.run_dot(allocator, self.history, dotorstar.dot);
                 },
                 .star => {
+                    var slice: Slice = undefined;
+                    slice.off = self.history.nodes.items.len;
                     try Matcher.run_star(allocator, self.history, dotorstar.star);
+                    slice.len = self.history.nodes.items.len - slice.off;
+                    slice.instruction = i;
+                    try self.slices.append(allocator, slice);
                 },
             }
         }
+        return self.slices.items;
     }
 };
 
@@ -113,7 +128,7 @@ test "basic usage" {
     );
     defer runner.deinit(ally);
 
-    try runner.runOnPosition(ally, chess.Parses.white(
+    const slice = try runner.runOnPosition(ally, chess.Parses.white(
         \\........
         \\........
         \\........
@@ -123,4 +138,6 @@ test "basic usage" {
         \\........
         \\........
     ));
+
+    try std.testing.expectEqual(0, slice.len);
 }
