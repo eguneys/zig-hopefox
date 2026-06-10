@@ -1,0 +1,35 @@
+const std = @import("std");
+const testing = std.testing;
+const Allocator = std.mem.Allocator;
+const chess = @import("chess/types.zig");
+const DotUsage = @import("usage.zig").DotUsage;
+
+fn expectVisuals(expected: []const u8, script: []const u8, position: *const [71:0]u8) !void {
+    const ally = testing.allocator;
+
+    var usage = try DotUsage.init(ally, script);
+    defer usage.deinit(ally);
+
+    try usage.runner.runOnPosition(ally, chess.Parses.white(position));
+
+    try std.testing.expectEqualStrings(expected, try usage.printLines(ally));
+}
+
+test "pawn captures" {
+    try expectVisuals(
+        \\2: {dxe4}{exd3}
+    ,
+        \\
+        \\pawn *Captures pawn2 *becomes pawn3
+        \\
+    ,
+        \\........
+        \\........
+        \\........
+        \\........
+        \\....p...
+        \\...P....
+        \\........
+        \\........
+    );
+}

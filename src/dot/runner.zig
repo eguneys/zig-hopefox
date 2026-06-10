@@ -111,6 +111,13 @@ pub const Runner = struct {
             slice.len = self.history.nodes.items.len - begin_off;
         }
     }
+
+    pub fn getLineNo(self: Runner, off_instruction: usize) usize {
+        const instruction = self.history.program.instructions[off_instruction];
+        const star = self.history.program.stars[instruction.star];
+        const token = self.history.program.tokens[star.starword];
+        return token.line_no;
+    }
 };
 
 test "basic usage" {

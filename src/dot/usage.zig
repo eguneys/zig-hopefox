@@ -98,7 +98,6 @@ pub const DotUsage = struct {
     }
 
     pub fn printInstructionLine(self: *DotUsage, allocator: Allocator, slice: Runner.Slice) ![]const u8 {
-        self.buffer.clearRetainingCapacity();
         self.visual.resetPosition(self.runner.history.position);
 
         for (slice.off..slice.off + slice.len) |i| {
@@ -112,6 +111,24 @@ pub const DotUsage = struct {
         }
         try self.buffer.appendSlice(allocator, self.visual.buffer.items);
 
+        return self.buffer.items;
+    }
+
+    pub fn clearBuffer(self: *DotUsage) void {
+        self.buffer.clearRetainingCapacity();
+    }
+
+    pub fn printLines(self: *DotUsage, allocator: Allocator) ![]const u8 {
+        self.clearBuffer();
+        for (self.runner.slices.items) |slice| {
+            if (self.buffer.items.len > 0) {
+                try self.buffer.append(allocator, '\n');
+            }
+            const str_line_no = try std.fmt.allocPrint(allocator, "{d}: ", .{self.runner.getLineNo(slice.instruction)});
+            defer allocator.free(str_line_no);
+            try self.buffer.appendSlice(allocator, str_line_no);
+            _ = try self.printInstructionLine(allocator, slice);
+        }
         return self.buffer.items;
     }
 };
@@ -147,4 +164,6 @@ test "basic usage" {
     try testing.expectEqual(1, usage.runner.history.nodes.items[slices[0].off]);
 
     try testing.expectEqualSlices(u8, "{dxe4}{exd3}", try usage.printInstructionLine(ally, slices[0]));
+
+    try testing.expectEqualSlices(u8, "2: {dxe4}{exd3}", try usage.printLines(ally));
 }
