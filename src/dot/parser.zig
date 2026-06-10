@@ -459,3 +459,26 @@ test "regression 1" {
 
     try std.testing.expectEqual(1, program.instructions.len);
 }
+
+test "regression 2" {
+    const ally = testing.allocator;
+
+    var lexer: lx.Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally,
+        \\
+        \\bishop *Captures pawn2 *becomes bishop3
+        \\
+    );
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    var builder = try ProgramBuilder.init(ally, tokens);
+    defer builder.deinit(ally);
+
+    const program = try builder.build(ally);
+    defer program.deinit(ally);
+
+    try std.testing.expectEqual(1, program.instructions.len);
+}

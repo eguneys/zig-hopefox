@@ -29,8 +29,8 @@ pub const Matcher = struct {
     fn dispatch_captures(allocator: Allocator, history: *History, slice: Slice, star: par.Star) !void {
         for (slice.off..slice.off + slice.len) |off| {
             const from_symbol = history.program.tokens[star.owner.symbol].identity.symbol;
-            const to_symbol = history.program.tokens[star.one].identity.symbol;
-            const captured_symbol = history.program.tokens[star.becomes].identity.symbol;
+            const to_symbol = history.program.tokens[star.becomes].identity.symbol;
+            const captured_symbol = history.program.tokens[star.one].identity.symbol;
             const From = history.table.getColumn(from_symbol);
             const To = history.table.getColumn(to_symbol);
             const Captured = history.table.getColumn(captured_symbol);
@@ -92,3 +92,7 @@ pub const Symbols = struct {
         };
     }
 };
+
+fn log2(a: chess.Bitboard, b: chess.Bitboard) void {
+    std.debug.print("\nA:\n{s}\nB:\n{s}\n", .{ chess.Prints.bitboard(a), chess.Prints.bitboard(b) });
+}
