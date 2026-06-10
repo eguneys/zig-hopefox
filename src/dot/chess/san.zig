@@ -1,6 +1,5 @@
 const std = @import("std");
 const types = @import("types.zig");
-const flat_map = @import("flat_map.zig");
 
 pub const San = struct {
     from: types.Square,
