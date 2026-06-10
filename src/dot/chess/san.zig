@@ -30,29 +30,53 @@ pub const San = struct {
 };
 
 pub const Prints = struct {
-    pub fn fromSan(allocator: std.mem.Allocator, san: San) ![]const u8 {
-        var res = try std.ArrayList(u8).initCapacity(allocator, 8);
-        errdefer res.deinit(allocator);
+    single: []u8,
+    list: []u8,
 
+    pub fn deinit(self: *Prints, allocator: std.mem.Allocator) void {
+        allocator.free(self.single);
+        allocator.free(self.list);
+    }
+
+    pub fn init(allocator: std.mem.Allocator, capacity: usize) !Prints {
+        var single = try std.ArrayList(u8).initCapacity(allocator, 8);
+        errdefer single.deinit(allocator);
+        var list = try std.ArrayList(u8).initCapacity(allocator, capacity);
+        errdefer list.deinit(allocator);
+
+        for (0..single.capacity) |_| try single.append(allocator, undefined);
+        for (0..list.capacity) |_| try list.append(allocator, undefined);
+
+        return .{ .single = try single.toOwnedSlice(allocator), .list = try list.toOwnedSlice(allocator) };
+    }
+
+    pub fn fromSan(self: Prints, san: San) []const u8 {
+        var i: usize = 0;
         if (san.piece.roleOf() != types.Role.Pawn) {
-            try res.append(allocator, types.Prints.role(san.piece.roleOf()));
+            self.single[i] = types.Prints.role(san.piece.roleOf());
+            i += 1;
         }
 
         //try res.appendSlice(allocator, &types.Prints.fromSquare(san.from));
         if (san.capture != null) {
             if (san.piece.roleOf() == types.Role.Pawn) {
-                try res.append(allocator, types.Prints.file(san.from.toFile()));
+                self.single[i] = types.Prints.file(san.from.toFile());
+                i += 1;
             }
-            try res.append(allocator, 'x');
+            self.single[i] = 'x';
+            i += 1;
         }
-        try res.appendSlice(allocator, &types.Prints.fromSquare(san.to));
+        std.mem.copyForwards(u8, self.single[i..], &types.Prints.fromSquare(san.to));
+        i += 2;
 
         if (san.promotion) |promotion| {
-            try res.append(allocator, '=');
-            try res.append(allocator, types.Prints.fromPromotionRole(promotion));
+            self.single[i] = '=';
+            i += 1;
+            self.single[i] = types.Prints.fromPromotionRole(promotion);
+            i += 1;
         }
 
-        return res.toOwnedSlice(allocator);
+        return self.single[0..i];
     }
 
     pub fn fromSans(allocator: std.mem.Allocator, slice: []San) ![]const u8 {
@@ -136,9 +160,11 @@ pub const Uci = struct {
 test "pawn moves" {
     const ally = std.testing.allocator;
 
+    var prints = try Prints.init(ally, 80);
+    defer prints.deinit(ally);
+
     const position = types.Fen.parse(types.Fen.Initial);
-    const sans = try Prints.fromSan(ally, San.fromMove(position, Uci.move("e2e4").toMove(position)));
-    defer ally.free(sans);
+    const sans = prints.fromSan(San.fromMove(position, Uci.move("e2e4").toMove(position)));
 
     try std.testing.expectEqualStrings("e4", sans);
 
@@ -178,9 +204,11 @@ test "pawn moves" {
 
 fn testSan(expected: []const u8, uci: []const u8, str_position: *const [71:0]u8) !void {
     const ally = std.testing.allocator;
+    var prints = try Prints.init(ally, 80);
+    defer prints.deinit(ally);
+
     const position = types.Parses.white(str_position);
-    const sans = try Prints.fromSan(ally, San.fromMove(position, Uci.move(uci).toMove(position)));
-    defer ally.free(sans);
+    const sans = prints.fromSan(San.fromMove(position, Uci.move(uci).toMove(position)));
 
     try std.testing.expectEqualStrings(expected, sans);
 }

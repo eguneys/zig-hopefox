@@ -3,6 +3,7 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const chess = @import("chess/types.zig");
+const san = @import("chess/san.zig");
 const Runner = @import("runner.zig").Runner;
 const lx = @import("lexer.zig");
 const par = @import("parser.zig");
@@ -63,4 +64,8 @@ test "basic usage" {
     try testing.expectEqual(1, slices[0].off);
     try testing.expectEqual(2, slices[0].len);
     try testing.expectEqual(1, usage.runner.history.nodes.items[slices[0].off]);
+
+    try testing.expectEqualSlices(usize, &[_]usize{1}, usage.runner.history.tree.getHistoryReversed(1));
+    const move = san.San.fromMove(usage.runner.history.position, usage.runner.history.tree.flat.items[1].value);
+    try testing.expectEqualSlices(u8, "dxe4", try san.Prints.fromSan(ally, move));
 }
