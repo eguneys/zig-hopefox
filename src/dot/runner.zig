@@ -91,10 +91,10 @@ pub const Runner = struct {
             const begin_off = self.history.nodes.items.len;
             switch (dotorstar) {
                 .dot => {
-                    try Matcher.run_dot(allocator, self.history, slice, dotorstar.dot);
+                    try Matcher.run_dot(allocator, self.history, slice, self.history.program.dots[dotorstar.dot]);
                 },
                 .star => {
-                    try Matcher.run_star(allocator, self.history, slice, dotorstar.star);
+                    try Matcher.run_star(allocator, self.history, slice, self.history.program.stars[dotorstar.star]);
                     const end_off = self.history.nodes.items.len;
                     try self.slices.append(allocator, .{ .off = begin_off, .len = end_off - begin_off, .instruction = i });
                 },

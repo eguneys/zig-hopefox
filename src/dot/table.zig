@@ -2,11 +2,13 @@ const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const AutoHashMap = std.AutoHashMap;
 
 pub fn Table(C: type, R: type) type {
     return struct {
         symbols: []C,
         columns: []ArrayList(R),
+        column_by_symbol: AutoHashMap(C, usize),
 
         const Self = @This();
 
@@ -14,26 +16,32 @@ pub fn Table(C: type, R: type) type {
             allocator.free(self.symbols);
             for (self.columns) |*column| column.deinit(allocator);
             allocator.free(self.columns);
+            self.column_by_symbol.deinit();
         }
 
         pub fn init(allocator: Allocator, symbols: []C, capacity: usize) !Self {
             var columns = try ArrayList(ArrayList(R)).initCapacity(allocator, symbols.len);
             errdefer columns.deinit(allocator);
 
-            for (symbols) |_| {
+            var column_by_symbol = AutoHashMap(C, usize).init(allocator);
+
+            for (symbols) |symbol| {
                 var column = try ArrayList(R).initCapacity(allocator, capacity);
                 errdefer column.deinit(allocator);
                 try columns.append(allocator, column);
+                try column_by_symbol.put(symbol, columns.items.len - 1);
             }
-            return .{ .symbols = symbols, .columns = try columns.toOwnedSlice(allocator) };
+            return .{ .column_by_symbol = column_by_symbol, .symbols = symbols, .columns = try columns.toOwnedSlice(allocator) };
         }
 
-        pub fn getValue(self: Self, column: usize, row: usize) R {
-            return self.columns[column].items[row];
+        pub fn getValue(self: Self, column: C, row: usize) R {
+            const icolumn = self.column_by_symbol.get(column) orelse 0;
+            return self.columns[icolumn].items[row];
         }
 
-        pub fn setLastRow(self: Self, column: usize, value: R) void {
-            self.columns[column].items[self.columns[column].items.len - 1] = value;
+        pub fn setLastRow(self: Self, column: C, value: R) void {
+            const icolumn = self.column_by_symbol.get(column) orelse 0;
+            self.columns[icolumn].items[self.columns[icolumn].items.len - 1] = value;
         }
 
         pub fn duplicateLastRow(self: *Self, allocator: Allocator) !void {
@@ -79,13 +87,13 @@ test "basic usage" {
     try table.appendRow(ally, row.items);
 
     try std.testing.expectEqual(1, table.columns[0].items.len);
-    try std.testing.expectEqual(51, table.getValue(1, 0));
-    try std.testing.expectEqual(52, table.getValue(2, 0));
+    try std.testing.expectEqual(51, table.getValue(2, 0));
+    try std.testing.expectEqual(52, table.getValue(3, 0));
 
     try table.duplicateLastRow(ally);
 
     try std.testing.expectEqual(2, table.columns[0].items.len);
 
-    table.setLastRow(1, 0);
-    try std.testing.expectEqual(0, table.getValue(1, 1));
+    table.setLastRow(2, 0);
+    try std.testing.expectEqual(0, table.getValue(2, 1));
 }
