@@ -10,9 +10,11 @@ const par = @import("parser.zig");
 
 pub const DotUsage = struct {
     runner: Runner,
+    prints: san.Prints,
 
     pub fn deinit(self: *DotUsage, allocator: Allocator) void {
         self.runner.deinit(allocator);
+        self.prints.deinit(allocator);
     }
 
     pub fn init(allocator: Allocator, script: []const u8) !DotUsage {
@@ -27,7 +29,7 @@ pub const DotUsage = struct {
 
         const program = try builder.build(allocator);
 
-        return .{ .runner = try Runner.init(
+        return .{ .prints = try san.Prints.init(allocator, 1024), .runner = try Runner.init(
             allocator,
             program,
             1024,
@@ -67,5 +69,5 @@ test "basic usage" {
 
     try testing.expectEqualSlices(usize, &[_]usize{1}, usage.runner.history.tree.getHistoryReversed(1));
     const move = san.San.fromMove(usage.runner.history.position, usage.runner.history.tree.flat.items[1].value);
-    try testing.expectEqualSlices(u8, "dxe4", try san.Prints.fromSan(ally, move));
+    try testing.expectEqualSlices(u8, "dxe4", usage.prints.fromSan(move));
 }
