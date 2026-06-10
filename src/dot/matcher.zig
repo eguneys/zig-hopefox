@@ -94,7 +94,6 @@ pub const Matcher = struct {
                 while (bb_checked2.next()) |sq_checked| {
                     const aa_checked = Symbols.checks(from_symbol, sq_from, sq_checked, position.occupied());
                     var bb_to2 = bb_to
-                        .bitand(chess.Bitboard.fromSquare(sq_checked))
                         .bitand(aa_checked);
                     while (bb_to2.next()) |sq_to| {
                         try history.table.duplicateLastRow(allocator);
@@ -152,8 +151,6 @@ pub const Symbols = struct {
             lx.SymbolId.sq => chess.Bitboard.Zero,
         };
 
-        log_bb(occupied, bb_to);
-        log_sym(symbol);
         var result = chess.Bitboard.Zero;
 
         while (bb_to.next()) |to| {
@@ -170,6 +167,7 @@ pub const Symbols = struct {
                 result = result.set(to);
             }
         }
+
         return result;
     }
 };

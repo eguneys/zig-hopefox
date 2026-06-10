@@ -464,6 +464,8 @@ pub const Attacks = struct {
                 .bitor(Attacks.ray(square, occupied, Direction.Right))
                 .bitor(Attacks.ray(square, occupied, Direction.Left))
                 .bitor(Attacks.ray(square, occupied, Direction.Down)),
+            DirectionPlus.All => Attacks.ray_plus(square, occupied, DirectionPlus.Diagonal)
+                .bitor(Attacks.ray_plus(square, occupied, DirectionPlus.Straight)),
             else => Bitboard.Zero,
         };
     }
@@ -521,6 +523,18 @@ pub const Attacks = struct {
                 .bitor(Attacks.king_plus(square, DirectionPlus.Vertical)),
             DirectionPlus.All => Attacks.king_plus(square, DirectionPlus.Straight)
                 .bitor(Attacks.king_plus(square, DirectionPlus.Diagonal)),
+        };
+    }
+
+    pub fn piece_ray(square: Square, occupied: Bitboard, piece: Piece) Bitboard {
+        return switch (piece) {
+            Piece.Black_Bishop, Piece.White_Bishop => Attacks.ray_plus(square, occupied, DirectionPlus.Diagonal),
+            Piece.Black_Rook, Piece.White_Rook => Attacks.ray_plus(square, occupied, DirectionPlus.Straight),
+            Piece.Black_Queen, Piece.White_Queen => Attacks.ray_plus(square, occupied, DirectionPlus.All),
+            Piece.Black_King, Piece.White_King => Attacks.king_plus(square, DirectionPlus.All),
+            Piece.Black_Knight, Piece.White_Knight => Bitboard.Zero,
+            Piece.Black_Pawn => Attacks.pawn_plus(square, DirectionPlus.Backward),
+            Piece.White_Pawn => Attacks.pawn_plus(square, DirectionPlus.Forward),
         };
     }
 };
@@ -1240,9 +1254,9 @@ pub const Castling = packed struct(u4) {
     black_queenside: bool,
 };
 
-fn log_bb(a: Bitboard, b: Bitboard) void {
+pub fn log_bb(a: Bitboard, b: Bitboard) void {
     std.debug.print("\nA:\n{s}\nB:\n{s}\n", .{ Prints.bitboard(a), Prints.bitboard(b) });
 }
-fn log_sq(a: Square, b: Square) void {
+pub fn log_sq(a: Square, b: Square) void {
     std.debug.print("\nA:{s} B:{s}\n", .{ Prints.fromSquare(a), Prints.fromSquare(b) });
 }

@@ -2,7 +2,7 @@ const expectVisuals = @import("usage_tests1.zig").expectVisuals;
 
 test "basic usage" {
     try expectVisuals(
-        \\2: {Rc8+}{Rg1+}
+        \\2: {Rg1+}{Rc8+}
     ,
         \\
         \\rook *Checks king *becomes rook2

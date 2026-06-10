@@ -1,5 +1,31 @@
 const std = @import("std");
 const types = @import("types.zig");
+const log_bb = types.log_bb;
+const log_sq = types.log_sq;
+
+pub const CheckFind = struct {
+    pub fn checkers(position: types.Position) types.Bitboard {
+        var result = types.Bitboard.Zero;
+
+        const occ = position.occupied();
+        var bb_king = position.bb_king;
+        while (bb_king.next()) |king| {
+            var candidates =
+                types.Attacks.ray_plus(king, occ, types.DirectionPlus.All);
+            while (candidates.next()) |candidate| {
+                const check = types.Attacks.piece_ray(candidate, occ, position.getPiece(candidate));
+                if (check.has(king)) {
+                    result = result.set(candidate);
+                }
+            }
+        }
+        return result;
+    }
+
+    pub fn isCheck(position: types.Position) bool {
+        return !checkers(position).isEmpty();
+    }
+};
 
 pub const San = struct {
     from: types.Square,
@@ -14,6 +40,11 @@ pub const San = struct {
 
     pub fn fromMove(position: types.Position, move: types.Move) San {
         const to: types.Square = @enumFromInt(move.to);
+
+        var pos_after = position;
+        _ = pos_after.make_move(move);
+        const check = CheckFind.isCheck(pos_after);
+
         return .{
             .piece = position.getPiece(@enumFromInt(move.from)),
             .from = @enumFromInt(move.from),
@@ -22,7 +53,7 @@ pub const San = struct {
             .promotion = if (move.kind == types.MoveType.Promotion) move.promotion else null,
             .castling = null,
             .capture = if (position.pieceOn(to) != null) to else null,
-            .check = false,
+            .check = check,
             .checkmate = false,
         };
     }
@@ -72,6 +103,11 @@ pub const Prints = struct {
             self.single[i] = '=';
             i += 1;
             self.single[i] = types.Prints.fromPromotionRole(promotion);
+            i += 1;
+        }
+
+        if (san.check) {
+            self.single[i] = '+';
             i += 1;
         }
 
