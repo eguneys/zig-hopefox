@@ -8,13 +8,74 @@ const Runner = @import("runner.zig").Runner;
 const lx = @import("lexer.zig");
 const par = @import("parser.zig");
 
+const Visual = struct {
+    builder: san.PrintBuilder,
+    buffer: ArrayList(u8),
+
+    fn deinit(self: *Visual, allocator: Allocator) void {
+        self.builder.deinit(allocator);
+        self.buffer.deinit(allocator);
+    }
+
+    fn init(allocator: Allocator) !Visual {
+        return .{
+            .builder = try san.PrintBuilder.init(allocator),
+            .buffer = try ArrayList(u8).initCapacity(allocator, 0),
+        };
+    }
+
+    fn resetPosition(self: *Visual, position: chess.Position) void {
+        self.builder.resetPosition(position);
+        self.buffer.clearRetainingCapacity();
+    }
+
+    fn beginLine(self: *Visual, allocator: Allocator) !void {
+        self.builder.clearRetainingPosition();
+        try self.buffer.append(allocator, '{');
+    }
+
+    fn appendMove(self: *Visual, allocator: Allocator, move: chess.Move) !void {
+        try self.builder.appendMove(allocator, move);
+    }
+
+    fn endLine(self: *Visual, allocator: Allocator) !void {
+        try self.buffer.appendSlice(allocator, self.builder.string.items);
+        try self.buffer.append(allocator, '}');
+    }
+};
+
+test "visual" {
+    const ally = testing.allocator;
+
+    var visual = try Visual.init(ally);
+    defer visual.deinit(ally);
+
+    const position = chess.Fen.parse(chess.Fen.Initial);
+    visual.resetPosition(position);
+
+    try visual.beginLine(ally);
+    try visual.appendMove(ally, san.Uci.move("e2e4").toMove(position));
+    try visual.appendMove(ally, san.Uci.move("e7e5").toMove(position));
+    try visual.appendMove(ally, san.Uci.move("b1f3").toMove(position));
+    try visual.endLine(ally);
+    try visual.beginLine(ally);
+    try visual.appendMove(ally, san.Uci.move("e2e4").toMove(position));
+    try visual.appendMove(ally, san.Uci.move("e7e5").toMove(position));
+    try visual.appendMove(ally, san.Uci.move("b1f3").toMove(position));
+    try visual.endLine(ally);
+
+    try testing.expectEqualSlices(u8, "{e4 e5 Nf3}{e4 e5 Nf3}", visual.buffer.items);
+}
+
 pub const DotUsage = struct {
     runner: Runner,
-    prints: san.Prints,
+    visual: Visual,
+    buffer: ArrayList(u8),
 
     pub fn deinit(self: *DotUsage, allocator: Allocator) void {
         self.runner.deinit(allocator);
-        self.prints.deinit(allocator);
+        self.visual.deinit(allocator);
+        self.buffer.deinit(allocator);
     }
 
     pub fn init(allocator: Allocator, script: []const u8) !DotUsage {
@@ -29,11 +90,29 @@ pub const DotUsage = struct {
 
         const program = try builder.build(allocator);
 
-        return .{ .prints = try san.Prints.init(allocator, 1024), .runner = try Runner.init(
-            allocator,
-            program,
-            1024,
-        ) };
+        return .{
+            .buffer = try std.ArrayList(u8).initCapacity(allocator, 1024),
+            .runner = try Runner.init(allocator, program, 2048),
+            .visual = try Visual.init(allocator),
+        };
+    }
+
+    pub fn printInstructionLine(self: *DotUsage, allocator: Allocator, slice: Runner.Slice) ![]const u8 {
+        self.buffer.clearRetainingCapacity();
+        self.visual.resetPosition(self.runner.history.position);
+
+        for (slice.off..slice.off + slice.len) |i| {
+            const history = self.runner.history.tree.getHistoryReversed(i);
+            try self.visual.beginLine(allocator);
+            for (0..history.len) |j| {
+                const move = self.runner.history.tree.getNode(history[history.len - 1 - j]).value;
+                try self.visual.appendMove(allocator, move);
+            }
+            try self.visual.endLine(allocator);
+        }
+        try self.buffer.appendSlice(allocator, self.visual.buffer.items);
+
+        return self.buffer.items;
     }
 };
 
@@ -67,7 +146,5 @@ test "basic usage" {
     try testing.expectEqual(2, slices[0].len);
     try testing.expectEqual(1, usage.runner.history.nodes.items[slices[0].off]);
 
-    try testing.expectEqualSlices(usize, &[_]usize{1}, usage.runner.history.tree.getHistoryReversed(1));
-    const move = san.San.fromMove(usage.runner.history.position, usage.runner.history.tree.flat.items[1].value);
-    try testing.expectEqualSlices(u8, "dxe4", usage.prints.fromSan(move));
+    try testing.expectEqualSlices(u8, "{dxe4}{exd3}", try usage.printInstructionLine(ally, slices[0]));
 }

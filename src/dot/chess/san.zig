@@ -78,22 +78,59 @@ pub const Prints = struct {
 
         return self.single[0..i];
     }
+};
 
-    pub fn fromSans(allocator: std.mem.Allocator, slice: []San) ![]const u8 {
-        var res = try std.ArrayList(u8).initCapacity(allocator, 8);
-        errdefer res.deinit(allocator);
+pub const PrintBuilder = struct {
+    position: types.Position,
+    string: std.ArrayList(u8),
+    prints: Prints,
 
-        var sep: []const u8 = "";
-        for (slice) |san| {
-            try res.appendSlice(allocator, sep);
-            const san_string = try Prints.fromSan(allocator, san);
-            try res.appendSlice(allocator, san_string);
-            allocator.free(san_string);
-            sep = " ";
+    pub fn deinit(self: *PrintBuilder, allocator: std.mem.Allocator) void {
+        self.string.deinit(allocator);
+        self.prints.deinit(allocator);
+    }
+
+    pub fn init(allocator: std.mem.Allocator) !PrintBuilder {
+        return .{
+            .prints = try Prints.init(allocator, 0),
+            .position = undefined,
+            .string = try std.ArrayList(u8).initCapacity(allocator, 0),
+        };
+    }
+
+    pub fn clearRetainingPosition(self: *PrintBuilder) void {
+        self.string.clearRetainingCapacity();
+    }
+
+    pub fn resetPosition(self: *PrintBuilder, position: types.Position) void {
+        self.position = position;
+        self.string.clearRetainingCapacity();
+    }
+
+    pub fn appendMove(self: *PrintBuilder, allocator: std.mem.Allocator, move: types.Move) !void {
+        if (self.string.items.len > 0) {
+            try self.string.append(allocator, ' ');
         }
-        return try res.toOwnedSlice(allocator);
+        try self.string.appendSlice(allocator, self.prints.fromSan(San.fromMove(self.position, move)));
     }
 };
+
+test "print builder" {
+    const ally = std.testing.allocator;
+
+    var builder = try PrintBuilder.init(ally);
+    defer builder.deinit(ally);
+
+    builder.resetPosition(types.Fen.parse(types.Fen.Initial));
+
+    try builder.appendMove(ally, Uci.move("e2e4").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("e7e5").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("g1f3").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("b8c6").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("f1c4").toMove(builder.position));
+
+    try std.testing.expectEqualStrings("e4 e5 Nf3 Nc6 Bc4", builder.string.items);
+}
 
 pub const Uci = struct {
     from: types.Square,
