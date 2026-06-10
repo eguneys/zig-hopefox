@@ -209,6 +209,10 @@ pub const Bitboard = packed struct(u64) {
     pub const H7 = Bitboard.fromSquare(Square.H7);
     pub const H8 = Bitboard.fromSquare(Square.H8);
 
+    pub fn fromInt(bits: u64) Bitboard {
+        return .{ .bits = bits };
+    }
+
     pub fn fromSquare(sq: Square) Bitboard {
         return Bitboard{ .bits = @as(u64, 1) << @intCast(@intFromEnum(sq)) };
     }
@@ -389,6 +393,55 @@ pub const Attacks = struct {
         return ray_masks[@intFromEnum(direction)][@intFromEnum(square)].bitand(occupied);
     }
 
+    fn positive_eye(occ: u64, ray_mask: u64, slider_bit: u64) u64 {
+        const o = occ & ray_mask;
+        return ((o -% (2 *% slider_bit)) ^ occ) & ray_mask;
+    }
+
+    // world
+    fn negative_eye(occ: u64, ray_mask: u64, slider_bit: u64) u64 {
+        const o: u64 = @bitReverse(occ & ray_mask);
+        const r: u64 = @bitReverse(slider_bit);
+        return @bitReverse((o -% (2 *% r)) ^ o) & ray_mask;
+    }
+
+    pub fn eye(square: Square, occupied: Bitboard, direction: Direction) Bitboard {
+        const ray_mask = ray_masks[@intFromEnum(direction)][@intFromEnum(square)];
+        const slider_bit = Bitboard.fromSquare(square);
+
+        return switch (direction) {
+            Direction.Right, Direction.Up, Direction.Up_Left, Direction.Up_Right => Bitboard.fromInt(positive_eye(occupied.bits, ray_mask.bits, slider_bit.bits)),
+
+            else => Bitboard.fromInt(negative_eye(occupied.bits, ray_mask.bits, slider_bit.bits)),
+        };
+    }
+
+    pub fn eyes_plus(square: Square, occupied: Bitboard, plus: DirectionPlus) Bitboard {
+        return switch (plus) {
+            DirectionPlus.Forward => Attacks.eye(square, occupied, Direction.Up)
+                .bitor(Attacks.eye(square, occupied, Direction.Up_Right))
+                .bitor(Attacks.eye(square, occupied, Direction.Up_Left)),
+            DirectionPlus.Backward => Attacks.eye(square, occupied, Direction.Down)
+                .bitor(Attacks.eye(square, occupied, Direction.Down_Right))
+                .bitor(Attacks.eye(square, occupied, Direction.Down_Left)),
+            DirectionPlus.KingSide => Attacks.eye(square, occupied, Direction.Right)
+                .bitor(Attacks.eye(square, occupied, Direction.Up_Right))
+                .bitor(Attacks.eye(square, occupied, Direction.Down_Right)),
+            DirectionPlus.QueenSide => Attacks.eye(square, occupied, Direction.Left)
+                .bitor(Attacks.eye(square, occupied, Direction.Up_Left))
+                .bitor(Attacks.eye(square, occupied, Direction.Down_Left)),
+            DirectionPlus.Diagonal => Attacks.eye(square, occupied, Direction.Up_Left)
+                .bitor(Attacks.eye(square, occupied, Direction.Up_Right))
+                .bitor(Attacks.eye(square, occupied, Direction.Down_Left))
+                .bitor(Attacks.eye(square, occupied, Direction.Down_Right)),
+            DirectionPlus.Straight => Attacks.eye(square, occupied, Direction.Up)
+                .bitor(Attacks.eye(square, occupied, Direction.Right))
+                .bitor(Attacks.eye(square, occupied, Direction.Left))
+                .bitor(Attacks.eye(square, occupied, Direction.Down)),
+            else => Bitboard.Zero,
+        };
+    }
+
     pub fn ray_plus(square: Square, occupied: Bitboard, plus: DirectionPlus) Bitboard {
         return switch (plus) {
             DirectionPlus.Forward => Attacks.ray(square, occupied, Direction.Up)
@@ -407,6 +460,10 @@ pub const Attacks = struct {
                 .bitor(Attacks.ray(square, occupied, Direction.Up_Right))
                 .bitor(Attacks.ray(square, occupied, Direction.Down_Left))
                 .bitor(Attacks.ray(square, occupied, Direction.Down_Right)),
+            DirectionPlus.Straight => Attacks.ray(square, occupied, Direction.Up)
+                .bitor(Attacks.ray(square, occupied, Direction.Right))
+                .bitor(Attacks.ray(square, occupied, Direction.Left))
+                .bitor(Attacks.ray(square, occupied, Direction.Down)),
             else => Bitboard.Zero,
         };
     }
@@ -467,6 +524,74 @@ pub const Attacks = struct {
         };
     }
 };
+
+test "eyes attacks" {
+    try expectBitboard(
+        \\........
+        \\........
+        \\........
+        \\..oooo..
+        \\........
+        \\........
+        \\........
+        \\........
+    , Attacks.eye(Square.B5, Bitboard.fromSquare(Square.F5), Direction.Right));
+
+    try expectBitboard(
+        \\......o.
+        \\.....o..
+        \\....o...
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+    , Attacks.eye(Square.D5, Bitboard.G8, Direction.Up_Right));
+
+    try expectBitboard(
+        \\....o...
+        \\....o...
+        \\....o...
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+    , Attacks.eye(Square.E5, Bitboard.Zero, Direction.Up));
+
+    try expectBitboard(
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+        \\..ooo...
+        \\........
+    , Attacks.eye(Square.F2, Bitboard.fromSquare(Square.C2), Direction.Left));
+
+    try expectBitboard(
+        \\........
+        \\........
+        \\........
+        \\....o...
+        \\...o....
+        \\..o.....
+        \\.o......
+        \\........
+    , Attacks.eye(Square.F6, Bitboard.fromSquare(Square.B2), Direction.Down_Left));
+
+    try expectBitboard(
+        \\........
+        \\........
+        \\........
+        \\.o......
+        \\..o.....
+        \\...o....
+        \\........
+        \\........
+    , Attacks.eye(Square.A6, Bitboard.fromSquare(Square.D3), Direction.Down_Right));
+}
 
 test "piece attacks" {
     try expectBitboard(
@@ -1114,3 +1239,10 @@ pub const Castling = packed struct(u4) {
     black_kingside: bool,
     black_queenside: bool,
 };
+
+fn log_bb(a: Bitboard, b: Bitboard) void {
+    std.debug.print("\nA:\n{s}\nB:\n{s}\n", .{ Prints.bitboard(a), Prints.bitboard(b) });
+}
+fn log_sq(a: Square, b: Square) void {
+    std.debug.print("\nA:{s} B:{s}\n", .{ Prints.fromSquare(a), Prints.fromSquare(b) });
+}

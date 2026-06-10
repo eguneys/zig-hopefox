@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const chess = @import("chess/types.zig");
 const DotUsage = @import("usage.zig").DotUsage;
 
-fn expectVisuals(expected: []const u8, script: []const u8, position: *const [71:0]u8) !void {
+pub fn expectVisuals(expected: []const u8, script: []const u8, position: *const [71:0]u8) !void {
     const ally = testing.allocator;
 
     var usage = try DotUsage.init(ally, script);

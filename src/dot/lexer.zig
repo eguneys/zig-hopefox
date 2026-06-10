@@ -37,6 +37,7 @@ pub const StarWordId = enum {
     Sacrificeson,
     becomes,
     Captures,
+    Checks,
     forks,
     and_,
     Movesto,

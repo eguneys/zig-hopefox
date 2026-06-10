@@ -22,6 +22,9 @@ pub const Matcher = struct {
             lx.StarWordId.Captures => {
                 try dispatch_captures(allocator, history, slice, star);
             },
+            lx.StarWordId.Checks => {
+                try dispatch_checks(allocator, history, slice, star);
+            },
             else => {},
         }
     }
@@ -68,6 +71,49 @@ pub const Matcher = struct {
             }
         }
     }
+
+    fn dispatch_checks(allocator: Allocator, history: *History, slice: Slice, star: par.Star) !void {
+        const from_symbol = history.program.tokens[star.owner.symbol].identity.symbol;
+        const to_symbol = history.program.tokens[star.becomes].identity.symbol;
+        const checked_symbol = history.program.tokens[star.one].identity.symbol;
+        const From = history.table.getColumn(from_symbol);
+        const To = history.table.getColumn(to_symbol);
+        const Checked = history.table.getColumn(checked_symbol);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_to = To[off];
+            const bb_checked = Checked[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from.bitand(Symbols.bitboard(from_symbol, position));
+            while (bb_from2.next()) |sq_from| {
+                var bb_checked2 = bb_checked
+                    .bitand(Symbols.bitboard(checked_symbol, position));
+                while (bb_checked2.next()) |sq_checked| {
+                    const aa_checked = Symbols.checks(from_symbol, sq_from, sq_checked, position.occupied());
+                    var bb_to2 = bb_to
+                        .bitand(chess.Bitboard.fromSquare(sq_checked))
+                        .bitand(aa_checked);
+                    while (bb_to2.next()) |sq_to| {
+                        try history.table.duplicateLastRow(allocator);
+
+                        history.table.setLastRow(from_symbol, chess.Bitboard.fromSquare(sq_from));
+                        history.table.setLastRow(to_symbol, chess.Bitboard.fromSquare(sq_to));
+                        history.table.setLastRow(checked_symbol, chess.Bitboard.fromSquare(sq_checked));
+
+                        var move: chess.Move = undefined;
+                        move.from = @truncate(@intFromEnum(sq_from));
+                        move.to = @truncate(@intFromEnum(sq_to));
+                        move.kind = chess.MoveType.Normal;
+                        const ref = try history.tree.appendChild(allocator, off, move);
+                        try history.nodes.append(allocator, ref);
+                    }
+                }
+            }
+        }
+    }
 };
 
 pub const Symbols = struct {
@@ -94,8 +140,47 @@ pub const Symbols = struct {
             lx.SymbolId.sq => chess.Bitboard.Zero,
         };
     }
+
+    fn checks(symbol: lx.Symbol, from: chess.Square, check: chess.Square, occupied: chess.Bitboard) chess.Bitboard {
+        var bb_to = switch (symbol.name) {
+            lx.SymbolId.bishop => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.Diagonal),
+            lx.SymbolId.rook => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.Straight),
+            lx.SymbolId.queen => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.All),
+            lx.SymbolId.king => chess.Attacks.king_plus(from, chess.DirectionPlus.All),
+            lx.SymbolId.knight => chess.Bitboard.Zero,
+            lx.SymbolId.pawn => chess.Bitboard.Zero,
+            lx.SymbolId.sq => chess.Bitboard.Zero,
+        };
+
+        log_bb(occupied, bb_to);
+        log_sym(symbol);
+        var result = chess.Bitboard.Zero;
+
+        while (bb_to.next()) |to| {
+            const bb_to2 = switch (symbol.name) {
+                lx.SymbolId.bishop => chess.Attacks.ray_plus(to, occupied, chess.DirectionPlus.Diagonal),
+                lx.SymbolId.rook => chess.Attacks.ray_plus(to, occupied, chess.DirectionPlus.Straight),
+                lx.SymbolId.queen => chess.Attacks.ray_plus(to, occupied, chess.DirectionPlus.All),
+                lx.SymbolId.king => chess.Attacks.king_plus(to, chess.DirectionPlus.All),
+                lx.SymbolId.knight => chess.Bitboard.Zero,
+                lx.SymbolId.pawn => chess.Bitboard.Zero,
+                lx.SymbolId.sq => chess.Bitboard.Zero,
+            };
+            if (bb_to2.has(check)) {
+                result = result.set(to);
+            }
+        }
+        return result;
+    }
 };
 
-fn log2(a: chess.Bitboard, b: chess.Bitboard) void {
+fn log_bb(a: chess.Bitboard, b: chess.Bitboard) void {
     std.debug.print("\nA:\n{s}\nB:\n{s}\n", .{ chess.Prints.bitboard(a), chess.Prints.bitboard(b) });
+}
+fn log_sq(a: chess.Square, b: chess.Square) void {
+    std.debug.print("\nA:{s} B:{s}\n", .{ chess.Prints.fromSquare(a), chess.Prints.fromSquare(b) });
+}
+
+fn log_sym(a: lx.Symbol) void {
+    std.debug.print("\nS:{t}\n", .{a.name});
 }
