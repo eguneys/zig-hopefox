@@ -159,3 +159,7 @@ test "basic usage" {
     const slices = runner.slices.items;
     try std.testing.expectEqual(0, slices.len);
 }
+
+fn logN2(a: usize, b: usize) void {
+    std.debug.print("\nA:{d} B:{d} ", .{ a, b });
+}

@@ -167,3 +167,43 @@ test "basic usage" {
 
     try testing.expectEqualSlices(u8, "2: {dxe4}{exd3}", try usage.printLines(ally));
 }
+
+test "multi line" {
+    const ally = testing.allocator;
+
+    var usage = try DotUsage.init(ally,
+        \\
+        \\bishop *Captures pawn *becomes bishop2
+        \\pawn2 *Captures bishop2 *becomes pawn3
+        \\
+    );
+
+    defer usage.deinit(ally);
+
+    try usage.runner.runOnPosition(ally, chess.Parses.white(
+        \\........
+        \\........
+        \\..b.....
+        \\........
+        \\....p...
+        \\...P....
+        \\........
+        \\........
+    ));
+
+    const slices = usage.runner.slices.items;
+    try testing.expectEqual(2, slices.len);
+
+    try testing.expectEqual(1, slices[0].off);
+    try testing.expectEqual(1, slices[0].len);
+    try testing.expectEqual(1, usage.runner.history.nodes.items[slices[0].off]);
+
+    try testing.expectEqualSlices(u8, "{Bxe4}", try usage.printInstructionLine(ally, slices[0]));
+
+    try testing.expectEqual(1, slices[1].len);
+
+    try testing.expectEqualSlices(u8,
+        \\2: {Bxe4}
+        \\3: {Bxe4 dxe4}
+    , try usage.printLines(ally));
+}
