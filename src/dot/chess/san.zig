@@ -1,29 +1,46 @@
 const std = @import("std");
 const types = @import("types.zig");
+const Bitboard = types.Bitboard;
 const log_bb = types.log_bb;
 const log_sq = types.log_sq;
 
 pub const CheckFind = struct {
-    pub fn checkers(position: types.Position) types.Bitboard {
-        var result = types.Bitboard.Zero;
+    black_bb: types.Bitboard,
+    white_bb: types.Bitboard,
+    white_checkers: Bitboard = Bitboard.Zero,
+    black_checkers: Bitboard = Bitboard.Zero,
+
+    pub fn init(position: types.Position) CheckFind {
+        var result = CheckFind{ .white_bb = position.bb_white, .black_bb = position.bb_black() };
 
         const occ = position.occupied();
         var bb_king = position.bb_king;
         while (bb_king.next()) |king| {
             var candidates =
                 types.Attacks.ray_plus(king, occ, types.DirectionPlus.All);
-            while (candidates.next()) |candidate| {
+
+            var white_candies = candidates.bitand(position.bb_white);
+            var black_candies = candidates.bitdiff(white_candies);
+
+            while (white_candies.next()) |candidate| {
                 const check = types.Attacks.piece_ray(candidate, occ, position.getPiece(candidate));
                 if (check.has(king)) {
-                    result = result.set(candidate);
+                    result.white_checkers = result.white_checkers.set(candidate);
+                }
+            }
+
+            while (black_candies.next()) |candidate| {
+                const check = types.Attacks.piece_ray(candidate, occ, position.getPiece(candidate));
+                if (check.has(king)) {
+                    result.black_checkers = result.black_checkers.set(candidate);
                 }
             }
         }
         return result;
     }
 
-    pub fn isCheck(position: types.Position) bool {
-        return !checkers(position).isEmpty();
+    pub fn isCheck(self: CheckFind) bool {
+        return !self.black_checkers.bitand(self.white_bb).isEmpty() or !self.white_checkers.bitand(self.black_bb).isEmpty();
     }
 };
 
@@ -43,7 +60,7 @@ pub const San = struct {
 
         var pos_after = position;
         _ = pos_after.make_move(move);
-        const check = CheckFind.isCheck(pos_after);
+        const check = CheckFind.init(pos_after).isCheck();
 
         return .{
             .piece = position.getPiece(@enumFromInt(move.from)),
