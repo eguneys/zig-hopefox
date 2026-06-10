@@ -267,6 +267,10 @@ pub const Bitboard = packed struct(u64) {
         return Bitboard{ .bits = self.bits & ~other.bits };
     }
 
+    pub fn complement(self: Bitboard) Bitboard {
+        return Bitboard{ .bits = ~self.bits };
+    }
+
     pub fn next(self: *Bitboard) ?Square {
         if (self.first()) |sq| {
             self.bits &= (self.bits -% 1);
@@ -668,6 +672,10 @@ pub const Position = packed struct(u512) {
     turn: Color,
     padding1: u7,
     padding7: u56,
+
+    pub fn bb_vacant(self: Position) Bitboard {
+        return self.occupied().complement();
+    }
 
     pub fn bb_black(self: Position) Bitboard {
         return self.occupied().bitdiff(self.bb_white);

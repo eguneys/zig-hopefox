@@ -240,26 +240,29 @@ pub const ProgramBuilder = struct {
             return errors.ExpectingStarBecomes;
         };
 
-        if (self.getFirstTokenAfter(starbecomes.token.end_column_no, starbecomes.token.line_no)) |becomes| {
-            if (becomes.token.kind == lx.TokenKind.StarWord and becomes.token.identity.starword == lx.StarWordId.becomes) {
-                const extra =
-                    if (self.getFirstTokenAfter(starword.token.end_column_no, starword.token.line_no)) |e|
-                        e.ref
-                    else
-                        null;
-
-                const starref = self.stars.items.len;
-                try self.stars.append(allocator, .{ .starword = starword.ref, .owner = owner, .becomes = becomes.ref, .one = symbol.ref, .two = extra });
-
-                try self.instructions.append(allocator, .{ .star = starref });
-
-                if (self.getFirstTokenAfter(0, starword.token.line_no + 1)) |get| {
-                    try self.addDotWord(allocator, get, owner);
-                    try self.addStarWord(allocator, get, owner);
+        const becomes = findbecomes: {
+            if (self.getFirstTokenAfter(starbecomes.token.end_column_no, starbecomes.token.line_no)) |becomes| {
+                if (becomes.token.kind == lx.TokenKind.StarWord and becomes.token.identity.starword == lx.StarWordId.becomes) {
+                    if (self.getFirstTokenAfter(becomes.token.end_column_no, becomes.token.line_no)) |becomessymbol| {
+                        if (becomessymbol.token.kind == lx.TokenKind.SymbolWord) {
+                            break :findbecomes becomessymbol;
+                        }
+                    }
                 }
-
-                return;
             }
+            return errors.ExpectingStarBecomes;
+        };
+
+        const extra = undefined;
+
+        const starref = self.stars.items.len;
+        try self.stars.append(allocator, .{ .starword = starword.ref, .owner = owner, .becomes = becomes.ref, .one = symbol.ref, .two = extra });
+
+        try self.instructions.append(allocator, .{ .star = starref });
+
+        if (self.getFirstTokenAfter(0, starword.token.line_no + 1)) |get| {
+            try self.addDotWord(allocator, get, owner);
+            try self.addStarWord(allocator, get, owner);
         }
     }
 

@@ -34,6 +34,11 @@ pub fn Table(C: type, R: type) type {
             return .{ .column_by_symbol = column_by_symbol, .symbols = symbols, .columns = try columns.toOwnedSlice(allocator) };
         }
 
+        pub fn getColumn(self: Self, column: C) []R {
+            const icolumn = self.column_by_symbol.get(column) orelse 0;
+            return self.columns[icolumn].items;
+        }
+
         pub fn getValue(self: Self, column: C, row: usize) R {
             const icolumn = self.column_by_symbol.get(column) orelse 0;
             return self.columns[icolumn].items[row];

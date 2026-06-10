@@ -49,6 +49,14 @@ pub const History = struct {
         return self;
     }
 
+    pub fn getPosition(self: History, off: usize) chess.Position {
+        var position = self.position;
+        for (self.tree.getHistoryReversed(off)) |move| {
+            _ = position.make_move(self.tree.getNode(move).value);
+        }
+        return position;
+    }
+
     pub fn addMove(self: *History, allocator: Allocator, off: usize, move: chess.Move) !void {
         try self.nodes.append(allocator, try self.tree.addChild(allocator, off, move));
     }
@@ -94,7 +102,7 @@ pub const Runner = struct {
                     try Matcher.run_dot(allocator, self.history, slice, self.history.program.dots[dotorstar.dot]);
                 },
                 .star => {
-                    try Matcher.run_star(allocator, self.history, slice, self.history.program.stars[dotorstar.star]);
+                    try Matcher.run_star(allocator, &self.history, slice, self.history.program.stars[dotorstar.star]);
                     const end_off = self.history.nodes.items.len;
                     try self.slices.append(allocator, .{ .off = begin_off, .len = end_off - begin_off, .instruction = i });
                 },

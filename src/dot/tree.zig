@@ -8,11 +8,13 @@ pub fn Tree(C: type) type {
         flat: ArrayList(Node),
         size: usize = 0,
         appending: usize = 0,
+        buffer: []usize,
 
         const Self = @This();
 
         pub fn deinit(self: *Self, allocator: Allocator) void {
             self.flat.deinit(allocator);
+            allocator.free(self.buffer);
         }
 
         pub fn init(allocator: Allocator) !Self {
@@ -21,10 +23,17 @@ pub fn Tree(C: type) type {
 
             try flat.append(allocator, Node{ .parent = 0, .value = undefined, .children = .{ .off = 1, .len = 0 } });
 
-            return .{ .flat = flat, .size = 1 };
+            var buffer = try ArrayList(usize).initCapacity(allocator, 30);
+            errdefer buffer.deinit(allocator);
+
+            for (0..buffer.capacity) |_| {
+                try buffer.append(allocator, undefined);
+            }
+
+            return .{ .flat = flat, .size = 1, .buffer = try buffer.toOwnedSlice(allocator) };
         }
 
-        pub fn getNode(self: *Self, off: usize) Node {
+        pub fn getNode(self: Self, off: usize) Node {
             return self.flat.items[off];
         }
 
@@ -45,19 +54,16 @@ pub fn Tree(C: type) type {
             return self.flat.items.len - 1;
         }
 
-        pub fn getHistory(self: *Self, allocator: Allocator, off: usize) ![]usize {
-            var result = try ArrayList(usize).initCapacity(allocator, 1);
-            errdefer result.deinit(allocator);
-
+        pub fn getHistoryReversed(self: Self, off: usize) []usize {
+            var i: usize = 0;
             var parent = off;
             while (parent != 0) {
-                try result.append(allocator, parent);
+                self.buffer[i] = parent;
                 parent = self.getNode(parent).parent;
+                i += 1;
             }
 
-            const res = try result.toOwnedSlice(allocator);
-            std.mem.reverse(C, res);
-            return res;
+            return self.buffer[0..i];
         }
 
         pub const Node = struct {
@@ -120,7 +126,6 @@ test "basic usage" {
     _ = try tree.appendChild(ally, 9, 10);
     try std.testing.expectEqual(11, try tree.appendChild(ally, 10, 11));
 
-    const history = try tree.getHistory(ally, 11);
-    defer ally.free(history);
-    try std.testing.expectEqualSlices(usize, &[_]usize{ 1, 9, 10, 11 }, history);
+    const history = tree.getHistoryReversed(11);
+    try std.testing.expectEqualSlices(usize, &[_]usize{ 11, 10, 9, 1 }, history);
 }
