@@ -136,6 +136,8 @@ pub const ProgramBuilder = struct {
         var result: ProgramBuilder = .{ .tokens = try Tokens.init(allocator, tokens) };
         errdefer result.deinit(allocator);
 
+        if (tokens.len == 0) return result;
+
         for (1..tokens[tokens.len - 1].line_no + 1) |line_no| {
             if (result.tokens.get(line_no)) |get| {
                 for (get.token, get.slice.off..get.slice.off + get.slice.len) |token, ref| {
@@ -481,4 +483,21 @@ test "regression 2" {
     defer program.deinit(ally);
 
     try std.testing.expectEqual(1, program.instructions.len);
+}
+
+test "empty" {
+    const ally = testing.allocator;
+
+    var lexer: lx.Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally, "asfj");
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    var builder = try ProgramBuilder.init(ally, tokens);
+    defer builder.deinit(ally);
+
+    const program = try builder.build(ally);
+    defer program.deinit(ally);
 }

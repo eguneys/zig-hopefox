@@ -10,7 +10,7 @@ pub fn main(init: std.process.Init) !void {
     var gpa: std.heap.DebugAllocator(.{}) = .init;
     const allocator = gpa.allocator();
 
-    var live = live_file.FileWatcher(live_file.Log).init("scripts/script1.gof");
+    var live = live_file.FileWatcher("scripts/script1.gof", "scripts/script1.output"){};
 
     try live.loop(init.io, allocator, &stdout);
 }

@@ -67,6 +67,13 @@ pub const Lexer = struct {
         try self.text.appendSlice(allocator, script);
     }
 
+    fn peekNextChar(self: *Self) ?u8 {
+        if (self.text.items.len <= self.inext) {
+            return null;
+        }
+        return self.text.items[self.inext];
+    }
+
     fn nextToken(self: *Self) ?Token {
         self.skipWhitespace();
 
@@ -86,28 +93,30 @@ pub const Lexer = struct {
             };
         }
 
-        if (self.text.items[self.inext] == '.') {
-            self.inext += 1;
-            self.column_no += 1;
-            return .{
-                .kind = TokenKind.Dot,
-                .line_no = self.line_no,
-                .begin_column_no = self.column_no - 1,
-                .end_column_no = self.column_no,
-                .identity = .{ .char = '.' },
-            };
-        }
+        if (self.peekNextChar()) |char| {
+            if (char == '.') {
+                self.inext += 1;
+                self.column_no += 1;
+                return .{
+                    .kind = TokenKind.Dot,
+                    .line_no = self.line_no,
+                    .begin_column_no = self.column_no - 1,
+                    .end_column_no = self.column_no,
+                    .identity = .{ .char = '.' },
+                };
+            }
 
-        if (self.text.items[self.inext] == '*') {
-            self.inext += 1;
-            self.column_no += 1;
-            return .{
-                .kind = TokenKind.Star,
-                .line_no = self.line_no,
-                .begin_column_no = self.column_no - 1,
-                .end_column_no = self.column_no,
-                .identity = .{ .char = '*' },
-            };
+            if (char == '*') {
+                self.inext += 1;
+                self.column_no += 1;
+                return .{
+                    .kind = TokenKind.Star,
+                    .line_no = self.line_no,
+                    .begin_column_no = self.column_no - 1,
+                    .end_column_no = self.column_no,
+                    .identity = .{ .char = '*' },
+                };
+            }
         }
 
         const begin_column_no = self.column_no;
@@ -161,14 +170,16 @@ pub const Lexer = struct {
                 const id: usize = findid: {
                     var base: usize = 1;
                     var iid: usize = 0;
-                    var char = self.text.items[self.inext];
-                    while (std.ascii.isDigit(char)) {
-                        iid += (char - '0') * base;
-                        base *= 10;
+                    while (self.peekNextChar()) |char| {
+                        if (std.ascii.isDigit(char)) {
+                            iid += (char - '0') * base;
+                            base *= 10;
 
-                        self.inext += 1;
-                        self.column_no += 1;
-                        char = self.text.items[self.inext];
+                            self.inext += 1;
+                            self.column_no += 1;
+                        } else {
+                            break;
+                        }
                     }
 
                     break :findid iid;
@@ -320,4 +331,15 @@ test "final form" {
     defer ally.free(tokens);
 
     try testing.expectEqual(50, tokens.len);
+}
+
+test "half baked" {
+    const ally = testing.allocator;
+
+    var lexer: Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally, "bishop");
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
 }
