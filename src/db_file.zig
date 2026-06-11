@@ -42,6 +42,7 @@ const DbWriter = struct {
     header: DbHeader,
 
     fn open(self: *DbWriter, io: std.Io, path: []const u8, meta_path: []const u8) !void {
+        self.header = .{ .count = 0 };
         self.file = try std.Io.Dir.cwd()
             .createFile(io, path, .{});
 

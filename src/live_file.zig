@@ -2,6 +2,7 @@ const std = @import("std");
 const dot_usage = @import("dot/usage.zig");
 const chess = @import("dot/chess/types.zig");
 const DbReader = @import("db_file.zig").DbReader;
+const DotCoverageOutput = @import("coverage.zig").DotCoverageOutput;
 
 pub const LiveFile = struct {
     script_path: []const u8,
@@ -30,6 +31,7 @@ pub const LiveFile = struct {
         self.output_file = try std.Io.Dir.cwd().createFile(io, output_path, .{});
 
         self.output_writer = self.output_file.writer(io, &self.output_buffer);
+
         self.db_reader = try DbReader.open(io, db_path, meta_path);
 
         // 6. Open and read the whole file
@@ -84,18 +86,8 @@ pub const LiveFile = struct {
             return;
         };
 
-        const position = try self.db_reader.readPosition(0);
-        dot.runner.runOnPosition(allocator, position) catch {
-            try self.writeContent("Error running position");
-            return;
-        };
+        try DotCoverageOutput.write(allocator, &self.db_reader, &dot, &self.output_writer);
 
-        const output = dot.printLines(allocator) catch {
-            try self.writeContent("Error writing output");
-            return;
-        };
-
-        try self.writeContent(output);
         try self.flush_output();
     }
 
