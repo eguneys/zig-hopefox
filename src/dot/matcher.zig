@@ -117,7 +117,7 @@ pub const Matcher = struct {
 
 pub const Symbols = struct {
     fn bitboard(symbol: lx.Symbol, position: chess.Position) chess.Bitboard {
-        return switch (symbol.name) {
+        const role_bb = switch (symbol.name) {
             lx.SymbolId.bishop => position.bb_bishop,
             lx.SymbolId.pawn => position.bb_pawn,
             lx.SymbolId.rook => position.bb_rook,
@@ -126,6 +126,8 @@ pub const Symbols = struct {
             lx.SymbolId.knight => position.bb_knight,
             lx.SymbolId.sq => position.bb_vacant(),
         };
+
+        return if (symbol.turn) role_bb.bitand(position.bb_turn()) else if (symbol.opponent) role_bb.bitand(position.bb_opponent()) else role_bb;
     }
 
     fn captures(symbol: lx.Symbol, from: chess.Square, position: chess.Position) chess.Bitboard {
@@ -172,13 +174,6 @@ pub const Symbols = struct {
     }
 };
 
-fn log_bb(a: chess.Bitboard, b: chess.Bitboard) void {
-    std.debug.print("\nA:\n{s}\nB:\n{s}\n", .{ chess.Prints.bitboard(a), chess.Prints.bitboard(b) });
-}
-fn log_sq(a: chess.Square, b: chess.Square) void {
-    std.debug.print("\nA:{s} B:{s}\n", .{ chess.Prints.fromSquare(a), chess.Prints.fromSquare(b) });
-}
-
 fn log_sym(a: lx.Symbol) void {
-    std.debug.print("\nS:{t}\n", .{a.name});
+    std.debug.print("\nS:{t} {d}\n", .{ a.name, a.id });
 }

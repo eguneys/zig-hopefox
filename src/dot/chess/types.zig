@@ -389,7 +389,7 @@ pub const Attacks = struct {
         return res;
     }
 
-    pub fn ray(square: Square, occupied: Bitboard, direction: Direction) Bitboard {
+    pub fn rayall(square: Square, occupied: Bitboard, direction: Direction) Bitboard {
         return ray_masks[@intFromEnum(direction)][@intFromEnum(square)].bitand(occupied);
     }
 
@@ -414,6 +414,10 @@ pub const Attacks = struct {
 
             else => Bitboard.fromInt(negative_eye(occupied.bits, ray_mask.bits, slider_bit.bits)),
         };
+    }
+
+    pub fn ray(square: Square, occupied: Bitboard, direction: Direction) Bitboard {
+        return eye(square, occupied, direction).bitand(occupied);
     }
 
     pub fn eyes_plus(square: Square, occupied: Bitboard, plus: DirectionPlus) Bitboard {
@@ -538,6 +542,19 @@ pub const Attacks = struct {
         };
     }
 };
+
+test "ray attacks" {
+    try expectBitboard(
+        \\........
+        \\........
+        \\........
+        \\.....o..
+        \\........
+        \\........
+        \\........
+        \\........
+    , Attacks.ray(Square.H5, Bitboard.F5.bitor(Bitboard.E5), Direction.Left));
+}
 
 test "eyes attacks" {
     try expectBitboard(
@@ -1259,4 +1276,7 @@ pub fn log_bb(a: Bitboard, b: Bitboard) void {
 }
 pub fn log_sq(a: Square, b: Square) void {
     std.debug.print("\nA:{s} B:{s}\n", .{ Prints.fromSquare(a), Prints.fromSquare(b) });
+}
+pub fn log_pos(a: Position) void {
+    std.debug.print("\n{s}\n", .{Prints.position(a)});
 }

@@ -3,6 +3,7 @@ const types = @import("types.zig");
 const Bitboard = types.Bitboard;
 const log_bb = types.log_bb;
 const log_sq = types.log_sq;
+const log_pos = types.log_pos;
 
 pub const CheckFind = struct {
     black_bb: types.Bitboard,
@@ -14,28 +15,31 @@ pub const CheckFind = struct {
         var result = CheckFind{ .white_bb = position.bb_white, .black_bb = position.bb_black() };
 
         const occ = position.occupied();
-        var bb_king = position.bb_king;
-        while (bb_king.next()) |king| {
-            var candidates =
-                types.Attacks.ray_plus(king, occ, types.DirectionPlus.All);
 
-            var white_candies = candidates.bitand(position.bb_white);
-            var black_candies = candidates.bitdiff(white_candies);
+        if (position.bb_white_king().single()) |white_king| {
+            var white_candies =
+                types.Attacks.ray_plus(white_king, occ, types.DirectionPlus.All);
 
             while (white_candies.next()) |candidate| {
                 const check = types.Attacks.piece_ray(candidate, occ, position.getPiece(candidate));
-                if (check.has(king)) {
+                if (check.has(white_king)) {
                     result.white_checkers = result.white_checkers.set(candidate);
                 }
             }
+        }
+
+        if (position.bb_black_king().single()) |black_king| {
+            var black_candies =
+                types.Attacks.ray_plus(black_king, occ, types.DirectionPlus.All);
 
             while (black_candies.next()) |candidate| {
                 const check = types.Attacks.piece_ray(candidate, occ, position.getPiece(candidate));
-                if (check.has(king)) {
+                if (check.has(black_king)) {
                     result.black_checkers = result.black_checkers.set(candidate);
                 }
             }
         }
+
         return result;
     }
 

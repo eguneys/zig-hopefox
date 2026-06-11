@@ -1,1 +1,1 @@
-bishop *Captures pawn *becomes bishop2
+rook_t *Checks king_o *becomes rook2

@@ -9,7 +9,12 @@ pub const TokenKind = enum { Dot, Star, DotWord, SymbolWord, StarWord, Eof };
 const IdentityTag = enum { symbol, char, dotword, starword };
 const TokenIdentity = union(IdentityTag) { symbol: Symbol, char: u8, dotword: DotWordId, starword: StarWordId };
 
-pub const Symbol = struct { name: SymbolId, id: usize };
+pub const Symbol = struct {
+    name: SymbolId,
+    id: usize,
+    turn: bool = false,
+    opponent: bool = false,
+};
 pub const SymbolId = enum { king, queen, rook, bishop, knight, pawn, sq };
 
 pub const DotWordId = enum {
@@ -185,15 +190,41 @@ pub const Lexer = struct {
                     break :findid iid;
                 };
 
+                var symbol_identity = Symbol{
+                    .name = @enumFromInt(symbol.value),
+                    .id = id,
+                };
+
+                while (self.peekNextChar()) |char| {
+                    if (char != '_') break;
+                    self.inext += 1;
+                    self.column_no += 1;
+
+                    if (self.peekNextChar()) |turn| {
+                        switch (turn) {
+                            't' => {
+                                symbol_identity.turn = true;
+                                self.inext += 1;
+                                self.column_no += 1;
+                            },
+                            'o' => {
+                                symbol_identity.opponent = true;
+                                self.inext += 1;
+                                self.column_no += 1;
+                            },
+                            else => {
+                                break;
+                            },
+                        }
+                    }
+                }
+
                 return .{
                     .kind = TokenKind.SymbolWord,
                     .line_no = self.line_no,
                     .begin_column_no = begin_column_no,
                     .end_column_no = self.column_no,
-                    .identity = .{ .symbol = .{
-                        .name = @enumFromInt(symbol.value),
-                        .id = id,
-                    } },
+                    .identity = .{ .symbol = symbol_identity },
                 };
             }
         }
@@ -342,4 +373,18 @@ test "half baked" {
     try lexer.appendScript(ally, "bishop");
     const tokens = try lexer.toOwnedSlice(ally);
     defer ally.free(tokens);
+}
+
+test "_t _o" {
+    const ally = testing.allocator;
+
+    var lexer: Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally, "bishop_t");
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    try std.testing.expectEqual(2, tokens.len);
+    try std.testing.expect(tokens[0].identity.symbol.turn);
 }
