@@ -2,6 +2,7 @@ const std = @import("std");
 const types = @import("dot/chess/types.zig");
 const san = @import("dot/chess/san.zig");
 
+const SizeOfPuzzleMeta = 1096 / 8;
 const PuzzleMeta = packed struct(u1096) {
     id: u40,
     move: u16,
@@ -156,8 +157,8 @@ pub const DbReader = struct {
         return @bitCast(buffer);
     }
     pub fn readMeta(self: *DbReader, off: usize) !PuzzleMeta {
-        var buffer: [@sizeOf(PuzzleMeta)]u8 = undefined;
-        try self.reader2.seekTo(off * @sizeOf(PuzzleMeta));
+        var buffer: [SizeOfPuzzleMeta]u8 = undefined;
+        try self.reader2.seekTo(@sizeOf(DbHeader) + off * SizeOfPuzzleMeta);
         try self.reader2.interface.readSliceAll(&buffer);
         return @bitCast(buffer);
     }

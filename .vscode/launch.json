@@ -9,7 +9,7 @@
             "name": "Zig Debug",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/zig-out/debug/test",
+            "program": "${workspaceFolder}/zig-out/bin/zig_hopefox.exe",
             "cwd": "${workspaceRoot}",
             "preLaunchTask": "zig build"
         }

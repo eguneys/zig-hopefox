@@ -62,6 +62,8 @@ pub const History = struct {
     }
 
     pub fn load_position(self: *History, allocator: Allocator, position: chess.Position) !void {
+        try self.tree.clearRetainingCapacity(allocator);
+
         self.table.clearRetainingCapacity();
         try self.table.appendRow(allocator, self.empty_row);
         self.nodes.clearRetainingCapacity();

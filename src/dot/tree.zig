@@ -37,6 +37,12 @@ pub fn Tree(C: type) type {
             return self.flat.items[off];
         }
 
+        pub fn clearRetainingCapacity(self: *Self, allocator: Allocator) !void {
+            self.flat.clearRetainingCapacity();
+            try self.flat.append(allocator, Node{ .parent = 0, .value = undefined, .children = .{ .off = 1, .len = 0 } });
+            self.appending = 0;
+        }
+
         pub fn appendChild(self: *Self, allocator: Allocator, off: usize, value: C) !usize {
             try self.flat.append(allocator, .{ .parent = off, .value = value, .children = .{
                 .off = 0,
