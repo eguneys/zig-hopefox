@@ -1,10 +1,18 @@
 const std = @import("std");
-const file = @import("file.zig");
+//const file = @import("file.zig");
+const file_watcher = @import("live_file.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout = std.Io.File.stdout().writer(init.io, &.{});
     try stdout.interface.print("GofChess Meta v0.0.0\n", .{});
     //try file.BuildDb.read_csv_to_build_db_if_doesnt_exists(init.io, "data/athousand_sorted.csv", "data/athousand.pos.db", "data/athousand.meta.db");
+
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
+    const allocator = gpa.allocator();
+
+    var live = file_watcher.FileWatcher.init("scripts/script1.gof");
+
+    try live.loop(init.io, allocator, &stdout);
 }
 
 test "imports" {
