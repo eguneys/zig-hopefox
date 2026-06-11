@@ -1,5 +1,6 @@
 const std = @import("std");
-const types = @import("chess");
+const types = @import("dot/chess/types.zig");
+const san = @import("dot/chess/san.zig");
 
 const PuzzleMeta = packed struct(u1096) {
     id: u40,
@@ -7,7 +8,7 @@ const PuzzleMeta = packed struct(u1096) {
     solution: u1024,
     size: u16,
 
-    fn parse(s_id: []const u8, s_moves: []const u8) PuzzleMeta {
+    fn parse(position: types.Position, s_id: []const u8, s_moves: []const u8) PuzzleMeta {
         const id = std.mem.readInt(u40, s_id[0..5], .native);
 
         var solution: u1024 = undefined;
@@ -15,7 +16,7 @@ const PuzzleMeta = packed struct(u1096) {
         var move: u16 = 0;
         var parts = std.mem.splitScalar(u8, s_moves, ' ');
         while (parts.next()) |part| {
-            const res: u16 = @bitCast(types.Uci.parse(part));
+            const res: u16 = @bitCast(san.Uci.move(part).toMove(position));
             if (move == 0) {
                 move = res;
             } else {
@@ -102,9 +103,9 @@ pub const BuildDb = struct {
             const fen = parts.next().?;
             const moves = parts.next().?;
 
-            const meta = PuzzleMeta.parse(id, moves);
-
             var position = types.Fen.parse(fen);
+
+            const meta = PuzzleMeta.parse(position, id, moves);
 
             _ = position.make_move(@bitCast(meta.move));
 
@@ -118,3 +119,50 @@ pub const BuildDb = struct {
 test "af" {
     try BuildDb.read_csv_to_build_db_if_doesnt_exists(std.testing.io, "data/athousand_sorted.csv", "data/athousand.pos.db", "data/athousand.meta.db");
 }
+
+pub const DbReader = struct {
+    meta_file: std.Io.File,
+    file: std.Io.File,
+    buffer: [4096]u8,
+    buffer2: [4096]u8,
+    reader: std.Io.File.Reader,
+    reader2: std.Io.File.Reader,
+    header: DbHeader,
+
+    pub fn open(io: std.Io, path: []const u8, meta_path: []const u8) !DbReader {
+        var self: DbReader = undefined;
+        self.file = try std.Io.Dir.cwd()
+            .openFile(io, path, .{});
+
+        self.reader = self.file.reader(io, &self.buffer);
+
+        self.meta_file = try std.Io.Dir.cwd()
+            .openFile(io, meta_path, .{});
+        self.reader2 = self.meta_file.reader(io, &self.buffer2);
+
+        var buffer: [@sizeOf(DbHeader)]u8 = undefined;
+        try self.reader2.interface.readSliceAll(&buffer);
+
+        self.header = @bitCast(buffer);
+
+        return self;
+    }
+
+    pub fn readPosition(self: *DbReader, off: usize) !types.Position {
+        var buffer: [@sizeOf(types.Position)]u8 = undefined;
+        try self.reader.seekTo(off * @sizeOf(types.Position));
+        try self.reader.interface.readSliceAll(&buffer);
+        return @bitCast(buffer);
+    }
+    pub fn readMeta(self: *DbReader, off: usize) !PuzzleMeta {
+        var buffer: [@sizeOf(PuzzleMeta)]u8 = undefined;
+        try self.reader2.seekTo(off * @sizeOf(PuzzleMeta));
+        try self.reader2.interface.readSliceAll(&buffer);
+        return @bitCast(buffer);
+    }
+
+    fn close(self: *DbWriter, io: std.Io) !void {
+        self.file.close(io);
+        self.meta_file.close(io);
+    }
+};

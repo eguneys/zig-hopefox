@@ -1,6 +1,6 @@
 const std = @import("std");
 //const file = @import("file.zig");
-const live_file = @import("live_file.zig");
+const LiveFile = @import("live_file.zig").LiveFile;
 
 pub fn main(init: std.process.Init) !void {
     var stdout = std.Io.File.stdout().writer(init.io, &.{});
@@ -10,7 +10,11 @@ pub fn main(init: std.process.Init) !void {
     var gpa: std.heap.DebugAllocator(.{}) = .init;
     const allocator = gpa.allocator();
 
-    var live = live_file.FileWatcher("scripts/script1.gof", "scripts/script1.output"){};
+    const db_path = "data/athousand.pos.db";
+    const meta_path = "data/athousand.meta.db";
+    const script_path = "scripts/script1.gof";
+    const output_path = "scripts/script1.output";
+    var live = try LiveFile.open(init.io, db_path, meta_path, script_path, output_path);
 
     try live.loop(init.io, allocator, &stdout);
 }
