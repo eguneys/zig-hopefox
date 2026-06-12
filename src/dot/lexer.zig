@@ -7,7 +7,12 @@ const chess = @import("chess/types.zig");
 pub const TokenKind = enum { Dot, Star, DotWord, SymbolWord, StarWord, Eof };
 
 const IdentityTag = enum { symbol, char, dotword, starword };
-const TokenIdentity = union(IdentityTag) { symbol: Symbol, char: u8, dotword: DotWordId, starword: StarWordId };
+const TokenIdentity = union(IdentityTag) {
+    symbol: Symbol,
+    char: u8,
+    dotword: DotWordId,
+    starword: StarWordId,
+};
 
 pub const Symbol = struct {
     name: SymbolId,
@@ -15,7 +20,16 @@ pub const Symbol = struct {
     turn: bool = false,
     opponent: bool = false,
 };
-pub const SymbolId = enum { king, queen, rook, bishop, knight, pawn, sq };
+pub const SymbolId = enum {
+    king,
+    queen,
+    rook,
+    bishop,
+    knight,
+    pawn,
+    sq,
+    Check,
+};
 
 pub const DotWordId = enum {
     eyes,
@@ -43,13 +57,20 @@ pub const StarWordId = enum {
     becomes,
     Captures,
     Checks,
+    Blocks,
     forks,
     and_,
     Movesto,
     withcheck,
 };
 
-pub const Token = struct { kind: TokenKind, line_no: usize, end_column_no: usize, begin_column_no: usize, identity: TokenIdentity };
+pub const Token = struct {
+    kind: TokenKind,
+    line_no: usize,
+    end_column_no: usize,
+    begin_column_no: usize,
+    identity: TokenIdentity,
+};
 
 pub const Lexer = struct {
     text: ArrayList(u8) = .empty,
@@ -387,4 +408,21 @@ test "_t _o" {
 
     try std.testing.expectEqual(2, tokens.len);
     try std.testing.expect(tokens[0].identity.symbol.turn);
+}
+
+test "star as symbol" {
+    const ally = testing.allocator;
+
+    var lexer: Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally,
+        \\rook3 *Blocks Check *becomes rook4
+    );
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    try std.testing.expectEqual(8, tokens.len);
+    try std.testing.expectEqual(TokenKind.StarWord, tokens[2].kind);
+    try std.testing.expectEqual(TokenKind.SymbolWord, tokens[3].kind);
 }

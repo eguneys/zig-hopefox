@@ -3,6 +3,7 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const AutoHashMap = std.AutoHashMap;
+const log = @import("logs.zig");
 
 pub fn Table(C: type, R: type) type {
     return struct {

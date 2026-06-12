@@ -1,1 +1,2 @@
 rook_t *Checks king_o *becomes rook2
+rook3 *Blocks Check *becomes rook4

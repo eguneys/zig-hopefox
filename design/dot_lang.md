@@ -1,3 +1,11 @@
+
+```
+rook_t *Checks king_o *becomes rook2
+          *Blockedby rook3 *becomes rook4
+                                       .attackedby bishop
+                                       .defendedby queen
+```
+
 ```
 bishop
       .eyes pawn

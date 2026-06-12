@@ -8,6 +8,7 @@ const History = @import("runner.zig").History;
 const chess = @import("chess/types.zig");
 const par = @import("parser.zig");
 const lx = @import("lexer.zig");
+const log = @import("logs.zig");
 
 pub const Matcher = struct {
     pub const Slice = struct { off: usize, len: usize };
@@ -24,6 +25,9 @@ pub const Matcher = struct {
             },
             lx.StarWordId.Checks => {
                 try dispatch_checks(allocator, history, slice, star);
+            },
+            lx.StarWordId.Blocks => {
+                try dispatch_blocks(allocator, history, slice, star);
             },
             else => {},
         }
@@ -76,6 +80,7 @@ pub const Matcher = struct {
         const from_symbol = history.program.tokens[star.owner.symbol].identity.symbol;
         const to_symbol = history.program.tokens[star.becomes].identity.symbol;
         const checked_symbol = history.program.tokens[star.one].identity.symbol;
+        const action_symbol = star.action;
         const From = history.table.getColumn(from_symbol);
         const To = history.table.getColumn(to_symbol);
         const Checked = history.table.getColumn(checked_symbol);
@@ -102,6 +107,11 @@ pub const Matcher = struct {
                         history.table.setLastRow(to_symbol, chess.Bitboard.fromSquare(sq_to));
                         history.table.setLastRow(checked_symbol, chess.Bitboard.fromSquare(sq_checked));
 
+                        if (action_symbol) |symbol| {
+                            const aa_checkray = chess.Attacks.from_to(sq_to, sq_checked);
+                            history.table.setLastRow(symbol, aa_checkray);
+                        }
+
                         var move: chess.Move = undefined;
                         move.from = @truncate(@intFromEnum(sq_from));
                         move.to = @truncate(@intFromEnum(sq_to));
@@ -113,9 +123,55 @@ pub const Matcher = struct {
             }
         }
     }
+
+    fn dispatch_blocks(allocator: Allocator, history: *History, slice: Slice, star: par.Star) !void {
+        const from_symbol = history.program.tokens[star.owner.symbol].identity.symbol;
+        const to_symbol = history.program.tokens[star.becomes].identity.symbol;
+        const blocks_symbol = history.program.tokens[star.one].identity.symbol;
+        const From = history.table.getColumn(from_symbol);
+        const To = history.table.getColumn(to_symbol);
+        const Blocks = history.table.getColumn(blocks_symbol);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_to = To[off];
+            const bb_blocks = Blocks[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from.bitand(Symbols.bitboard(from_symbol, position));
+            while (bb_from2.next()) |sq_from| {
+                const aa_blocks = Symbols.moves(from_symbol, sq_from, position.occupied());
+                var bb_to2 = bb_to
+                    .bitand(bb_blocks)
+                    .bitand(aa_blocks);
+                while (bb_to2.next()) |sq_to| {
+                    try history.table.duplicateLastRow(allocator);
+
+                    history.table.setLastRow(from_symbol, chess.Bitboard.fromSquare(sq_from));
+                    history.table.setLastRow(to_symbol, chess.Bitboard.fromSquare(sq_to));
+                    history.table.setLastRow(blocks_symbol, chess.Bitboard.fromSquare(sq_to));
+
+                    var move: chess.Move = undefined;
+                    move.from = @truncate(@intFromEnum(sq_from));
+                    move.to = @truncate(@intFromEnum(sq_to));
+                    move.kind = chess.MoveType.Normal;
+                    const ref = try history.tree.appendChild(allocator, off, move);
+                    try history.nodes.append(allocator, ref);
+                }
+            }
+        }
+    }
 };
 
 pub const Symbols = struct {
+    fn action_bitboard(symbol: lx.Symbol, table: Table(lx.Symbol, chess.Bitboard), row: usize) chess.Bitboard {
+        return switch (symbol.name) {
+            lx.SymbolId.Check => table.getColumn(symbol)[row],
+            else => chess.Bitboard.Zero,
+        };
+    }
+
     fn bitboard(symbol: lx.Symbol, position: chess.Position) chess.Bitboard {
         const role_bb = switch (symbol.name) {
             lx.SymbolId.bishop => position.bb_bishop,
@@ -125,9 +181,23 @@ pub const Symbols = struct {
             lx.SymbolId.king => position.bb_king,
             lx.SymbolId.knight => position.bb_knight,
             lx.SymbolId.sq => position.bb_vacant(),
+            else => chess.Bitboard.Zero, // might throw error
         };
 
         return if (symbol.turn) role_bb.bitand(position.bb_turn()) else if (symbol.opponent) role_bb.bitand(position.bb_opponent()) else role_bb;
+    }
+
+    fn moves(symbol: lx.Symbol, from: chess.Square, occupied: chess.Bitboard) chess.Bitboard {
+        return switch (symbol.name) {
+            lx.SymbolId.bishop => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.Diagonal),
+            lx.SymbolId.rook => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.Straight),
+            lx.SymbolId.queen => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.All),
+            lx.SymbolId.king => chess.Bitboard.Zero,
+            lx.SymbolId.knight => chess.Bitboard.Zero,
+            lx.SymbolId.pawn => chess.Bitboard.Zero,
+            lx.SymbolId.sq => chess.Bitboard.Zero,
+            else => chess.Bitboard.Zero,
+        };
     }
 
     fn captures(symbol: lx.Symbol, from: chess.Square, position: chess.Position) chess.Bitboard {
@@ -139,6 +209,7 @@ pub const Symbols = struct {
             lx.SymbolId.knight => chess.Bitboard.Zero,
             lx.SymbolId.pawn => chess.Attacks.pawn_plus(from, if (position.colorOn(from) == chess.Color.White) chess.DirectionPlus.Forward else chess.DirectionPlus.Backward),
             lx.SymbolId.sq => chess.Bitboard.Zero,
+            else => chess.Bitboard.Zero,
         };
     }
 
@@ -151,6 +222,7 @@ pub const Symbols = struct {
             lx.SymbolId.knight => chess.Bitboard.Zero,
             lx.SymbolId.pawn => chess.Bitboard.Zero,
             lx.SymbolId.sq => chess.Bitboard.Zero,
+            else => chess.Bitboard.Zero,
         };
 
         var result = chess.Bitboard.Zero;
@@ -164,6 +236,7 @@ pub const Symbols = struct {
                 lx.SymbolId.knight => chess.Bitboard.Zero,
                 lx.SymbolId.pawn => chess.Bitboard.Zero,
                 lx.SymbolId.sq => chess.Bitboard.Zero,
+                else => chess.Bitboard.Zero,
             };
             if (bb_to2.has(check)) {
                 result = result.set(to);
@@ -173,7 +246,3 @@ pub const Symbols = struct {
         return result;
     }
 };
-
-fn log_sym(a: lx.Symbol) void {
-    std.debug.print("\nS:{t} {d}\n", .{ a.name, a.id });
-}

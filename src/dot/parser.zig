@@ -50,7 +50,14 @@ pub const Symbol = TokenRef;
 pub const OwnerTag = enum { symbol, dot, star };
 pub const Owner = union(OwnerTag) { symbol: SymbolRef, dot: DotRef, star: StarRef };
 pub const Dot = struct { dotword: TokenRef, owner: Owner, extra: ?Symbol };
-pub const Star = struct { starword: TokenRef, owner: Owner, becomes: Symbol, one: Symbol, two: ?Symbol };
+pub const Star = struct {
+    starword: TokenRef,
+    owner: Owner,
+    action: ?lx.Symbol,
+    becomes: Symbol,
+    one: Symbol,
+    two: ?Symbol,
+};
 pub const InstructionTag = enum { dot, star };
 pub const DotOrStar = union(InstructionTag) { dot: DotRef, star: StarRef };
 
@@ -227,6 +234,7 @@ pub const ProgramBuilder = struct {
         const symbol = findsymbol: {
             if (self.getFirstTokenAfter(starword.token.end_column_no, starword.token.line_no)) |symbol| {
                 if (symbol.token.kind == lx.TokenKind.SymbolWord) {
+                    try self.addSymbol(allocator, symbol.token, symbol.ref);
                     break :findsymbol symbol;
                 }
             }
@@ -239,7 +247,8 @@ pub const ProgramBuilder = struct {
                     break :findstar starbecomes;
                 }
             }
-            return errors.ExpectingStarBecomes;
+            //return errors.ExpectingStarBecomes;
+            return;
         };
 
         const becomes = findbecomes: {
@@ -258,7 +267,14 @@ pub const ProgramBuilder = struct {
         const extra = undefined;
 
         const starref = self.stars.items.len;
-        try self.stars.append(allocator, .{ .starword = starword.ref, .owner = owner, .becomes = becomes.ref, .one = symbol.ref, .two = extra });
+        try self.stars.append(allocator, .{
+            .starword = starword.ref,
+            .owner = owner,
+            .action = ProgramBuilder.getActionSymbolForStarWord(starword.token),
+            .becomes = becomes.ref,
+            .one = symbol.ref,
+            .two = extra,
+        });
 
         try self.instructions.append(allocator, .{ .star = starref });
 
@@ -266,6 +282,13 @@ pub const ProgramBuilder = struct {
             try self.addDotWord(allocator, get, owner);
             try self.addStarWord(allocator, get, owner);
         }
+    }
+
+    fn getActionSymbolForStarWord(token: lx.Token) ?lx.Symbol {
+        return switch (token.identity.starword) {
+            .Checks => .{ .name = lx.SymbolId.Check, .id = 0 },
+            else => null,
+        };
     }
 
     fn addSymbol(self: *ProgramBuilder, allocator: Allocator, token: lx.Token, ref: TokenRef) !void {
@@ -500,4 +523,45 @@ test "empty" {
 
     const program = try builder.build(ally);
     defer program.deinit(ally);
+}
+
+test "Check as symbol" {
+    const ally = testing.allocator;
+
+    var lexer: lx.Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally,
+        \\rook3 *Blocks Check *becomes rook4
+    );
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    var builder = try ProgramBuilder.init(ally, tokens);
+    defer builder.deinit(ally);
+
+    const program = try builder.build(ally);
+    defer program.deinit(ally);
+}
+
+test "Symbols count" {
+    const ally = testing.allocator;
+
+    var lexer: lx.Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally,
+        \\rook *Checks king *becomes rook2
+        \\bishop *Blocks Check *becomes bishop2
+    );
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    var builder = try ProgramBuilder.init(ally, tokens);
+    defer builder.deinit(ally);
+
+    const program = try builder.build(ally);
+    defer program.deinit(ally);
+
+    try std.testing.expectEqual(6, program.symbols.len);
 }

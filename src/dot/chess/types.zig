@@ -389,6 +389,22 @@ pub const Attacks = struct {
         return res;
     }
 
+    pub fn directionOf(from: Square, to: Square) Direction {
+        if (from.toFile() == to.toFile()) {
+            return if (@intFromEnum(from.toRank()) < @intFromEnum(to.toRank())) Direction.Up else Direction.Down;
+        } else if (from.toRank() == to.toRank()) {
+            return if (@intFromEnum(from.toFile()) < @intFromEnum(to.toFile())) Direction.Right else Direction.Left;
+        } else if (@intFromEnum(from.toFile()) < @intFromEnum(to.toFile())) {
+            return if (@intFromEnum(from.toRank()) < @intFromEnum(to.toRank())) Direction.Up_Right else Direction.Down_Right;
+        } else {
+            return if (@intFromEnum(from.toRank()) < @intFromEnum(to.toRank())) Direction.Up_Left else Direction.Down_Left;
+        }
+    }
+
+    pub fn from_to(from: Square, to: Square) Bitboard {
+        return eye(from, Bitboard.fromSquare(to), directionOf(from, to));
+    }
+
     pub fn rayall(square: Square, occupied: Bitboard, direction: Direction) Bitboard {
         return ray_masks[@intFromEnum(direction)][@intFromEnum(square)].bitand(occupied);
     }
@@ -542,6 +558,19 @@ pub const Attacks = struct {
         };
     }
 };
+
+test "from_to" {
+    try expectBitboard(
+        \\........
+        \\........
+        \\........
+        \\..oooo..
+        \\........
+        \\........
+        \\........
+        \\........
+    , Attacks.from_to(Square.G5, Square.C5));
+}
 
 test "ray attacks" {
     try expectBitboard(
@@ -1270,13 +1299,3 @@ pub const Castling = packed struct(u4) {
     black_kingside: bool,
     black_queenside: bool,
 };
-
-pub fn log_bb(a: Bitboard, b: Bitboard) void {
-    std.debug.print("\nA:\n{s}\nB:\n{s}\n", .{ Prints.bitboard(a), Prints.bitboard(b) });
-}
-pub fn log_sq(a: Square, b: Square) void {
-    std.debug.print("\nA:{s} B:{s}\n", .{ Prints.fromSquare(a), Prints.fromSquare(b) });
-}
-pub fn log_pos(a: Position) void {
-    std.debug.print("\n{s}\n", .{Prints.position(a)});
-}

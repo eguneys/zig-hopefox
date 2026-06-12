@@ -110,6 +110,7 @@ pub const BuildDb = struct {
             const meta = PuzzleMeta.parse(position, id, moves);
 
             _ = position.make_move(@bitCast(meta.move));
+            position.flipTurn();
 
             try writer.add(position, meta);
         }

@@ -8,6 +8,7 @@ const chess = @import("chess/types.zig");
 const lx = @import("lexer.zig");
 const par = @import("parser.zig");
 const Matcher = @import("matcher.zig").Matcher;
+const log = @import("logs.zig");
 
 pub const History = struct {
     program: par.Program,
