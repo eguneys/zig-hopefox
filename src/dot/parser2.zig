@@ -19,23 +19,30 @@ pub const errors = error{
 };
 
 pub const TokenRef = usize;
+pub const SymbolRef = usize;
+
+pub const Symbol = struct {
+    identity: lx.SymbolIdentity,
+    props: lx.SymbolProperties,
+    token: TokenRef,
+};
 
 pub const BecomesAction = struct {
-    tag: TokenRef,
-    one: TokenRef,
-    two: TokenRef,
+    tag: SymbolRef,
+    one: SymbolRef,
+    two: SymbolRef,
 };
 
 pub const Becomes = struct {
     action: BecomesAction,
-    from: TokenRef,
-    to: TokenRef,
+    from: SymbolRef,
+    to: SymbolRef,
 };
 
 pub const BecomesRef = usize;
 pub const SideEffects = struct {
     action: BecomesAction,
-    from: TokenRef,
+    from: SymbolRef,
 };
 
 pub const SideEffectsRef = usize;
@@ -53,12 +60,14 @@ pub const ParsedProgram = struct {
     becomes: []Becomes,
     side_effects: []SideEffects,
     instructions: []Instruction,
+    symbols: []Symbol,
 
     pub fn deinit(self: ParsedProgram, allocator: Allocator) void {
         allocator.free(self.tokens);
         allocator.free(self.becomes);
         allocator.free(self.side_effects);
         allocator.free(self.instructions);
+        allocator.free(self.symbols);
     }
 };
 
@@ -67,12 +76,14 @@ pub const Parser = struct {
     becomes: ArrayList(Becomes),
     side_effects: ArrayList(SideEffects),
     instructions: ArrayList(Instruction),
+    symbols: ArrayList(Symbol),
 
     pub fn deinit(self: *Parser, allocator: Allocator) void {
         self.tokens.deinit(allocator);
         self.becomes.deinit(allocator);
         self.side_effects.deinit(allocator);
         self.instructions.deinit(allocator);
+        self.symbols.deinit(allocator);
     }
 
     pub fn init(allocator: Allocator, script: []const u8) !Parser {
@@ -87,6 +98,7 @@ pub const Parser = struct {
             .becomes = .empty,
             .side_effects = .empty,
             .instructions = .empty,
+            .symbols = .empty,
         };
         errdefer parser.deinit(allocator);
 
@@ -102,20 +114,20 @@ pub const Parser = struct {
     }
 
     fn beginToken(self: *Parser, allocator: Allocator, token: lx.Token, ref: TokenRef) !void {
-        switch (token.kind) {
-            lx.TokenTag.Dot => try self.beginDot(allocator, token.line_no, token.end_column_no),
+        switch (token.tag) {
+            lx.TokenTag.Dot => try self.beginDot(allocator, token.line_no, token.begin_column_no),
             lx.TokenTag.Star => return errors.ExpectingSymbolBeforeStar,
-            lx.TokenTag.Symbol => try self.beginSymbol(allocator, token, ref),
+            lx.TokenTag.Symbol => try self.beginSymbol(allocator, ref),
             lx.TokenTag.Eof => {},
         }
     }
 
-    fn getFirstSymbolBefore(self: Parser, line_no: usize, column_no: usize) ?Get {
+    fn getFirstSymbolBefore(self: *Parser, allocator: Allocator, line_no: usize, column_no: usize) !?GetSymbol {
         if (self.tokens.getLine(line_no)) |slice| {
             for (0..slice.slice.len) |i| {
                 const reverse = slice.slice.len - 1 - i;
                 if (slice.token[reverse].end_column_no > column_no) {
-                    return Get{ .token = slice.token[reverse], .ref = slice.slice.off + reverse };
+                    return try self.addOrGetSymbolForTokenRef(allocator, slice.slice.off + reverse);
                 }
             }
         }
@@ -123,121 +135,171 @@ pub const Parser = struct {
     }
 
     fn beginDot(self: *Parser, allocator: Allocator, line_no: usize, column_no: usize) !void {
-        if (self.getFirstSymbolBefore(line_no - 1, column_no)) |from| {
-            try self.takeDotFrom(allocator, from.ref, line_no, column_no);
+        if (try self.getFirstSymbolBefore(allocator, line_no, column_no) orelse
+            try self.getFirstSymbolBefore(allocator, line_no - 1, column_no)) |from|
+        {
+            if (self.eatDotAfter(line_no, column_no)) |dot| {
+                try self.takeDotFrom(allocator, from.ref, dot.token.line_no, dot.token.end_column_no);
+            }
         } else {
             return errors.ExpectingBeginSymbolBeforeDot;
         }
     }
 
-    fn beginSymbol(self: *Parser, allocator: Allocator, token: lx.Token, ref: TokenRef) !void {
-        if (self.tokens
-            .getAfter(token.line_no, token.end_column_no)) |aftersymbol|
-        {
-            switch (aftersymbol.token.kind) {
-                lx.TokenTag.Dot => {
-                    try self.takeDotFrom(allocator, ref, aftersymbol.token.line_no, aftersymbol.token.end_column_no);
-                },
-                lx.TokenTag.Star => {
-                    try self.takeStarFrom(allocator, ref, aftersymbol.token.line_no, aftersymbol.token.end_column_no);
-                },
-                else => return errors.ExpectingDotOrStarAfterSymbol,
+    fn beginSymbol(self: *Parser, allocator: Allocator, ref: TokenRef) !void {
+        if (try self.addOrGetSymbolForTokenRef(allocator, ref)) |symbol| {
+            if (self.eatStarAfter(symbol.token.line_no, symbol.token.end_column_no)) |star| {
+                try self.takeStarFrom(allocator, ref, star.token.line_no, star.token.end_column_no);
+            } else if (self.eatDotAfter(symbol.token.line_no, symbol.token.end_column_no)) |dot| {
+                try self.takeDotFrom(allocator, ref, dot.token.line_no, dot.token.end_column_no);
+            } else {
+                return errors.ExpectingDotOrStarAfterSymbol;
             }
         }
     }
 
-    fn takeSymbolAfter(self: *Parser, line_no: usize, column_no: usize) ?Get {
+    fn eatStarAfter(self: *Parser, line_no: usize, column_no: usize) ?GetToken {
+        if (self.tokens.getAfter(line_no, column_no)) |star| {
+            if (star.token.tag == lx.TokenTag.Star) {
+                return star;
+            }
+        }
+        return null;
+    }
+    fn eatDotAfter(self: *Parser, line_no: usize, column_no: usize) ?GetToken {
+        if (self.tokens.getAfter(line_no, column_no)) |dot| {
+            if (dot.token.tag == lx.TokenTag.Dot) {
+                return dot;
+            }
+        }
+        return null;
+    }
+
+    fn takeSymbolAfter(self: *Parser, allocator: Allocator, line_no: usize, column_no: usize) !?GetSymbol {
         if (self.tokens.getAfter(line_no, column_no)) |symbol| {
-            if (symbol.token.kind == lx.TokenTag.Symbol) {
-                return symbol;
+            if (symbol.token.tag == lx.TokenTag.Symbol) {
+                return self.addOrGetSymbolForTokenRef(allocator, symbol.ref);
             }
         }
         return null;
     }
 
-    fn takeSymbolAfterWithTag(self: *Parser, line_no: usize, column_no: usize, tag: lx.SymbolTag) ?Get {
-        if (self.takeSymbolAfter(line_no, column_no)) |symbol| {
-            if (symbol.token.tag == tag) {
-                return symbol;
+    fn eatTokenAfterWithTag(self: *Parser, line_no: usize, column_no: usize, tag: lx.SymbolTag) !?GetToken {
+        if (self.tokens.getAfter(line_no, column_no)) |token| {
+            if (token.token.symbol) |symbol| {
+                if (symbol.identity.tag == tag) {
+                    return token;
+                }
             }
         }
         return null;
+    }
+
+    fn getSymbolForTokenRef(self: *Parser, ref: TokenRef) ?GetSymbol {
+        for (0..self.symbols.items.len) |i| {
+            if (self.symbols.items[i].token == ref) {
+                return .{ .token = self.tokens.by_line_flat.items[ref], .symbol = self.symbols.items[i], .ref = i };
+            }
+        }
+        return null;
+    }
+
+    fn addOrGetSymbolForTokenRef(self: *Parser, allocator: Allocator, ref: TokenRef) !?GetSymbol {
+        if (getSymbolForTokenRef(self, ref)) |result| {
+            return result;
+        }
+
+        const symbol = self.tokens.by_line_flat.items[ref];
+
+        if (symbol.tag == lx.TokenTag.Symbol) {
+            const symbol_ref = self.symbols.items.len;
+            const result_symbol = Symbol{
+                .token = ref,
+                .identity = symbol.symbol.?.identity,
+                .props = symbol.symbol.?.props,
+            };
+            try self.symbols.append(allocator, result_symbol);
+            return .{
+                .token = symbol,
+                .symbol = result_symbol,
+                .ref = symbol_ref,
+            };
+        } else {
+            return null;
+        }
     }
 
     fn takeStarFrom(self: *Parser, allocator: Allocator, from: TokenRef, line_no: usize, column_no: usize) !void {
-        const tag = self.takeSymbolAfter(line_no, column_no) orelse
+        const tag = try self.takeSymbolAfter(allocator, line_no, column_no) orelse
             return errors.ExpectingSymbolAfterStar;
 
-        const one = self.takeSymbolAfter(tag.token.line_no, tag.token.end_column_no) orelse
+        const one = try self.takeSymbolAfter(allocator, tag.token.line_no, tag.token.end_column_no) orelse
             return errors.ExpectingSymbolAfterStarAction;
 
-        const two: ?Get = findtwo: {
+        const two: ?GetSymbol = findtwo: {
             if (self.tokens
                 .getAfter(one.token.line_no, one.token.end_column_no)) |star|
             {
-                if (star.token.kind == lx.TokenTag.Star) {
-                    if (self.takeSymbolAfter(star.token.line_no, star.token.end_column_no)) |toand| {
-                        if (toand.token.tag == lx.SymbolTag.and_) {
-                            break :findtwo self.takeSymbolAfter(toand.token.line_no, toand.token.end_column_no);
-                        }
-                        if (toand.token.tag == lx.SymbolTag.to) {
-                            break :findtwo self.takeSymbolAfter(toand.token.line_no, toand.token.end_column_no);
-                        }
+                if (star.token.tag == lx.TokenTag.Star) {
+                    if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.and_)) |toand| {
+                        break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
+                    }
+                    if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.to)) |toand| {
+                        break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
                     }
                 }
             }
             break :findtwo null;
         };
 
-        var next = two orelse one;
+        const next = two orelse one;
 
-        next = findbecomes: {
+        const becomes = findbecomes: {
             if (self.tokens
                 .getAfter(next.token.line_no, next.token.end_column_no)) |star|
             {
-                if (star.token.kind == lx.TokenTag.Star) {
-                    if (self.takeSymbolAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.becomes)) |becomes|
+                if (star.token.tag == lx.TokenTag.Star) {
+                    if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.becomes)) |becomes| {
                         break :findbecomes becomes;
+                    }
                 }
             }
             return errors.ExpectingBecomesAfterStarAction;
         };
 
         const to =
-            self.takeSymbolAfter(next.token.line_no, next.token.end_column_no) orelse
+            try self.takeSymbolAfter(allocator, becomes.token.line_no, becomes.token.end_column_no) orelse
             return errors.ExpectingSymbolAfterStarAction;
 
         const tworef = if (two) |ref| ref.ref else 0;
 
-        const becomes = Becomes{
+        const result = Becomes{
             .from = from,
             .to = to.ref,
             .action = .{ .tag = tag.ref, .one = one.ref, .two = tworef },
         };
 
         try self.instructions.append(allocator, .{ .becomes = self.becomes.items.len });
-        try self.becomes.append(allocator, becomes);
+        try self.becomes.append(allocator, result);
     }
 
     fn takeDotFrom(self: *Parser, allocator: Allocator, from: TokenRef, line_no: usize, column_no: usize) !void {
-        const tag = self.takeSymbolAfter(line_no, column_no) orelse
+        const tag = (try self.takeSymbolAfter(allocator, line_no, column_no)) orelse
             return errors.ExpectingSymbolAfterDot;
 
-        const one = self.takeSymbolAfter(tag.token.line_no, tag.token.end_column_no) orelse
+        const one = (try self.takeSymbolAfter(allocator, tag.token.line_no, tag.token.end_column_no)) orelse
             return errors.ExpectingSymbolAfterDotAction;
 
-        const two: ?Get = findtwo: {
+        const two: ?GetSymbol = findtwo: {
             if (self.tokens
                 .getAfter(one.token.line_no, one.token.end_column_no)) |star|
             {
-                if (star.token.kind == lx.TokenTag.Star) {
-                    if (self.takeSymbolAfter(star.token.line_no, star.token.end_column_no)) |toand| {
-                        if (toand.token.tag == lx.SymbolTag.and_) {
-                            break :findtwo self.takeSymbolAfter(toand.token.line_no, toand.token.end_column_no);
-                        }
-                        if (toand.token.tag == lx.SymbolTag.to) {
-                            break :findtwo self.takeSymbolAfter(toand.token.line_no, toand.token.end_column_no);
-                        }
+                if (star.token.tag == lx.TokenTag.Star) {
+                    if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.and_)) |toand| {
+                        break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
+                    }
+                    if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.to)) |toand| {
+                        break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
                     }
                 }
             }
@@ -272,12 +334,16 @@ pub const Parser = struct {
         program.instructions = try self.instructions.toOwnedSlice(allocator);
         errdefer allocator.free(program.instructions);
 
+        program.symbols = try self.symbols.toOwnedSlice(allocator);
+        errdefer allocator.free(program.symbols);
+
         return program;
     }
 
     const Slice = struct { off: usize, len: usize };
     const GetSlice = struct { token: []lx.Token, slice: Slice };
-    const Get = struct { token: lx.Token, ref: TokenRef };
+    const GetToken = struct { token: lx.Token, ref: TokenRef };
+    const GetSymbol = struct { token: lx.Token, symbol: Symbol, ref: SymbolRef };
     const Tokens = struct {
         by_line_flat: ArrayList(lx.Token),
         by_line: AutoHashMapUnmanaged(usize, Slice),
@@ -330,7 +396,7 @@ pub const Parser = struct {
                 null;
         }
 
-        fn getAfter(self: *Tokens, line_no: usize, after_column: usize) ?Get {
+        fn getAfter(self: *Tokens, line_no: usize, after_column: usize) ?GetToken {
             if (self.getLine(line_no)) |get| {
                 for (0..get.slice.len) |i| {
                     if (get.token[i].begin_column_no >= after_column) {
@@ -364,4 +430,18 @@ test "basic usage" {
     try testing.expectEqual(2, program.becomes.len);
     try testing.expectEqual(1, program.side_effects.len);
     try testing.expectEqual(3, program.instructions.len);
+    try testing.expectEqual(12, program.symbols.len);
+}
+
+fn log_str(string: []const u8) void {
+    std.debug.print("{s}", .{string});
+}
+
+fn log_token(token: lx.Token) void {
+    std.debug.print("[Token.{d}", .{token.begin_column_no});
+    if (token.symbol) |symbol| {
+        std.debug.print("{t}{d}]", .{ symbol.identity.tag, symbol.identity.id });
+    } else {
+        std.debug.print("]", .{});
+    }
 }

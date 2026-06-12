@@ -22,19 +22,21 @@ pub const SymbolTag = enum {
     to,
 };
 
+pub const SymbolIdentity = struct { tag: SymbolTag, id: usize };
+
 pub const SymbolProperties = struct {
-    id: usize,
     turn: bool = false,
     opponent: bool = false,
 };
 
+pub const Symbol = struct { identity: SymbolIdentity, props: SymbolProperties };
+
 pub const Token = struct {
-    kind: TokenTag,
+    tag: TokenTag,
     line_no: usize,
     end_column_no: usize,
     begin_column_no: usize,
-    tag: SymbolTag = undefined,
-    props: SymbolProperties = undefined,
+    symbol: ?Symbol,
 };
 
 pub const Lexer = struct {
@@ -76,10 +78,11 @@ pub const Lexer = struct {
             self.inext += 1;
             self.column_no += 1;
             return .{
-                .kind = TokenTag.Eof,
+                .tag = TokenTag.Eof,
                 .line_no = self.line_no,
                 .begin_column_no = self.column_no - 2,
                 .end_column_no = self.column_no - 2,
+                .symbol = null,
             };
         }
 
@@ -88,10 +91,11 @@ pub const Lexer = struct {
                 self.inext += 1;
                 self.column_no += 1;
                 return .{
-                    .kind = TokenTag.Dot,
+                    .tag = TokenTag.Dot,
                     .line_no = self.line_no,
                     .begin_column_no = self.column_no - 1,
                     .end_column_no = self.column_no,
+                    .symbol = null,
                 };
             }
 
@@ -99,10 +103,11 @@ pub const Lexer = struct {
                 self.inext += 1;
                 self.column_no += 1;
                 return .{
-                    .kind = TokenTag.Star,
+                    .tag = TokenTag.Star,
                     .line_no = self.line_no,
                     .begin_column_no = self.column_no - 1,
                     .end_column_no = self.column_no,
+                    .symbol = null,
                 };
             }
         }
@@ -132,9 +137,7 @@ pub const Lexer = struct {
                     break :findid iid;
                 };
 
-                var props = SymbolProperties{
-                    .id = id,
-                };
+                var props = SymbolProperties{};
 
                 while (self.peekNextChar()) |char| {
                     if (char != '_') break;
@@ -161,12 +164,14 @@ pub const Lexer = struct {
                 }
 
                 return .{
-                    .kind = TokenTag.Symbol,
+                    .tag = TokenTag.Symbol,
                     .line_no = self.line_no,
                     .begin_column_no = begin_column_no,
                     .end_column_no = self.column_no,
-                    .tag = @enumFromInt(i),
-                    .props = props,
+                    .symbol = .{
+                        .identity = .{ .id = id, .tag = @enumFromInt(i) },
+                        .props = props,
+                    },
                 };
             }
         }
@@ -175,14 +180,13 @@ pub const Lexer = struct {
             self.inext += 3;
             self.column_no += 3;
 
-            return .{
-                .kind = TokenTag.Symbol,
-                .line_no = self.line_no,
-                .begin_column_no = begin_column_no,
-                .end_column_no = self.column_no,
-                .tag = SymbolTag.and_,
+            return .{ .tag = TokenTag.Symbol, .line_no = self.line_no, .begin_column_no = begin_column_no, .end_column_no = self.column_no, .symbol = .{
+                .identity = .{
+                    .id = 0,
+                    .tag = SymbolTag.and_,
+                },
                 .props = undefined,
-            };
+            } };
         }
 
         return null;
@@ -229,4 +233,13 @@ test "basic usage" {
     defer ally.free(tokens);
 
     try std.testing.expectEqual(24, tokens.len);
+
+    try std.testing.expectEqual(1, tokens[0].begin_column_no);
+    try std.testing.expectEqual(7, tokens[1].begin_column_no);
+    try std.testing.expectEqual(8, tokens[2].begin_column_no);
+    try std.testing.expectEqual(17, tokens[3].begin_column_no);
+    try std.testing.expectEqual(23, tokens[4].begin_column_no);
+    try std.testing.expectEqual(24, tokens[5].begin_column_no);
+    try std.testing.expectEqual(32, tokens[6].begin_column_no);
+    try std.testing.expectEqual(7, tokens[7].begin_column_no);
 }
