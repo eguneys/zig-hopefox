@@ -584,3 +584,23 @@ test "Symbols count" {
 
     try std.testing.expectEqual(6, program.symbols.len);
 }
+
+test "Forks dot" {
+    const ally = testing.allocator;
+
+    var lexer: lx.Lexer = .{};
+    defer lexer.deinit(ally);
+
+    try lexer.appendScript(ally,
+        \\rook2 *Captures rook4 *becomes rook5
+        \\      .Forks king and queen
+    );
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    var builder = try ProgramBuilder.init(ally, tokens);
+    defer builder.deinit(ally);
+
+    const program = try builder.build(ally);
+    defer program.deinit(ally);
+}

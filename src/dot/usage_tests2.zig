@@ -57,3 +57,23 @@ test "Check symbol" {
         \\......K.
     );
 }
+
+test "*Captures .Forks" {
+    try expectVisuals(
+        \\1: {Rxd8+}
+        \\2: {Rxd8+ Rf8}
+    ,
+        \\rook2 *Captures rook4 *becomes rook5
+        \\      .Forks king .and queen
+        \\rook *Blocks rook5 *to king *becomes rook6
+    ,
+        \\.Q.R..K.
+        \\........
+        \\.....r..
+        \\........
+        \\........
+        \\........
+        \\........
+        \\...r....
+    );
+}

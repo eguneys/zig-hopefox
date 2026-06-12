@@ -12,7 +12,7 @@ const log = @import("logs.zig");
 
 pub const History = struct {
     program: par.Program,
-    table: Table(lx.Symbol, chess.Bitboard),
+    table: Table(par.SymbolNameId, chess.Bitboard),
     tree: Tree(chess.Move),
     nodes: ArrayList(usize),
 
@@ -28,21 +28,19 @@ pub const History = struct {
     }
 
     pub fn init(allocator: Allocator, program: par.Program, capacity: usize) !History {
-        var symbols = try ArrayList(lx.Symbol).initCapacity(allocator, 10);
+        var symbols = try ArrayList(par.SymbolNameId).initCapacity(allocator, 10);
         errdefer symbols.deinit(allocator);
 
         var empty_row = try ArrayList(chess.Bitboard).initCapacity(allocator, 10);
         errdefer empty_row.deinit(allocator);
 
         for (program.symbols) |ref| {
-            const symbol = program.tokens[ref];
-            try symbols.append(allocator, symbol.identity.symbol);
-
+            try symbols.append(allocator, ref.nameId);
             try empty_row.append(allocator, chess.Bitboard.All);
         }
 
         var self: History = undefined;
-        self.table = try Table(lx.Symbol, chess.Bitboard).init(allocator, try symbols.toOwnedSlice(allocator), capacity);
+        self.table = try Table(par.SymbolNameId, chess.Bitboard).init(allocator, try symbols.toOwnedSlice(allocator), capacity);
         self.tree = try Tree(chess.Move).init(allocator);
         self.nodes = try ArrayList(usize).initCapacity(allocator, capacity);
         self.program = program;

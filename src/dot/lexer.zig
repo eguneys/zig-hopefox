@@ -50,6 +50,7 @@ pub const DotWordId = enum {
     cancapture,
     corner,
     hanging,
+    Forks,
 };
 
 pub const StarWordId = enum {
@@ -58,7 +59,7 @@ pub const StarWordId = enum {
     Captures,
     Checks,
     Blocks,
-    forks,
+    Forks,
     and_,
     Movesto,
     withcheck,
@@ -147,6 +148,21 @@ pub const Lexer = struct {
 
         const begin_column_no = self.column_no;
 
+        inline for (DotWordFields, 0..) |dotword, i| {
+            if (std.mem.startsWith(u8, self.text.items[self.inext..], dotword.name)) {
+                self.inext += dotword.name.len;
+                self.column_no += dotword.name.len;
+
+                return .{
+                    .kind = TokenKind.DotWord,
+                    .line_no = self.line_no,
+                    .begin_column_no = begin_column_no,
+                    .end_column_no = self.column_no,
+                    .identity = .{ .dotword = @enumFromInt(i) },
+                };
+            }
+        }
+
         inline for (StarWordFields, 0..) |starword, i| {
             if (std.mem.startsWith(u8, self.text.items[self.inext..], starword.name)) {
                 self.inext += starword.name.len;
@@ -172,21 +188,6 @@ pub const Lexer = struct {
                 .end_column_no = self.column_no,
                 .identity = .{ .starword = StarWordId.and_ },
             };
-        }
-
-        inline for (DotWordFields, 0..) |dotword, i| {
-            if (std.mem.startsWith(u8, self.text.items[self.inext..], dotword.name)) {
-                self.inext += dotword.name.len;
-                self.column_no += dotword.name.len;
-
-                return .{
-                    .kind = TokenKind.DotWord,
-                    .line_no = self.line_no,
-                    .begin_column_no = begin_column_no,
-                    .end_column_no = self.column_no,
-                    .identity = .{ .dotword = @enumFromInt(i) },
-                };
-            }
         }
 
         inline for (SymbolFields) |symbol| {
