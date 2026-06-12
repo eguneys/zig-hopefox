@@ -126,7 +126,7 @@ pub const Parser = struct {
         if (self.tokens.getLine(line_no)) |slice| {
             for (0..slice.slice.len) |i| {
                 const reverse = slice.slice.len - 1 - i;
-                if (slice.token[reverse].end_column_no > column_no) {
+                if (slice.token[reverse].end_column_no < column_no) {
                     return try self.addOrGetSymbolForTokenRef(allocator, slice.slice.off + reverse);
                 }
             }
@@ -294,7 +294,7 @@ pub const Parser = struct {
             if (self.tokens
                 .getAfter(one.token.line_no, one.token.end_column_no)) |star|
             {
-                if (star.token.tag == lx.TokenTag.Star) {
+                if (star.token.tag == lx.TokenTag.Dot) {
                     if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.and_)) |toand| {
                         break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
                     }
@@ -431,6 +431,7 @@ test "basic usage" {
     try testing.expectEqual(1, program.side_effects.len);
     try testing.expectEqual(3, program.instructions.len);
     try testing.expectEqual(12, program.symbols.len);
+    try testing.expectEqual(0, program.side_effects[0].from);
 }
 
 fn log_str(string: []const u8) void {
@@ -438,10 +439,13 @@ fn log_str(string: []const u8) void {
 }
 
 fn log_token(token: lx.Token) void {
-    std.debug.print("[Token.{d}", .{token.begin_column_no});
-    if (token.symbol) |symbol| {
-        std.debug.print("{t}{d}]", .{ symbol.identity.tag, symbol.identity.id });
-    } else {
-        std.debug.print("]", .{});
-    }
+    std.debug.print("[Token:{d} ", .{token.begin_column_no});
+    if (token.tag == lx.TokenTag.Dot) {
+        std.debug.print("Dot", .{});
+    } else if (token.tag == lx.TokenTag.Star) {
+        std.debug.print("Star", .{});
+    } else if (token.symbol) |symbol| {
+        std.debug.print("{t}{d}", .{ symbol.identity.tag, symbol.identity.id });
+    } else {}
+    std.debug.print("]", .{});
 }
