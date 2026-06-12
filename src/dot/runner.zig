@@ -52,8 +52,12 @@ pub const History = struct {
 
     pub fn getPosition(self: History, off: usize) chess.Position {
         var position = self.position;
-        for (self.tree.getHistoryReversed(off)) |move| {
-            _ = position.make_move(self.tree.getNode(move).value);
+        const reversed_moves = self.tree.getHistoryReversed(off);
+
+        for (0..reversed_moves.len) |i| {
+            const move = self.tree.getNode(reversed_moves[reversed_moves.len - 1 - i]).value;
+            _ = position.make_move(move);
+            position.flipTurn();
         }
         return position;
     }

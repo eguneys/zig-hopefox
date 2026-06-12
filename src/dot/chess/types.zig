@@ -1062,6 +1062,7 @@ pub const Position = packed struct(u512) {
         const from_piece = self.pieceOn(from).?;
         const captured = self.pieceOn(to);
         self.remove_piece(from);
+        self.remove_piece(to);
         self.put_piece(to, from_piece);
         return captured;
     }

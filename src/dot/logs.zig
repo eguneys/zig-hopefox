@@ -35,5 +35,5 @@ pub fn d(a: usize) void {
 }
 
 pub fn str(a: []const u8) void {
-    std.debug.print("S:{s} ", .{a});
+    std.debug.print("{s} ", .{a});
 }
