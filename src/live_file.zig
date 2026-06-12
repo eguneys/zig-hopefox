@@ -82,7 +82,9 @@ pub const LiveFile = struct {
     fn processContent(self: *Self, allocator: std.mem.Allocator, content: []const u8) !void {
         try self.output_writer.seekTo(0);
         var dot = dot_usage.DotUsage.init(allocator, content) catch {
+            std.debug.print("coludn't parse gof script", .{});
             try self.writeContent("couldn't parse gof script");
+            try self.flush_output();
             return;
         };
 

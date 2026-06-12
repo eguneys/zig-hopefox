@@ -9,7 +9,7 @@ pub const DotCoverageOutput = struct {
             if (i > 0) _ = try writer.interface.write("\n");
 
             const position = try db_reader.readPosition(i);
-            if (true) {
+            if (false) {
                 const meta = try db_reader.readMeta(i);
                 const meta_id: [5]u8 = @bitCast(meta.id);
                 std.debug.print("\nhttps://lichess.org/training/{s}\n{s}\n", .{ meta_id, chess.Prints.position(position) });

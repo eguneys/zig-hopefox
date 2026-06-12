@@ -46,17 +46,27 @@ pub const SymbolRef = usize;
 pub const StarRef = usize;
 pub const DotRef = usize;
 
-pub const Symbol = TokenRef;
+pub const SymbolNameId = struct {
+    name: lx.SymbolId,
+    id: usize,
+};
+
+pub const SymbolProperties = struct {
+    turn: bool,
+    opponent: bool,
+};
+
+pub const Symbol = struct { token: TokenRef, nameId: SymbolNameId, props: SymbolProperties };
 pub const OwnerTag = enum { symbol, dot, star };
 pub const Owner = union(OwnerTag) { symbol: SymbolRef, dot: DotRef, star: StarRef };
-pub const Dot = struct { dotword: TokenRef, owner: Owner, extra: ?Symbol };
+pub const Dot = struct { dotword: TokenRef, owner: Owner, extra: ?SymbolRef };
 pub const Star = struct {
     starword: TokenRef,
     owner: Owner,
-    action: ?lx.Symbol,
-    becomes: Symbol,
-    one: Symbol,
-    two: ?Symbol,
+    action: ?SymbolRef,
+    becomes: SymbolRef,
+    one: SymbolRef,
+    two: ?SymbolRef,
 };
 pub const InstructionTag = enum { dot, star };
 pub const DotOrStar = union(InstructionTag) { dot: DotRef, star: StarRef };
@@ -149,7 +159,7 @@ pub const ProgramBuilder = struct {
             if (result.tokens.get(line_no)) |get| {
                 for (get.token, get.slice.off..get.slice.off + get.slice.len) |token, ref| {
                     if (token.begin_column_no == 1 and token.kind != lx.TokenKind.Eof) {
-                        try result.addSymbol(allocator, token, ref);
+                        _ = try result.addSymbol(allocator, token, ref);
                         break;
                     }
                 }
@@ -185,10 +195,9 @@ pub const ProgramBuilder = struct {
             if (self.getFirstTokenAfter(dot.token.end_column_no, dot.token.line_no)) |dotword| {
                 if (dotword.token.kind == lx.TokenKind.DotWord) {
                     for (self.dots.items) |existing| if (existing.dotword == dotword.ref) return;
-                    var extra: ?Symbol = null;
+                    var extra: ?SymbolRef = null;
                     if (self.getFirstTokenAfter(dotword.token.end_column_no, dotword.token.line_no)) |e| {
-                        try self.addSymbol(allocator, e.token, e.ref);
-                        extra = e.ref;
+                        extra = try self.addSymbol(allocator, e.token, e.ref);
                     }
 
                     const dotref = self.dots.items.len;
@@ -234,7 +243,7 @@ pub const ProgramBuilder = struct {
         const symbol = findsymbol: {
             if (self.getFirstTokenAfter(starword.token.end_column_no, starword.token.line_no)) |symbol| {
                 if (symbol.token.kind == lx.TokenKind.SymbolWord) {
-                    try self.addSymbol(allocator, symbol.token, symbol.ref);
+                    _ = try self.addSymbol(allocator, symbol.token, symbol.ref);
                     break :findsymbol symbol;
                 }
             }
@@ -270,7 +279,7 @@ pub const ProgramBuilder = struct {
         try self.stars.append(allocator, .{
             .starword = starword.ref,
             .owner = owner,
-            .action = ProgramBuilder.getActionSymbolForStarWord(starword.token),
+            .action = null,
             .becomes = becomes.ref,
             .one = symbol.ref,
             .two = extra,
@@ -284,16 +293,10 @@ pub const ProgramBuilder = struct {
         }
     }
 
-    fn getActionSymbolForStarWord(token: lx.Token) ?lx.Symbol {
-        return switch (token.identity.starword) {
-            .Checks => .{ .name = lx.SymbolId.Check, .id = 0 },
-            else => null,
-        };
-    }
-
-    fn addSymbol(self: *ProgramBuilder, allocator: Allocator, token: lx.Token, ref: TokenRef) !void {
+    fn addSymbol(self: *ProgramBuilder, allocator: Allocator, token: lx.Token, ref: TokenRef) !?SymbolRef {
         if (token.kind == lx.TokenKind.SymbolWord) {
-            try self.symbols.append(allocator, ref);
+            const result = self.symbols.items.len;
+            try self.symbols.append(allocator, ProgramBuilder.tokenToSymbol(token, ref));
 
             if (self.getFirstTokenAfter(token.end_column_no, token.line_no)) |get| {
                 try self.addDotWord(allocator, get, Owner{ .symbol = ref });
@@ -303,7 +306,23 @@ pub const ProgramBuilder = struct {
                 try self.addDotWord(allocator, get, Owner{ .symbol = ref });
                 try self.addStarWord(allocator, get, Owner{ .symbol = ref });
             }
+            return result;
         }
+        return null;
+    }
+
+    fn tokenToSymbol(token: lx.Token, ref: TokenRef) Symbol {
+        return .{
+            .token = ref,
+            .nameId = .{
+                .name = token.identity.symbol.name,
+                .id = token.identity.symbol.id,
+            },
+            .props = .{
+                .turn = token.identity.symbol.turn,
+                .opponent = token.identity.symbol.opponent,
+            },
+        };
     }
 
     pub fn build(self: *ProgramBuilder, allocator: Allocator) !Program {
