@@ -130,3 +130,22 @@ test "regression 1" {
 
     std.debug.print("HELLO{s}", .{aa});
 }
+
+test "blocks checks" {
+    try expectVisuals(
+        \\1: {Rf6+}
+        \\2: 
+    ,
+        \\rook_t *Checks king_o *becomes rook2
+        \\rook3 *Blocks Check *becomes rook4
+    ,
+        \\..r.....
+        \\...Qnk.p
+        \\...R....
+        \\....B..b
+        \\Pp..p...
+        \\.P..P...
+        \\.....PPP
+        \\......K.
+    );
+}

@@ -108,7 +108,7 @@ pub const Matcher = struct {
                         history.table.setLastRow(checked_symbol, chess.Bitboard.fromSquare(sq_checked));
 
                         if (action_symbol) |symbol| {
-                            const aa_checkray = chess.Attacks.from_to(sq_to, sq_checked);
+                            const aa_checkray = chess.Attacks.from_to(sq_to, sq_checked).unset(sq_checked);
                             history.table.setLastRow(symbol, aa_checkray);
                         }
 

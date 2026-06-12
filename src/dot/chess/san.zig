@@ -1,9 +1,7 @@
 const std = @import("std");
 const types = @import("types.zig");
 const Bitboard = types.Bitboard;
-const log_bb = types.log_bb;
-const log_sq = types.log_sq;
-const log_pos = types.log_pos;
+const log = @import("logs.zig");
 
 pub const CheckFind = struct {
     black_bb: types.Bitboard,
@@ -168,6 +166,7 @@ pub const PrintBuilder = struct {
             try self.string.append(allocator, ' ');
         }
         try self.string.appendSlice(allocator, self.prints.fromSan(San.fromMove(self.position, move)));
+        _ = self.position.make_move(move);
     }
 };
 
@@ -180,12 +179,13 @@ test "print builder" {
     builder.resetPosition(types.Fen.parse(types.Fen.Initial));
 
     try builder.appendMove(ally, Uci.move("e2e4").toMove(builder.position));
-    try builder.appendMove(ally, Uci.move("e7e5").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("e7e6").toMove(builder.position));
     try builder.appendMove(ally, Uci.move("g1f3").toMove(builder.position));
     try builder.appendMove(ally, Uci.move("b8c6").toMove(builder.position));
     try builder.appendMove(ally, Uci.move("f1c4").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("e4e5").toMove(builder.position));
 
-    try std.testing.expectEqualStrings("e4 e5 Nf3 Nc6 Bc4", builder.string.items);
+    try std.testing.expectEqualStrings("e4 e6 Nf3 Nc6 Bc4 e5", builder.string.items);
 }
 
 pub const Uci = struct {
