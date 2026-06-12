@@ -132,13 +132,13 @@ test "regression 1" {
 }
 
 test "blocks checks" {
-    try expectVisuals(
-        \\1: {Rf6+}
-        \\2: 
+    try expectVisualsPosition(
+        \\1: {Rc1+}
+        \\2: {Rc1+ Rd1}
     ,
         \\rook_t *Checks king_o *becomes rook2
-        \\rook3 *Blocks Check *becomes rook4
-    ,
+        \\rook3_o *Blocks Check *becomes rook4
+    , chess.Parses.black(
         \\..r.....
         \\...Qnk.p
         \\...R....
@@ -147,5 +147,5 @@ test "blocks checks" {
         \\.P..P...
         \\.....PPP
         \\......K.
-    );
+    ));
 }

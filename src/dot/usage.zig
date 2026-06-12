@@ -7,6 +7,7 @@ const san = @import("chess/san.zig");
 const Runner = @import("runner.zig").Runner;
 const lx = @import("lexer.zig");
 const par = @import("parser.zig");
+const log = @import("logs.zig");
 
 const Visual = struct {
     builder: san.PrintBuilder,
@@ -29,8 +30,8 @@ const Visual = struct {
         self.buffer.clearRetainingCapacity();
     }
 
-    fn beginLine(self: *Visual, allocator: Allocator) !void {
-        self.builder.clearRetainingPosition();
+    fn beginLine(self: *Visual, allocator: Allocator, position: chess.Position) !void {
+        self.builder.resetPosition(position);
         try self.buffer.append(allocator, '{');
     }
 
@@ -53,12 +54,12 @@ test "visual" {
     const position = chess.Fen.parse(chess.Fen.Initial);
     visual.resetPosition(position);
 
-    try visual.beginLine(ally);
+    try visual.beginLine(ally, position);
     try visual.appendMove(ally, san.Uci.move("e2e4").toMove(position));
     try visual.appendMove(ally, san.Uci.move("e7e5").toMove(position));
     try visual.appendMove(ally, san.Uci.move("b1f3").toMove(position));
     try visual.endLine(ally);
-    try visual.beginLine(ally);
+    try visual.beginLine(ally, position);
     try visual.appendMove(ally, san.Uci.move("e2e4").toMove(position));
     try visual.appendMove(ally, san.Uci.move("e7e5").toMove(position));
     try visual.appendMove(ally, san.Uci.move("b1f3").toMove(position));
@@ -102,7 +103,7 @@ pub const DotUsage = struct {
 
         for (slice.off..slice.off + slice.len) |i| {
             const history = self.runner.history.tree.getHistoryReversed(i);
-            try self.visual.beginLine(allocator);
+            try self.visual.beginLine(allocator, self.runner.history.position);
             for (0..history.len) |j| {
                 const move = self.runner.history.tree.getNode(history[history.len - 1 - j]).value;
                 try self.visual.appendMove(allocator, move);

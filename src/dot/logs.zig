@@ -26,7 +26,14 @@ pub fn sym_bb(a: lx.Symbol, b: cs.Bitboard) void {
     sym(a);
     bbo(b);
 }
+pub fn move(a: cs.Move) void {
+    std.debug.print("\n{s}{s}\n", .{ cs.Prints.fromSquare(@enumFromInt(a.from)), cs.Prints.fromSquare(@enumFromInt(a.to)) });
+}
 
 pub fn d(a: usize) void {
     std.debug.print("D:{d} ", .{a});
+}
+
+pub fn str(a: []const u8) void {
+    std.debug.print("S:{s} ", .{a});
 }
