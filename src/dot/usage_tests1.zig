@@ -149,3 +149,24 @@ test "blocks checks" {
         \\......K.
     ));
 }
+
+test "captures blocks check" {
+    try expectVisualsPosition(
+        \\1: {Rxf1}
+        \\2: 
+        \\3: 
+    ,
+        \\rook_t *Checks king_o *becomes rook2
+        \\rook3_t *Blocks Check *becomes rook4
+        \\rook2 *Captures rook4 *becomes rook5
+    , chess.Parses.black(
+        \\.....rk.
+        \\pp.....p
+        \\..p.P.p.
+        \\...pN...
+        \\.....r..
+        \\..P....Q
+        \\PP....PP
+        \\.....R.K
+    ));
+}
