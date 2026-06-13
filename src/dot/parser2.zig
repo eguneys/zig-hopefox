@@ -55,14 +55,14 @@ pub const Instruction = union(InstructionTag) {
     sideEffects: SideEffectsRef,
 };
 
-pub const ParsedProgram = struct {
+pub const Program = struct {
     tokens: []lx.Token,
     becomes: []Becomes,
     side_effects: []SideEffects,
     instructions: []Instruction,
     symbols: []Symbol,
 
-    pub fn deinit(self: ParsedProgram, allocator: Allocator) void {
+    pub fn deinit(self: Program, allocator: Allocator) void {
         allocator.free(self.tokens);
         allocator.free(self.becomes);
         allocator.free(self.side_effects);
@@ -319,8 +319,8 @@ pub const Parser = struct {
 
     const Self = @This();
 
-    pub fn toOwnedProgram(self: *Self, allocator: Allocator) !ParsedProgram {
-        var program: ParsedProgram = undefined;
+    pub fn toOwnedProgram(self: *Self, allocator: Allocator) !Program {
+        var program: Program = undefined;
 
         program.tokens = try self.tokens.toOwnedSlice(allocator);
         errdefer allocator.free(program.tokens);

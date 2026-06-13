@@ -14,6 +14,7 @@ pub const SymbolTag = enum {
     knight,
     pawn,
     sq,
+    Checks,
     Captures,
     becomes,
     Forks,

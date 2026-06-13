@@ -12,34 +12,34 @@ const log = @import("logs.zig");
 
 pub const Matcher = struct {
     pub const Slice = struct { off: usize, len: usize };
-    pub fn run_dot(allocator: Allocator, history: History, slice: Slice, dot: par.Dot) !void {
+    pub fn run_dot(allocator: Allocator, history: History, slice: Slice, dot: par.SideEffects) !void {
         _ = allocator;
         _ = history;
         _ = dot;
         _ = slice;
     }
-    pub fn run_star(allocator: Allocator, history: *History, slice: Slice, star: par.Star) !void {
-        switch (history.program.tokens[star.starword].identity.starword) {
-            lx.StarWordId.Captures => {
+    pub fn run_star(allocator: Allocator, history: *History, slice: Slice, star: par.Becomes) !void {
+        switch (history.program.symbols[star.action.tag].identity.tag) {
+            lx.SymbolTag.Captures => {
                 try dispatch_captures(allocator, history, slice, star);
             },
-            lx.StarWordId.Checks => {
+            lx.SymbolTag.Checks => {
                 try dispatch_checks(allocator, history, slice, star);
             },
-            lx.StarWordId.Blocks => {
+            lx.SymbolTag.Blocks => {
                 try dispatch_blocks(allocator, history, slice, star);
             },
             else => {},
         }
     }
 
-    fn dispatch_captures(allocator: Allocator, history: *History, slice: Slice, star: par.Star) !void {
-        const from_symbol = history.program.symbols[star.owner.symbol];
-        const to_symbol = history.program.symbols[star.becomes];
-        const captured_symbol = history.program.symbols[star.one];
-        const From = history.table.getColumn(from_symbol.nameId);
-        const To = history.table.getColumn(to_symbol.nameId);
-        const Captured = history.table.getColumn(captured_symbol.nameId);
+    fn dispatch_captures(allocator: Allocator, history: *History, slice: Slice, star: par.Becomes) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const to_symbol = history.program.symbols[star.to];
+        const captured_symbol = history.program.symbols[star.action.one];
+        const From = history.table.getColumn(from_symbol.identity);
+        const To = history.table.getColumn(to_symbol.identity);
+        const Captured = history.table.getColumn(captured_symbol.identity);
 
         for (slice.off..slice.off + slice.len) |off| {
             const bb_from = From[off];
@@ -60,9 +60,9 @@ pub const Matcher = struct {
                     while (bb_to2.next()) |sq_to| {
                         try history.table.duplicateLastRow(allocator);
 
-                        history.table.setLastRow(from_symbol.nameId, chess.Bitboard.fromSquare(sq_from));
-                        history.table.setLastRow(to_symbol.nameId, chess.Bitboard.fromSquare(sq_to));
-                        history.table.setLastRow(captured_symbol.nameId, chess.Bitboard.fromSquare(sq_captured));
+                        history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+                        history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
+                        history.table.setLastRow(captured_symbol.identity, chess.Bitboard.fromSquare(sq_captured));
 
                         var move: chess.Move = undefined;
                         move.from = @truncate(@intFromEnum(sq_from));
@@ -76,14 +76,14 @@ pub const Matcher = struct {
         }
     }
 
-    fn dispatch_checks(allocator: Allocator, history: *History, slice: Slice, star: par.Star) !void {
-        const from_symbol = history.program.symbols[star.owner.symbol];
-        const to_symbol = history.program.symbols[star.becomes];
-        const checked_symbol = history.program.symbols[star.one];
-        const action_symbol = if (star.action) |action| history.program.symbols[action] else null;
-        const From = history.table.getColumn(from_symbol.nameId);
-        const To = history.table.getColumn(to_symbol.nameId);
-        const Checked = history.table.getColumn(checked_symbol.nameId);
+    fn dispatch_checks(allocator: Allocator, history: *History, slice: Slice, star: par.Becomes) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const to_symbol = history.program.symbols[star.to];
+        const checked_symbol = history.program.symbols[star.action.one];
+        const action_symbol = history.program.symbols[star.action.tag];
+        const From = history.table.getColumn(from_symbol.identity);
+        const To = history.table.getColumn(to_symbol.identity);
+        const Checked = history.table.getColumn(checked_symbol.identity);
 
         for (slice.off..slice.off + slice.len) |off| {
             const bb_from = From[off];
@@ -103,14 +103,12 @@ pub const Matcher = struct {
                     while (bb_to2.next()) |sq_to| {
                         try history.table.duplicateLastRow(allocator);
 
-                        history.table.setLastRow(from_symbol.nameId, chess.Bitboard.fromSquare(sq_from));
-                        history.table.setLastRow(to_symbol.nameId, chess.Bitboard.fromSquare(sq_to));
-                        history.table.setLastRow(checked_symbol.nameId, chess.Bitboard.fromSquare(sq_checked));
+                        history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+                        history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
+                        history.table.setLastRow(checked_symbol.identity, chess.Bitboard.fromSquare(sq_checked));
 
-                        if (action_symbol) |symbol| {
-                            const aa_checkray = chess.Attacks.from_to(sq_to, sq_checked).unset(sq_checked);
-                            history.table.setLastRow(symbol.nameId, aa_checkray);
-                        }
+                        const aa_checkray = chess.Attacks.from_to(sq_to, sq_checked).unset(sq_checked);
+                        history.table.setLastRow(action_symbol.identity, aa_checkray);
 
                         var move: chess.Move = undefined;
                         move.from = @truncate(@intFromEnum(sq_from));
@@ -124,13 +122,13 @@ pub const Matcher = struct {
         }
     }
 
-    fn dispatch_blocks(allocator: Allocator, history: *History, slice: Slice, star: par.Star) !void {
-        const from_symbol = history.program.symbols[star.owner.symbol];
-        const to_symbol = history.program.symbols[star.becomes];
-        const blocks_symbol = history.program.symbols[star.one];
-        const From = history.table.getColumn(from_symbol.nameId);
-        const To = history.table.getColumn(to_symbol.nameId);
-        const Blocks = history.table.getColumn(blocks_symbol.nameId);
+    fn dispatch_blocks(allocator: Allocator, history: *History, slice: Slice, star: par.Becomes) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const to_symbol = history.program.symbols[star.to];
+        const blocks_symbol = history.program.symbols[star.action.one];
+        const From = history.table.getColumn(from_symbol.identity);
+        const To = history.table.getColumn(to_symbol.identity);
+        const Blocks = history.table.getColumn(blocks_symbol.identity);
 
         for (slice.off..slice.off + slice.len) |off| {
             const bb_from = From[off];
@@ -148,9 +146,9 @@ pub const Matcher = struct {
                 while (bb_to2.next()) |sq_to| {
                     try history.table.duplicateLastRow(allocator);
 
-                    history.table.setLastRow(from_symbol.nameId, chess.Bitboard.fromSquare(sq_from));
-                    history.table.setLastRow(to_symbol.nameId, chess.Bitboard.fromSquare(sq_to));
-                    history.table.setLastRow(blocks_symbol.nameId, chess.Bitboard.fromSquare(sq_to));
+                    history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+                    history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
+                    history.table.setLastRow(blocks_symbol.identity, chess.Bitboard.fromSquare(sq_to));
 
                     var move: chess.Move = undefined;
                     move.from = @truncate(@intFromEnum(sq_from));
@@ -201,7 +199,7 @@ pub const Symbols = struct {
     }
 
     fn captures(symbol: par.Symbol, from: chess.Square, position: chess.Position) chess.Bitboard {
-        return switch (symbol.tag) {
+        return switch (symbol.identity.tag) {
             lx.SymbolTag.bishop => chess.Attacks.ray_plus(from, position.occupied(), chess.DirectionPlus.Diagonal),
             lx.SymbolTag.rook => chess.Attacks.ray_plus(from, position.occupied(), chess.DirectionPlus.Straight),
             lx.SymbolTag.queen => chess.Attacks.ray_plus(from, position.occupied(), chess.DirectionPlus.All),
@@ -214,7 +212,7 @@ pub const Symbols = struct {
     }
 
     fn checks(symbol: par.Symbol, from: chess.Square, check: chess.Square, occupied: chess.Bitboard) chess.Bitboard {
-        var bb_to = switch (symbol.nameId.name) {
+        var bb_to = switch (symbol.identity.tag) {
             lx.SymbolTag.bishop => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.Diagonal),
             lx.SymbolTag.rook => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.Straight),
             lx.SymbolTag.queen => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.All),
@@ -228,7 +226,7 @@ pub const Symbols = struct {
         var result = chess.Bitboard.Zero;
 
         while (bb_to.next()) |to| {
-            const bb_to2 = switch (symbol.nameId.name) {
+            const bb_to2 = switch (symbol.identity.tag) {
                 lx.SymbolTag.bishop => chess.Attacks.ray_plus(to, occupied, chess.DirectionPlus.Diagonal),
                 lx.SymbolTag.rook => chess.Attacks.ray_plus(to, occupied, chess.DirectionPlus.Straight),
                 lx.SymbolTag.queen => chess.Attacks.ray_plus(to, occupied, chess.DirectionPlus.All),

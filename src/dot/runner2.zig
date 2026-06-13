@@ -11,7 +11,7 @@ const Matcher = @import("matcher2.zig").Matcher;
 const log = @import("logs.zig");
 
 pub const History = struct {
-    program: par.ParsedProgram,
+    program: par.Program,
     table: Table(lx.SymbolIdentity, chess.Bitboard),
     tree: Tree(chess.Move),
     nodes: ArrayList(usize),
@@ -28,21 +28,22 @@ pub const History = struct {
     }
 
     pub fn init(allocator: Allocator, program: par.Program, capacity: usize) !History {
-        var symbols: ArrayList(par.SymbolNameId) = .empty;
+        var symbols: ArrayList(lx.SymbolIdentity) = .empty;
         errdefer symbols.deinit(allocator);
 
         var empty_row: ArrayList(chess.Bitboard) = .empty;
         errdefer empty_row.deinit(allocator);
 
         for (program.symbols) |ref| {
-            try symbols.append(allocator, ref.nameId);
+            try symbols.append(allocator, ref.identity);
             try empty_row.append(allocator, chess.Bitboard.All);
         }
 
         var self: History = undefined;
-        self.table = try Table(par.SymbolNameId, chess.Bitboard).init(allocator, try symbols.toOwnedSlice(allocator), capacity);
+        self.table = try Table(lx.SymbolIdentity, chess.Bitboard)
+            .init(allocator, try symbols.toOwnedSlice(allocator), capacity);
         self.tree = try Tree(chess.Move).init(allocator);
-        self.nodes = .empty
+        self.nodes = .empty;
         self.program = program;
         self.empty_row = try empty_row.toOwnedSlice(allocator);
         return self;
@@ -105,10 +106,10 @@ pub const Runner = struct {
             const begin_off = self.history.nodes.items.len;
             switch (instruction) {
                 .becomes => {
-                    try Matcher.run_dot(allocator, self.history, slice, self.history.program.becomes[instruction.becomes]);
+                    try Matcher.run_dot(allocator, self.history, slice, self.history.program.side_effects[instruction.sideEffects]);
                 },
                 .sideEffects => {
-                    try Matcher.run_star(allocator, &self.history, slice, self.history.program.side_effects[instruction.sideEffects]);
+                    try Matcher.run_star(allocator, &self.history, slice, self.history.program.becomes[instruction.becomes]);
                     const end_off = self.history.nodes.items.len;
                     try self.slices.append(allocator, .{ .off = begin_off, .len = end_off - begin_off, .instruction = i });
                 },
@@ -129,20 +130,10 @@ pub const Runner = struct {
 test "basic usage" {
     const ally = testing.allocator;
 
-    var lexer = lx.Lexer{};
-    defer lexer.deinit(ally);
-    try lexer.appendScript(ally,
-        \\
-        \\
-        \\
-    );
-    const tokens = try lexer.toOwnedSlice(ally);
-    defer ally.free(tokens);
-    var builder = try par.ProgramBuilder.init(ally, tokens);
-    defer builder.deinit(ally);
+    var parser = try par.Parser.init(ally, "");
+    defer parser.deinit(ally);
 
-    const program = try builder.build(ally);
-    errdefer program.deinit(ally);
+    const program = try parser.toOwnedProgram(ally);
 
     var runner = try Runner.init(
         ally,
