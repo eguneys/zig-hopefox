@@ -105,10 +105,10 @@ pub const Runner = struct {
             const instruction = self.history.program.instructions[i];
             const begin_off = self.history.nodes.items.len;
             switch (instruction) {
-                .becomes => {
+                .sideEffects => {
                     try Matcher.run_dot(allocator, self.history, slice, self.history.program.side_effects[instruction.sideEffects]);
                 },
-                .sideEffects => {
+                .becomes => {
                     try Matcher.run_star(allocator, &self.history, slice, self.history.program.becomes[instruction.becomes]);
                     const end_off = self.history.nodes.items.len;
                     try self.slices.append(allocator, .{ .off = begin_off, .len = end_off - begin_off, .instruction = i });
@@ -121,8 +121,9 @@ pub const Runner = struct {
 
     pub fn getLineNo(self: Runner, off_instruction: usize) usize {
         const instruction = self.history.program.instructions[off_instruction];
-        const star = self.history.program.stars[instruction.star];
-        const token = self.history.program.tokens[star.starword];
+        const star = self.history.program.becomes[instruction.becomes];
+        const symbol = self.history.program.symbols[star.action.tag];
+        const token = self.history.program.tokens[symbol.token];
         return token.line_no;
     }
 };

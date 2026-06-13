@@ -1,7 +1,7 @@
 const std = @import("std");
 const cs = @import("chess/types.zig");
-const lx = @import("lexer.zig");
 const san = @import("chess/san.zig");
+const lx = @import("lexer2.zig");
 
 pub fn bbo(a: cs.Bitboard) void {
     std.debug.print("\nA:\n{s}", .{cs.Prints.bitboard(a)});
