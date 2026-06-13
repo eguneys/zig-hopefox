@@ -49,7 +49,8 @@ pub fn build(b: *std.Build) void {
     exe_tests.max_memory = 10000;
     mod_tests.max_memory = 10000;
 
-    //exe_tests.root_module.addImport("chess", chess_mod);
+    exe_tests.root_module.addImport("chess", mod);
+    mod_tests.root_module.addImport("chess", mod);
 
     const run_exe_tests = b.addRunArtifact(exe_tests);
 

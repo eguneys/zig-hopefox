@@ -32,4 +32,6 @@ test "imports" {
     _ = @import("dot/parser2.zig");
     _ = @import("dot/runner2.zig");
     _ = @import("dot/usage2.zig");
+
+    _ = @import("orch/parser.zig");
 }
