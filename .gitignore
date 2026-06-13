@@ -1,4 +1,5 @@
 data/*
+scripts/*.output
 
 .zig-cache/
 zig-out/

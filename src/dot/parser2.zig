@@ -122,6 +122,22 @@ pub const Parser = struct {
         }
     }
 
+    fn getLastBecomesSymbolBefore(self: *Parser, line_no: usize) !?GetSymbol {
+        if (self.tokens.getLine(line_no)) |slice| {
+            for (0..slice.slice.len) |i| {
+                const reverse = slice.slice.len - 1 - i;
+                if (slice.token[reverse].tag == lx.TokenTag.Symbol) {
+                    if (slice.token[reverse].symbol) |symbol| {
+                        if (symbol.identity.tag == lx.SymbolTag.becomes) {
+                            return self.getSymbolForTokenRef(slice.slice.off + reverse + 1);
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     fn getFirstSymbolBefore(self: *Parser, allocator: Allocator, line_no: usize, column_no: usize) !?GetSymbol {
         if (self.tokens.getLine(line_no)) |slice| {
             for (0..slice.slice.len) |i| {
@@ -135,11 +151,11 @@ pub const Parser = struct {
     }
 
     fn beginDot(self: *Parser, allocator: Allocator, line_no: usize, column_no: usize) !void {
-        if (try self.getFirstSymbolBefore(allocator, line_no, column_no) orelse
-            try self.getFirstSymbolBefore(allocator, line_no - 1, column_no) orelse
-            try self.getFirstSymbolBefore(allocator, line_no - 2, column_no) orelse
-            try self.getFirstSymbolBefore(allocator, line_no - 3, column_no) orelse
-            try self.getFirstSymbolBefore(allocator, line_no - 4, column_no)) |from|
+        if (try self.getLastBecomesSymbolBefore(line_no) orelse
+            try self.getLastBecomesSymbolBefore(line_no - 1) orelse
+            try self.getLastBecomesSymbolBefore(line_no - 2) orelse
+            try self.getLastBecomesSymbolBefore(line_no - 3) orelse
+            try self.getLastBecomesSymbolBefore(line_no - 4)) |from|
         {
             if (self.eatDotAfter(line_no, column_no)) |dot| {
                 try self.takeDotFrom(allocator, from.ref, dot.token.line_no, dot.token.end_column_no);
@@ -430,7 +446,7 @@ test "basic usage" {
     try testing.expectEqual(1, program.side_effects.len);
     try testing.expectEqual(3, program.instructions.len);
     try testing.expectEqual(12, program.symbols.len);
-    try testing.expectEqual(0, program.side_effects[0].from);
+    try testing.expectEqual(3, program.side_effects[0].from);
 }
 
 fn log_str(string: []const u8) void {
@@ -493,4 +509,9 @@ test "symbol names" {
 
     try testing.expectEqual(4, program.becomes[program.instructions[1].becomes].from);
     try testing.expectEqual(7, program.becomes[program.instructions[1].becomes].to);
+
+    try testing.expectEqual(lx.SymbolTag.Forks, program.symbols[12].identity.tag);
+    try testing.expectEqual(lx.SymbolTag.rook, program.symbols[11].identity.tag);
+
+    try testing.expectEqual(11, program.side_effects[program.instructions[3].sideEffects].from);
 }
