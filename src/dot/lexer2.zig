@@ -17,8 +17,10 @@ pub const SymbolTag = enum {
     Checks,
     Captures,
     becomes,
+    defendedby,
     Forks,
     Blocks,
+    Check,
     and_,
     to,
 };
@@ -164,13 +166,20 @@ pub const Lexer = struct {
                     }
                 }
 
+                var symbol_tag: SymbolTag = @enumFromInt(i);
+
+                switch (symbol_tag) {
+                    SymbolTag.Checks => symbol_tag = SymbolTag.Check,
+                    else => {},
+                }
+
                 return .{
                     .tag = TokenTag.Symbol,
                     .line_no = self.line_no,
                     .begin_column_no = begin_column_no,
                     .end_column_no = self.column_no,
                     .symbol = .{
-                        .identity = .{ .id = id, .tag = @enumFromInt(i) },
+                        .identity = .{ .id = id, .tag = symbol_tag },
                         .props = props,
                     },
                 };
@@ -213,7 +222,9 @@ pub const Lexer = struct {
         var tokens: ArrayList(Token) = .empty;
         errdefer tokens.deinit(allocator);
 
-        while (self.nextToken()) |token| try tokens.append(allocator, token);
+        while (self.nextToken()) |token| {
+            try tokens.append(allocator, token);
+        }
 
         return tokens.toOwnedSlice(allocator);
     }
@@ -243,4 +254,19 @@ test "basic usage" {
     try std.testing.expectEqual(24, tokens[5].begin_column_no);
     try std.testing.expectEqual(32, tokens[6].begin_column_no);
     try std.testing.expectEqual(7, tokens[7].begin_column_no);
+}
+
+test "basic regression" {
+    const ally = testing.allocator;
+    const script =
+        \\rook_t *Checks king_o *becomes rook2
+    ;
+
+    var lexer = try Lexer.init(ally, script);
+    defer lexer.deinit(ally);
+
+    const tokens = try lexer.toOwnedSlice(ally);
+    defer ally.free(tokens);
+
+    try std.testing.expectEqual(8, tokens.len);
 }

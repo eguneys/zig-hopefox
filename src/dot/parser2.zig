@@ -136,7 +136,10 @@ pub const Parser = struct {
 
     fn beginDot(self: *Parser, allocator: Allocator, line_no: usize, column_no: usize) !void {
         if (try self.getFirstSymbolBefore(allocator, line_no, column_no) orelse
-            try self.getFirstSymbolBefore(allocator, line_no - 1, column_no)) |from|
+            try self.getFirstSymbolBefore(allocator, line_no - 1, column_no) orelse
+            try self.getFirstSymbolBefore(allocator, line_no - 2, column_no) orelse
+            try self.getFirstSymbolBefore(allocator, line_no - 3, column_no) orelse
+            try self.getFirstSymbolBefore(allocator, line_no - 4, column_no)) |from|
         {
             if (self.eatDotAfter(line_no, column_no)) |dot| {
                 try self.takeDotFrom(allocator, from.ref, dot.token.line_no, dot.token.end_column_no);
@@ -149,9 +152,9 @@ pub const Parser = struct {
     fn beginSymbol(self: *Parser, allocator: Allocator, ref: TokenRef) !void {
         if (try self.addOrGetSymbolForTokenRef(allocator, ref)) |symbol| {
             if (self.eatStarAfter(symbol.token.line_no, symbol.token.end_column_no)) |star| {
-                try self.takeStarFrom(allocator, ref, star.token.line_no, star.token.end_column_no);
+                try self.takeStarFrom(allocator, symbol.ref, star.token.line_no, star.token.end_column_no);
             } else if (self.eatDotAfter(symbol.token.line_no, symbol.token.end_column_no)) |dot| {
-                try self.takeDotFrom(allocator, ref, dot.token.line_no, dot.token.end_column_no);
+                try self.takeDotFrom(allocator, symbol.ref, dot.token.line_no, dot.token.end_column_no);
             } else {
                 return errors.ExpectingDotOrStarAfterSymbol;
             }
@@ -229,7 +232,7 @@ pub const Parser = struct {
         }
     }
 
-    fn takeStarFrom(self: *Parser, allocator: Allocator, from: TokenRef, line_no: usize, column_no: usize) !void {
+    fn takeStarFrom(self: *Parser, allocator: Allocator, from: SymbolRef, line_no: usize, column_no: usize) !void {
         const tag = try self.takeSymbolAfter(allocator, line_no, column_no) orelse
             return errors.ExpectingSymbolAfterStar;
 
@@ -283,7 +286,7 @@ pub const Parser = struct {
         try self.becomes.append(allocator, result);
     }
 
-    fn takeDotFrom(self: *Parser, allocator: Allocator, from: TokenRef, line_no: usize, column_no: usize) !void {
+    fn takeDotFrom(self: *Parser, allocator: Allocator, from: SymbolRef, line_no: usize, column_no: usize) !void {
         const tag = (try self.takeSymbolAfter(allocator, line_no, column_no)) orelse
             return errors.ExpectingSymbolAfterDot;
 
@@ -448,4 +451,50 @@ fn log_token(token: lx.Token) void {
         std.debug.print("{t}{d}", .{ symbol.identity.tag, symbol.identity.id });
     } else {}
     std.debug.print("]", .{});
+}
+
+test "more dots" {
+    const ally = testing.allocator;
+    const script =
+        \\rook2 *Captures rook4 *becomes rook5
+        \\      .Forks king .and queen
+        \\      .defendedby bishop
+    ;
+
+    var parser = try Parser.init(ally, script);
+    defer parser.deinit(ally);
+
+    const program = try parser.toOwnedProgram(ally);
+    defer program.deinit(ally);
+
+    try testing.expectEqual(2, program.side_effects.len);
+}
+
+test "symbol names" {
+    const ally = testing.allocator;
+    const script =
+        \\rook_t *Checks king_o *becomes rook2
+        \\rook3_t *Blocks Check *becomes rook4
+        \\rook2 *Captures rook4 *becomes rook5
+        \\      .Forks king and queen
+        \\      .defendedby bishop
+    ;
+
+    var parser = try Parser.init(ally, script);
+    defer parser.deinit(ally);
+
+    const program = try parser.toOwnedProgram(ally);
+    defer program.deinit(ally);
+
+    try testing.expectEqual(lx.SymbolTag.rook, program.symbols[0].identity.tag);
+    try testing.expectEqual(lx.SymbolTag.Check, program.symbols[1].identity.tag);
+    try testing.expectEqual(lx.SymbolTag.king, program.symbols[2].identity.tag);
+    try testing.expectEqual(lx.SymbolTag.rook, program.symbols[3].identity.tag);
+    try testing.expectEqual(lx.SymbolTag.rook, program.symbols[4].identity.tag);
+    try testing.expectEqual(lx.SymbolTag.Blocks, program.symbols[5].identity.tag);
+    try testing.expectEqual(lx.SymbolTag.Check, program.symbols[6].identity.tag);
+    try testing.expectEqual(lx.SymbolTag.rook, program.symbols[7].identity.tag);
+
+    try testing.expectEqual(4, program.becomes[program.instructions[1].becomes].from);
+    try testing.expectEqual(7, program.becomes[program.instructions[1].becomes].to);
 }

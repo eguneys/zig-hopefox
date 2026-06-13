@@ -2,6 +2,7 @@ const std = @import("std");
 const cs = @import("chess/types.zig");
 const san = @import("chess/san.zig");
 const lx = @import("lexer2.zig");
+const par = @import("parser2.zig");
 
 pub fn bbo(a: cs.Bitboard) void {
     std.debug.print("\nA:\n{s}", .{cs.Prints.bitboard(a)});
@@ -18,8 +19,13 @@ pub fn pos(a: cs.Position) void {
     std.debug.print("\n{s}\n", .{cs.Prints.position(a)});
 }
 
-pub fn sym(a: lx.Symbol) void {
-    std.debug.print("\nS:{t} {d}\n", .{ a.name, a.id });
+pub fn sym_id(a: lx.SymbolIdentity) void {
+    std.debug.print("\nS:{t}{d}\n", .{ a.tag, a.id });
+}
+
+pub fn sym(a: par.Symbol) void {
+    const s = if (a.props.turn) "t" else if (a.props.opponent) "o" else "";
+    std.debug.print("\nS:{t}{d}_{s}\n", .{ a.identity.tag, a.identity.id, s });
 }
 
 pub fn sym_bb(a: lx.Symbol, b: cs.Bitboard) void {

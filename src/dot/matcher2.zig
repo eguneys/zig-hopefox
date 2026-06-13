@@ -23,7 +23,7 @@ pub const Matcher = struct {
             lx.SymbolTag.Captures => {
                 try dispatch_captures(allocator, history, slice, star);
             },
-            lx.SymbolTag.Checks => {
+            lx.SymbolTag.Check => {
                 try dispatch_checks(allocator, history, slice, star);
             },
             lx.SymbolTag.Blocks => {
@@ -130,6 +130,8 @@ pub const Matcher = struct {
         const To = history.table.getColumn(to_symbol.identity);
         const Blocks = history.table.getColumn(blocks_symbol.identity);
 
+        log.d(star.from);
+        log.d(star.to);
         for (slice.off..slice.off + slice.len) |off| {
             const bb_from = From[off];
             const bb_to = To[off];
