@@ -1,5 +1,5 @@
 const std = @import("std");
-const DotUsage = @import("dot/usage.zig").DotUsage;
+const DotUsage = @import("dot/usage2.zig").DotUsage;
 const chess = @import("dot/chess/types.zig");
 const DbReader = @import("db_file.zig").DbReader;
 

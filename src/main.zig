@@ -28,9 +28,8 @@ test "imports" {
     _ = @import("dot/tree.zig");
     _ = @import("dot/chess/types.zig");
     _ = @import("dot/chess/san.zig");
-    _ = @import("dot/lexer.zig");
-    _ = @import("dot/parser.zig");
-    _ = @import("dot/runner.zig");
-    _ = @import("dot/usage.zig");
-    _ = @import("dot/usage_tests1.zig");
+    _ = @import("dot/lexer2.zig");
+    _ = @import("dot/parser2.zig");
+    _ = @import("dot/runner2.zig");
+    _ = @import("dot/usage2.zig");
 }
