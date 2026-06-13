@@ -12,11 +12,13 @@ const log = @import("logs.zig");
 
 pub const Matcher = struct {
     pub const Slice = struct { off: usize, len: usize };
-    pub fn run_dot(allocator: Allocator, history: History, slice: Slice, dot: par.SideEffects) !void {
-        _ = allocator;
-        _ = history;
-        _ = dot;
-        _ = slice;
+    pub fn run_dot(allocator: Allocator, history: *History, slice: Slice, dot: par.SideEffects) !void {
+        switch (history.program.symbols[dot.action.tag].identity.tag) {
+            lx.SymbolTag.Forks => {
+                try Filters.dispatch_forks(allocator, history, slice, dot);
+            },
+            else => {},
+        }
     }
     pub fn run_star(allocator: Allocator, history: *History, slice: Slice, star: par.Becomes) !void {
         switch (history.program.symbols[star.action.tag].identity.tag) {
@@ -130,8 +132,6 @@ pub const Matcher = struct {
         const To = history.table.getColumn(to_symbol.identity);
         const Blocks = history.table.getColumn(blocks_symbol.identity);
 
-        log.d(star.from);
-        log.d(star.to);
         for (slice.off..slice.off + slice.len) |off| {
             const bb_from = From[off];
             const bb_to = To[off];
@@ -244,5 +244,48 @@ pub const Symbols = struct {
         }
 
         return result;
+    }
+};
+
+pub const Filters = struct {
+    fn dispatch_forks(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const fork_a_symbol = history.program.symbols[star.action.one];
+        const fork_b_symbol = history.program.symbols[star.action.two];
+        const From = history.table.getColumn(from_symbol.identity);
+        const ForkA = history.table.getColumn(fork_a_symbol.identity);
+        const ForkB = history.table.getColumn(fork_b_symbol.identity);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_forka = ForkA[off];
+            const bb_forkb = ForkB[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from.bitand(Symbols.bitboard(from_symbol, position));
+            while (bb_from2.next()) |sq_from| {
+                const aa_captures = Symbols.captures(from_symbol, sq_from, position);
+                var bb_forka2 = bb_forka
+                    .bitand(Symbols.bitboard(fork_a_symbol, position))
+                    .bitand(aa_captures);
+                while (bb_forka2.next()) |sq_forka| {
+                    var bb_forkb2 = bb_forkb
+                        .bitand(Symbols.bitboard(fork_b_symbol, position))
+                        .bitand(aa_captures);
+                    while (bb_forkb2.next()) |sq_forkb| {
+                        try history.table.duplicateLastRow(allocator);
+
+                        history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+                        history.table.setLastRow(fork_a_symbol.identity, chess.Bitboard.fromSquare(sq_forka));
+                        history.table.setLastRow(fork_b_symbol.identity, chess.Bitboard.fromSquare(sq_forkb));
+
+                        const move = chess.Move.none;
+                        const ref = try history.tree.appendChild(allocator, off, move);
+                        try history.nodes.append(allocator, ref);
+                    }
+                }
+            }
+        }
     }
 };

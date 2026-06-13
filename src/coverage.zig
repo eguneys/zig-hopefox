@@ -9,11 +9,11 @@ pub const DotCoverageOutput = struct {
             if (i > 0) _ = try writer.interface.write("\n");
 
             const position = try db_reader.readPosition(i);
-            if (false) {
-                const meta = try db_reader.readMeta(i);
-                const meta_id: [5]u8 = @bitCast(meta.id);
-                std.debug.print("\nhttps://lichess.org/training/{s}\n{s}\n", .{ meta_id, chess.Prints.position(position) });
-            }
+            const meta = try db_reader.readMeta(i);
+            const meta_id: [5]u8 = @bitCast(meta.id);
+            _ = try writer.interface.write("https://lichess.org/training/");
+            _ = try writer.interface.write(&meta_id);
+            _ = try writer.interface.write("\n");
             dot.runner.runOnPosition(allocator, position) catch {
                 _ = try writer.interface.write("Error running position");
                 return;

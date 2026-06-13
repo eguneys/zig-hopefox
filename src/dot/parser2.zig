@@ -240,16 +240,12 @@ pub const Parser = struct {
             return errors.ExpectingSymbolAfterStarAction;
 
         const two: ?GetSymbol = findtwo: {
-            if (self.tokens
-                .getAfter(one.token.line_no, one.token.end_column_no)) |star|
-            {
-                if (star.token.tag == lx.TokenTag.Star) {
-                    if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.and_)) |toand| {
-                        break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
-                    }
-                    if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.to)) |toand| {
-                        break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
-                    }
+            if (self.eatStarAfter(one.token.line_no, one.token.end_column_no)) |star| {
+                if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.and_)) |toand| {
+                    break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
+                }
+                if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.to)) |toand| {
+                    break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
                 }
             }
             break :findtwo null;

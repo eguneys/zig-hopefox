@@ -162,6 +162,9 @@ pub const PrintBuilder = struct {
     }
 
     pub fn appendMove(self: *PrintBuilder, allocator: std.mem.Allocator, move: types.Move) !void {
+        if (move.isNone()) {
+            return;
+        }
         if (self.string.items.len > 0) {
             try self.string.append(allocator, ' ');
         }

@@ -119,6 +119,7 @@ pub const DotUsage = struct {
             if (self.buffer.items.len > 0) {
                 try self.buffer.append(allocator, '\n');
             }
+
             const str_line_no = try std.fmt.allocPrint(allocator, "{d}: ", .{self.runner.getLineNo(slice.instruction)});
             defer allocator.free(str_line_no);
             try self.buffer.appendSlice(allocator, str_line_no);

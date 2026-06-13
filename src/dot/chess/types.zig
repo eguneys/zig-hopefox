@@ -1215,6 +1215,17 @@ pub const Move = packed struct(u16) {
     to: u6,
     kind: MoveType,
     promotion: MovePromotionRole,
+
+    pub const none: Move = .{
+        .from = 0,
+        .to = 0,
+        .kind = undefined,
+        .promotion = undefined,
+    };
+
+    pub fn isNone(self: Move) bool {
+        return self == Move.none;
+    }
 };
 
 pub const Parses = struct {

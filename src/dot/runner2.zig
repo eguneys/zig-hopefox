@@ -55,6 +55,9 @@ pub const History = struct {
 
         for (0..reversed_moves.len) |i| {
             const move = self.tree.getNode(reversed_moves[reversed_moves.len - 1 - i]).value;
+            if (move.isNone()) {
+                continue;
+            }
             _ = position.make_move(move);
             position.flipTurn();
         }
@@ -106,7 +109,10 @@ pub const Runner = struct {
             const begin_off = self.history.nodes.items.len;
             switch (instruction) {
                 .sideEffects => {
-                    try Matcher.run_dot(allocator, self.history, slice, self.history.program.side_effects[instruction.sideEffects]);
+                    try Matcher.run_dot(allocator, &self.history, slice, self.history.program.side_effects[instruction.sideEffects]);
+
+                    const end_off = self.history.nodes.items.len;
+                    try self.slices.append(allocator, .{ .off = begin_off, .len = end_off - begin_off, .instruction = i });
                 },
                 .becomes => {
                     try Matcher.run_star(allocator, &self.history, slice, self.history.program.becomes[instruction.becomes]);
@@ -121,8 +127,11 @@ pub const Runner = struct {
 
     pub fn getLineNo(self: Runner, off_instruction: usize) usize {
         const instruction = self.history.program.instructions[off_instruction];
-        const star = self.history.program.becomes[instruction.becomes];
-        const symbol = self.history.program.symbols[star.action.tag];
+        const action_tag = switch (instruction) {
+            .sideEffects => self.history.program.side_effects[instruction.sideEffects].action.tag,
+            .becomes => self.history.program.becomes[instruction.becomes].action.tag,
+        };
+        const symbol = self.history.program.symbols[action_tag];
         const token = self.history.program.tokens[symbol.token];
         return token.line_no;
     }
