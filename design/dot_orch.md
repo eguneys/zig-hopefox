@@ -1,3 +1,4 @@
+```
 db: data/athousand_sorted.csv
    output:
       preview:
@@ -39,3 +40,4 @@ output: scripts/script2.csv
   - filter: fullMatch
   - format: csv
 
+```
