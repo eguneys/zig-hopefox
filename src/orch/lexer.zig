@@ -193,29 +193,35 @@ pub const Lexer = struct {
 
         inline for (OutputConfigFields, 0..) |tag, i| {
             if (std.mem.startsWith(u8, self.text[self.inext..], tag.name)) {
-                self.inext += tag.name.len;
-                self.column_no += tag.name.len;
+                const nextChar = self.inext + tag.name.len;
+                if (nextChar < self.text.len and self.text[nextChar] == ':') {
+                    self.inext += tag.name.len + 1;
+                    self.column_no += tag.name.len + 1;
 
-                return .{
-                    .tag = TokenTag.OutputConfig,
-                    .line = self.line_no,
-                    .column = column_no,
-                    .value = .{ .output_config = @enumFromInt(i) },
-                };
+                    return .{
+                        .tag = TokenTag.OutputConfig,
+                        .line = self.line_no,
+                        .column = column_no,
+                        .value = .{ .output_config = @enumFromInt(i) },
+                    };
+                }
             }
         }
 
         inline for (CommandFields, 0..) |tag, i| {
             if (std.mem.startsWith(u8, self.text[self.inext..], tag.name)) {
-                self.inext += tag.name.len;
-                self.column_no += tag.name.len;
+                const nextChar = self.inext + tag.name.len;
+                if (nextChar < self.text.len and self.text[nextChar] == ':') {
+                    self.inext += tag.name.len + 1;
+                    self.column_no += tag.name.len + 1;
 
-                return .{
-                    .tag = TokenTag.Command,
-                    .line = self.line_no,
-                    .column = column_no,
-                    .value = .{ .command = @enumFromInt(i) },
-                };
+                    return .{
+                        .tag = TokenTag.Command,
+                        .line = self.line_no,
+                        .column = column_no,
+                        .value = .{ .command = @enumFromInt(i) },
+                    };
+                }
             }
         }
         inline for (FilterKindFields, 0..) |tag, i| {
@@ -234,22 +240,25 @@ pub const Lexer = struct {
 
         inline for (OutputFields, 0..) |tag, i| {
             if (std.mem.startsWith(u8, self.text[self.inext..], tag.name)) {
-                self.inext += tag.name.len;
-                self.column_no += tag.name.len;
+                const nextChar = self.inext + tag.name.len;
+                if (nextChar < self.text.len and self.text[nextChar] == ':') {
+                    self.inext += tag.name.len + 1;
+                    self.column_no += tag.name.len + 1;
 
-                return .{
-                    .tag = TokenTag.OutputFormat,
-                    .line = self.line_no,
-                    .column = column_no,
-                    .value = .{ .output_format = @enumFromInt(i) },
-                };
+                    return .{
+                        .tag = TokenTag.OutputFormat,
+                        .line = self.line_no,
+                        .column = column_no,
+                        .value = .{ .output_format = @enumFromInt(i) },
+                    };
+                }
             }
         }
 
         const findword: []const u8 = findword: {
             const start = self.inext;
             while (self.peekNextChar()) |char| {
-                if (!std.ascii.isWhitespace(char)) {
+                if (std.ascii.isAlphanumeric(char) or char == '_') {
                     self.inext += 1;
                     self.column_no += 1;
                 } else {
