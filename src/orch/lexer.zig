@@ -5,7 +5,7 @@ const ArrayList = std.ArrayList;
 
 const errors = error{UnknownToken};
 
-pub const TokenTag = enum { OutputFormat, Command, OutputConfig, Word, Colon, Dash, Number, PathJoin, Dot, Equals, Eof };
+pub const TokenTag = enum { FilterKind, OutputFormat, Command, OutputConfig, Word, Colon, Dash, Number, PathJoin, Dot, Equals, Eof };
 
 pub const OutputFormat = enum {
     preview,
@@ -13,19 +13,26 @@ pub const OutputFormat = enum {
     csv,
 };
 
+pub const FilterKind = enum {
+    fullMatch,
+    single,
+};
+
 pub const OutputConfig = enum {
     basePath,
+    filterSingle,
     filter,
     take,
+    skip,
     runOnly,
-    filterSingle,
 };
 
 pub const Command = enum {
     run,
-    db,
+    input,
     output,
     variation,
+    unify,
 };
 
 pub const Token = struct {
@@ -39,6 +46,7 @@ pub const Token = struct {
         command: Command,
         output_config: OutputConfig,
         output_format: OutputFormat,
+        filter_kind: FilterKind,
     },
 };
 
@@ -79,6 +87,7 @@ pub const Lexer = struct {
     const CommandFields = std.meta.fields(Command);
     const OutputConfigFields = std.meta.fields(OutputConfig);
     const OutputFields = std.meta.fields(OutputFormat);
+    const FilterKindFields = std.meta.fields(FilterKind);
 
     fn nextToken(self: *Lexer) !?Token {
         self.skipWhitespace();
@@ -181,6 +190,21 @@ pub const Lexer = struct {
         }
 
         const column_no = self.column_no;
+
+        inline for (OutputConfigFields, 0..) |tag, i| {
+            if (std.mem.startsWith(u8, self.text[self.inext..], tag.name)) {
+                self.inext += tag.name.len;
+                self.column_no += tag.name.len;
+
+                return .{
+                    .tag = TokenTag.OutputConfig,
+                    .line = self.line_no,
+                    .column = column_no,
+                    .value = .{ .output_config = @enumFromInt(i) },
+                };
+            }
+        }
+
         inline for (CommandFields, 0..) |tag, i| {
             if (std.mem.startsWith(u8, self.text[self.inext..], tag.name)) {
                 self.inext += tag.name.len;
@@ -194,17 +218,16 @@ pub const Lexer = struct {
                 };
             }
         }
-
-        inline for (OutputConfigFields, 0..) |tag, i| {
+        inline for (FilterKindFields, 0..) |tag, i| {
             if (std.mem.startsWith(u8, self.text[self.inext..], tag.name)) {
                 self.inext += tag.name.len;
                 self.column_no += tag.name.len;
 
                 return .{
-                    .tag = TokenTag.OutputConfig,
+                    .tag = TokenTag.FilterKind,
                     .line = self.line_no,
                     .column = column_no,
-                    .value = .{ .output_config = @enumFromInt(i) },
+                    .value = .{ .filter_kind = @enumFromInt(i) },
                 };
             }
         }
@@ -250,7 +273,7 @@ pub const Lexer = struct {
 
     pub fn toOwnedTokens(self: *Lexer, allocator: Allocator) ![]Token {
         var tokens: std.ArrayList(Token) = .empty;
-        errdefer tokens.deinit(allocator);
+        defer tokens.deinit(allocator);
 
         while (try self.nextToken()) |token| {
             try tokens.append(allocator, token);

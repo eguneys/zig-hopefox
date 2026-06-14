@@ -17,28 +17,35 @@ pub const Orch = struct {
 
 pub const Db = struct {
     db_path: []const u8,
-    output: Output,
+    output: []Output,
     variation: []Variation,
 
     pub fn deinit(self: *Db, allocator: Allocator) void {
         allocator.free(self.db_path);
         for (self.variation) |*v| v.deinit(allocator);
+        for (self.output) |*o| o.deinit(allocator);
         allocator.free(self.variation);
+        allocator.free(self.output);
     }
 };
 
 pub const Variation = struct {
     name: []const u8,
     script_path: []const u8,
-    output: ?Output,
-    unify: []Unify,
+    output: ?[]Output,
+    unify: ?[]Unify,
 
     pub fn deinit(self: *Variation, allocator: Allocator) void {
         allocator.free(self.name);
         allocator.free(self.script_path);
-        for (self.unify) |*u| u.deinit(allocator);
-        allocator.free(self.unify);
-        if (self.output) |*o| o.deinit(allocator);
+        if (self.unify) |unify| {
+            for (unify) |*u| u.deinit(allocator);
+            allocator.free(unify);
+        }
+        if (self.output) |output| {
+            for (output) |*o| o.deinit(allocator);
+            allocator.free(output);
+        }
     }
 };
 
@@ -54,16 +61,12 @@ pub const Unify = struct {
     }
 };
 
-pub const FilterKind = enum {
-    fullMatch,
-    single,
-};
-
 pub const Output = struct {
     format: lx.OutputFormat,
     basePath: ?[]const u8,
-    filter: ?FilterKind,
+    filter: ?lx.FilterKind,
     take: ?usize,
+    skip: ?usize,
     runOnly: ?bool,
     filterSingle: ?[]const u8,
 
@@ -83,7 +86,7 @@ pub const Parser = struct {
 
     const DbInRef = struct {
         db_path: []const u8,
-        output: Ref,
+        output: Slice,
         variation: Slice,
     };
 
@@ -93,8 +96,8 @@ pub const Parser = struct {
     const VariationInRef = struct {
         name: []const u8,
         script_path: []const u8,
-        output: ?Ref,
-        unify: Slice,
+        output: ?Slice,
+        unify: ?Slice,
     };
 
     const Self = @This();
@@ -127,99 +130,216 @@ pub const Parser = struct {
     }
 
     fn parseDb(self: *Self, allocator: Allocator) !?DbInRef {
-        if (self.eatCommand(lx.Command.db) == null) {
+        if (self.eatCommand(lx.Command.input) == null) {
             return null;
         }
         _ = try self.eatTag(lx.TokenTag.Colon);
 
         const db_path = try self.parsePath(allocator);
+        defer allocator.free(db_path);
 
-        const output = try self.parseOutput() orelse Defaults.output;
-        const output_ref = self.outputs.items.len;
-        try self.outputs.append(allocator, output);
+        if (try self.parseOutput(allocator)) |output_slice| {
+            const variation_slice = try self.parseVariation(allocator);
 
-        var variation_slice = Slice{ .off = self.variations.items.len, .len = 0 };
+            if (variation_slice == null) {
+                return errors.UnknownToken;
+            }
 
-        while (try self.parseVariation(allocator)) |variation| {
-            try self.variations.append(allocator, variation);
-            variation_slice.len += 1;
+            return .{
+                .db_path = try allocator.dupe(u8, db_path),
+                .output = output_slice,
+                .variation = variation_slice.?,
+            };
         }
-
-        return .{
-            .db_path = db_path,
-            .output = output_ref,
-            .variation = variation_slice,
-        };
+        return null;
     }
 
-    fn parseOutput(self: *Self) !?Output {
+    fn parseOutput(self: *Self, allocator: Allocator) !?Slice {
         if (self.eatCommand(lx.Command.output) == null) {
             return null;
         }
         _ = try self.eatTag(lx.TokenTag.Colon);
 
+        var result = Slice{ .off = self.outputs.items.len, .len = 0 };
         var something_else = false;
         while (!something_else) {
             if (try self.eatTag(lx.TokenTag.OutputFormat)) |format| {
                 _ = try self.eatTag(lx.TokenTag.Colon);
 
                 var basePath: ?[]const u8 = null;
-                var filter: ?FilterKind = null;
+                var filter: ?lx.FilterKind = null;
                 var take: ?usize = null;
+                var skip: ?usize = null;
                 var runOnly: ?bool = null;
                 var filterSingle: ?[]const u8 = null;
                 while (try self.eatTag(lx.TokenTag.Dash) != null) {
-                    basePath = try self.eatOutputConfigPath(lx.OutputConfig.basePath);
-                    filter = try self.eatOutputConfigFilter(lx.OutputConfig.filter);
-                    take = try self.eatOutputConfigNumber(lx.OutputConfig.take);
-                    runOnly = try self.eatOutputConfigParam(lx.OutputConfig.runOnly);
-                    filterSingle = try self.eatOutputConfigText(lx.OutputConfig.filterSingle);
+                    if (basePath == null) {
+                        basePath = try self.eatOutputConfigPath(allocator, lx.OutputConfig.basePath);
+                    }
+                    if (filter == null) {
+                        filter = try self.eatOutputConfigFilter(lx.OutputConfig.filter);
+                    }
+                    if (take == null) {
+                        take = try self.eatOutputConfigNumber(lx.OutputConfig.take);
+                    }
+                    if (skip == null) {
+                        skip = try self.eatOutputConfigNumber(lx.OutputConfig.skip);
+                    }
+                    if (runOnly == null) {
+                        runOnly = try self.eatOutputConfigParam(lx.OutputConfig.runOnly);
+                    }
+                    if (filterSingle == null) {
+                        filterSingle = try self.eatOutputConfigText(allocator, lx.OutputConfig.filterSingle);
+                    }
                 }
 
-                return .{
+                const output = Output{
                     .format = format.value.output_format,
                     .basePath = basePath,
                     .filter = filter,
                     .take = take,
+                    .skip = skip,
                     .runOnly = runOnly,
                     .filterSingle = filterSingle,
                 };
+
+                try self.outputs.append(allocator, output);
+                result.len += 1;
             } else {
                 something_else = true;
             }
         }
-        return errors.UnknownToken;
+        return result;
     }
 
-    fn eatOutputConfigPath(self: *Self, config: lx.OutputConfig) !?[]const u8 {
-        _ = self;
-        _ = config;
+    fn log_next_token(self: Self) void {
+        std.debug.print("\n{t} Line: {d}:{d}", .{ self.tokens[self.inext].tag, self.tokens[self.inext].line, self.tokens[self.inext].column });
+    }
+
+    fn eatOutputConfigPath(self: *Self, allocator: Allocator, config: lx.OutputConfig) !?[]const u8 {
+        if (try self.peekTag(lx.TokenTag.OutputConfig)) |tag| {
+            if (tag.value.output_config == config) {
+                _ = try self.eatTag(lx.TokenTag.OutputConfig);
+                _ = try self.eatTag(lx.TokenTag.Colon);
+                return try self.parsePath(allocator);
+            }
+        }
         return null;
     }
-    fn eatOutputConfigFilter(self: *Self, config: lx.OutputConfig) !?FilterKind {
-        _ = self;
-        _ = config;
+    fn eatOutputConfigFilter(self: *Self, config: lx.OutputConfig) !?lx.FilterKind {
+        if (try self.peekTag(lx.TokenTag.OutputConfig)) |tag| {
+            if (tag.value.output_config == config) {
+                _ = try self.eatTag(lx.TokenTag.OutputConfig);
+                _ = try self.eatTag(lx.TokenTag.Colon);
+                if (try self.eatTag(lx.TokenTag.FilterKind)) |kind| {
+                    return kind.value.filter_kind;
+                }
+            }
+        }
         return null;
     }
     fn eatOutputConfigNumber(self: *Self, config: lx.OutputConfig) !?usize {
-        _ = self;
-        _ = config;
+        if (try self.peekTag(lx.TokenTag.OutputConfig)) |tag| {
+            if (tag.value.output_config == config) {
+                _ = try self.eatTag(lx.TokenTag.OutputConfig);
+                _ = try self.eatTag(lx.TokenTag.Colon);
+                if (try self.eatTag(lx.TokenTag.Number)) |number| {
+                    return number.value.number;
+                }
+            }
+        }
         return null;
     }
     fn eatOutputConfigParam(self: *Self, config: lx.OutputConfig) !?bool {
-        _ = self;
-        _ = config;
+        if (try self.peekTag(lx.TokenTag.OutputConfig)) |tag| {
+            if (tag.value.output_config == config) {
+                _ = try self.eatTag(lx.TokenTag.OutputConfig);
+                return true;
+            }
+        }
         return null;
     }
-    fn eatOutputConfigText(self: *Self, config: lx.OutputConfig) !?[]const u8 {
-        _ = self;
-        _ = config;
+    fn eatOutputConfigText(self: *Self, allocator: Allocator, config: lx.OutputConfig) !?[]const u8 {
+        if (try self.peekTag(lx.TokenTag.OutputConfig)) |tag| {
+            if (tag.value.output_config == config) {
+                _ = try self.eatTag(lx.TokenTag.OutputConfig);
+                _ = try self.eatTag(lx.TokenTag.Colon);
+                return try self.eatWord(allocator);
+            }
+        }
         return null;
     }
 
-    fn parseVariation(self: *Self, allocator: Allocator) !?VariationInRef {
-        _ = self;
-        _ = allocator;
+    fn parseVariation(self: *Self, allocator: Allocator) !?Slice {
+        if (self.eatCommand(lx.Command.variation) == null) {
+            return null;
+        }
+        _ = try self.eatTag(lx.TokenTag.Colon);
+
+        var result = Slice{ .off = self.variations.items.len, .len = 0 };
+        while (true) {
+            if (try self.eatWord(allocator)) |name| {
+                _ = try self.eatTag(lx.TokenTag.Colon);
+
+                const script_path = try self.parsePath(allocator);
+                errdefer allocator.free(script_path);
+
+                const output = try self.parseOutput(allocator);
+                const unify = try self.parseUnify(allocator);
+
+                const variation = VariationInRef{
+                    .name = name,
+                    .script_path = script_path,
+                    .output = output,
+                    .unify = unify,
+                };
+
+                try self.variations.append(allocator, variation);
+                result.len += 1;
+            } else {
+                break;
+            }
+        }
+        return result;
+    }
+
+    fn parseUnify(self: *Self, allocator: Allocator) !?Slice {
+        if (self.eatCommand(lx.Command.unify) != null) {
+            _ = try self.eatTag(lx.TokenTag.Colon);
+
+            var result = Slice{ .off = self.unifies.items.len, .len = 0 };
+
+            while (try self.eatTag(lx.TokenTag.Dash) != null) {
+                const symbol = try self.eatWord(allocator);
+                _ = try self.eatTag(lx.TokenTag.Colon);
+
+                if (symbol == null) {
+                    return null;
+                }
+
+                const to_variation = try self.eatWord(allocator);
+
+                if (to_variation == null) {
+                    return null;
+                }
+
+                _ = try self.eatTag(lx.TokenTag.Dot);
+                const to_symbol = try self.eatWord(allocator);
+
+                if (to_symbol == null) {
+                    return null;
+                }
+
+                try self.unifies.append(allocator, Unify{
+                    .symbol = symbol.?,
+                    .to_variation = to_variation.?,
+                    .to_symbol = to_symbol.?,
+                });
+                result.len += 1;
+            }
+
+            return result;
+        }
         return null;
     }
 
@@ -229,9 +349,13 @@ pub const Parser = struct {
 
         var can_see_word = true;
         while (can_see_word) {
-            const word = try self.eatWord();
-            try result.appendSlice(allocator, word);
-            can_see_word = false;
+            if (try self.eatWord(allocator)) |word| {
+                try result.appendSlice(allocator, word);
+                allocator.free(word);
+                can_see_word = false;
+            } else {
+                break;
+            }
 
             if (try self.eatTag(lx.TokenTag.Dot) != null) {
                 try result.append(allocator, '.');
@@ -245,6 +369,15 @@ pub const Parser = struct {
         }
 
         return try result.toOwnedSlice(allocator);
+    }
+
+    fn peekTag(self: *Self, tag: lx.TokenTag) !?lx.Token {
+        const next = self.tokens[self.inext];
+        if (next.tag != tag) {
+            return null;
+        }
+
+        return self.tokens[self.inext];
     }
 
     fn eatTag(self: *Self, tag: lx.TokenTag) !?lx.Token {
@@ -266,15 +399,15 @@ pub const Parser = struct {
         self.inext += 1;
     }
 
-    fn eatWord(self: *Self) ![]const u8 {
+    fn eatWord(self: *Self, allocator: Allocator) !?[]const u8 {
         const next = self.tokens[self.inext];
         if (next.tag != lx.TokenTag.Word) {
-            return errors.UnknownToken;
+            return null;
         }
 
         self.inext += 1;
 
-        return self.tokens[self.inext - 1].value.text;
+        return try allocator.dupe(u8, self.tokens[self.inext - 1].value.text);
     }
 
     pub fn toOwnedParse(self: *Self, allocator: Allocator) !Orch {
@@ -290,22 +423,42 @@ pub const Parser = struct {
             for (dbs.variation.off..dbs.variation.off + dbs.variation.len) |i| {
                 const inref = self.variations.items[i];
 
-                const output =
-                    if (inref.output) |ref| self.outputs.items[ref] else null;
+                var voutputs: ArrayList(Output) = .empty;
+                defer voutputs.deinit(allocator);
+
+                if (inref.output) |slice| {
+                    for (slice.off..slice.off + slice.len) |j| {
+                        try voutputs.append(allocator, self.outputs.items[j]);
+                    }
+                }
+
+                var vunifies: ArrayList(Unify) = .empty;
+                defer vunifies.deinit(allocator);
+
+                if (inref.unify) |slice| {
+                    for (slice.off..slice.off + slice.len) |j| {
+                        try vunifies.append(allocator, self.unifies.items[j]);
+                    }
+                }
 
                 const variation = Variation{
                     .name = inref.name,
                     .script_path = inref.script_path,
-                    .output = output,
-                    .unify = self.unifies.items[inref.unify.off .. inref.unify.off + inref.unify.len],
+                    .output = try voutputs.toOwnedSlice(allocator),
+                    .unify = try vunifies.toOwnedSlice(allocator),
                 };
 
                 try variations.append(allocator, variation);
             }
 
+            var outputs: ArrayList(Output) = .empty;
+            defer outputs.deinit(allocator);
+
+            try outputs.appendSlice(allocator, self.outputs.items[dbs.output.off..(dbs.output.off + dbs.output.len)]);
+
             const db = Db{
                 .db_path = dbs.db_path,
-                .output = self.outputs.items[dbs.output],
+                .output = try outputs.toOwnedSlice(allocator),
                 .variation = try variations.toOwnedSlice(allocator),
             };
             try orchs.append(allocator, db);
@@ -319,17 +472,17 @@ test "basic parser usage" {
     const ally = testing.allocator;
 
     var parser = try Parser.init(ally,
-        \\db: data/athousand_sorted.csv
+        \\input: data/athousand_sorted.csv
         \\   output:
         \\      preview:
-        \\         - basePath: scripts/output/
+        \\         - basePath: scripts/output
         \\         - filter: fullMatch
-        \\         - filterSingle: 0f1ave
+        \\         - filterSingle: _id_0f1ave
         \\         - skip: 10
         \\         - take: 15
         \\         - runOnly
         \\      db:
-        \\         - basePath: scripts/output/
+        \\         - basePath: scripts/output
         \\         - filter: fullMatch
         \\         - take: 15
         \\         - runOnly
@@ -342,13 +495,13 @@ test "basic parser usage" {
         \\            - runOnly
         \\     variation1: scripts/variation2.gof
         \\         unify:
-        \\           rook: mainline.rook
-        \\           king: mainline.king
+        \\           - rook: mainline.rook
+        \\           - king: mainline.king
         \\     variation2: scripts/variation3.gof
         \\         unify:
-        \\           rook: mainline.rook
-        \\           king: mainline.king
-        \\           bishop: variation1.bishop
+        \\           - rook: mainline.rook
+        \\           - king: mainline.king
+        \\           - bishop: variation1.bishop
         \\     variation3: scripts/variation4.gof
         \\
     );
@@ -357,6 +510,16 @@ test "basic parser usage" {
 
     var orch_file = try parser.toOwnedParse(ally);
     defer orch_file.deinit(ally);
+
+    try testing.expectEqual(1, orch_file.dbs.len);
+    try testing.expectEqualStrings("data/athousand_sorted.csv", orch_file.dbs[0].db_path);
+
+    try testing.expectEqual(2, orch_file.dbs[0].output.len);
+
+    try testing.expectEqual(lx.OutputFormat.preview, orch_file.dbs[0].output[0].format);
+    try testing.expectEqualStrings("scripts/output", orch_file.dbs[0].output[0].basePath.?);
+
+    try testing.expectEqual(4, orch_file.dbs[0].variation.len);
 }
 
 pub const Defaults = struct {
