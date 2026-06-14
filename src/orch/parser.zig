@@ -1,309 +1,371 @@
 const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
+const lx = @import("lexer.zig");
 
 const errors = error{UnknownToken};
 
-pub const TokenTag = enum { Command, Filter, Word, Colon, Dash, Number, PathJoin, Dot, Equals, Eof };
+pub const Orch = struct {
+    dbs: []Db,
 
-pub const Filter = enum {
-    filter,
-    take,
-    runOnly,
+    pub fn deinit(self: *Orch, allocator: Allocator) void {
+        for (self.dbs) |*db| db.deinit(allocator);
+        allocator.free(self.dbs);
+    }
 };
 
-pub const Command = enum {
-    run,
-    db,
-    output,
-    variation,
+pub const Db = struct {
+    db_path: []const u8,
+    output: Output,
+    variation: []Variation,
+
+    pub fn deinit(self: *Db, allocator: Allocator) void {
+        allocator.free(self.db_path);
+        for (self.variation) |*v| v.deinit(allocator);
+        allocator.free(self.variation);
+    }
 };
 
-pub const Token = struct {
-    tag: TokenTag,
-    line: usize,
-    column: usize,
-    value: union {
-        char: u8,
-        text: []const u8,
-        number: usize,
-        command: Command,
-        filter: Filter,
-    },
+pub const Variation = struct {
+    name: []const u8,
+    script_path: []const u8,
+    output: ?Output,
+    unify: []Unify,
+
+    pub fn deinit(self: *Variation, allocator: Allocator) void {
+        allocator.free(self.name);
+        allocator.free(self.script_path);
+        for (self.unify) |*u| u.deinit(allocator);
+        allocator.free(self.unify);
+        if (self.output) |*o| o.deinit(allocator);
+    }
 };
 
-pub const Lexer = struct {
-    text: []const u8,
+pub const Unify = struct {
+    symbol: []const u8,
+    to_variation: []const u8,
+    to_symbol: []const u8,
+
+    pub fn deinit(self: *Unify, allocator: Allocator) void {
+        allocator.free(self.symbol);
+        allocator.free(self.to_variation);
+        allocator.free(self.to_symbol);
+    }
+};
+
+pub const FilterKind = enum {
+    fullMatch,
+    single,
+};
+
+pub const Output = struct {
+    format: lx.OutputFormat,
+    basePath: ?[]const u8,
+    filter: ?FilterKind,
+    take: ?usize,
+    runOnly: ?bool,
+    filterSingle: ?[]const u8,
+
+    pub fn deinit(self: *Output, allocator: Allocator) void {
+        if (self.basePath) |path| allocator.free(path);
+        if (self.filterSingle) |path| allocator.free(path);
+    }
+};
+
+pub const Parser = struct {
     inext: usize = 0,
-    line_no: usize = 1,
-    column_no: usize = 1,
+    tokens: []lx.Token,
+    dbs: ArrayList(DbInRef),
+    outputs: ArrayList(Output),
+    unifies: ArrayList(Unify),
+    variations: ArrayList(VariationInRef),
 
-    fn init(text: []const u8) Lexer {
-        return .{ .text = text };
+    const DbInRef = struct {
+        db_path: []const u8,
+        output: Ref,
+        variation: Slice,
+    };
+
+    const Ref = usize;
+    const Slice = struct { off: usize, len: usize };
+
+    const VariationInRef = struct {
+        name: []const u8,
+        script_path: []const u8,
+        output: ?Ref,
+        unify: Slice,
+    };
+
+    const Self = @This();
+
+    pub fn deinit(self: *Self, allocator: Allocator) void {
+        allocator.free(self.tokens);
+        self.dbs.deinit(allocator);
+        self.outputs.deinit(allocator);
+        self.unifies.deinit(allocator);
+        self.variations.deinit(allocator);
     }
 
-    fn peekNextChar(self: Lexer) ?u8 {
-        if (self.inext >= self.text.len) {
+    pub fn init(allocator: Allocator, script: []const u8) !Self {
+        var lexer = lx.Lexer.init(script);
+        const tokens = try lexer.toOwnedTokens(allocator);
+
+        return .{
+            .tokens = tokens,
+            .dbs = .empty,
+            .outputs = .empty,
+            .unifies = .empty,
+            .variations = .empty,
+        };
+    }
+
+    pub fn parse(self: *Self, allocator: Allocator) !void {
+        while (try self.parseDb(allocator)) |db| {
+            try self.dbs.append(allocator, db);
+        }
+    }
+
+    fn parseDb(self: *Self, allocator: Allocator) !?DbInRef {
+        if (self.eatCommand(lx.Command.db) == null) {
             return null;
         }
+        _ = try self.eatTag(lx.TokenTag.Colon);
 
-        return self.text[self.inext];
+        const db_path = try self.parsePath(allocator);
+
+        const output = try self.parseOutput() orelse Defaults.output;
+        const output_ref = self.outputs.items.len;
+        try self.outputs.append(allocator, output);
+
+        var variation_slice = Slice{ .off = self.variations.items.len, .len = 0 };
+
+        while (try self.parseVariation(allocator)) |variation| {
+            try self.variations.append(allocator, variation);
+            variation_slice.len += 1;
+        }
+
+        return .{
+            .db_path = db_path,
+            .output = output_ref,
+            .variation = variation_slice,
+        };
     }
 
-    fn skipWhitespace(self: *Lexer) void {
-        while (self.inext < self.text.len) {
-            const c = self.text[self.inext];
-            if (c == '\n') {
-                self.inext += 1;
-                self.line_no += 1;
-                self.column_no = 1;
-            } else if (std.ascii.isWhitespace(c)) {
-                self.inext += 1;
-                self.column_no += 1;
+    fn parseOutput(self: *Self) !?Output {
+        if (self.eatCommand(lx.Command.output) == null) {
+            return null;
+        }
+        _ = try self.eatTag(lx.TokenTag.Colon);
+
+        var something_else = false;
+        while (!something_else) {
+            if (try self.eatTag(lx.TokenTag.OutputFormat)) |format| {
+                _ = try self.eatTag(lx.TokenTag.Colon);
+
+                var basePath: ?[]const u8 = null;
+                var filter: ?FilterKind = null;
+                var take: ?usize = null;
+                var runOnly: ?bool = null;
+                var filterSingle: ?[]const u8 = null;
+                while (try self.eatTag(lx.TokenTag.Dash) != null) {
+                    basePath = try self.eatOutputConfigPath(lx.OutputConfig.basePath);
+                    filter = try self.eatOutputConfigFilter(lx.OutputConfig.filter);
+                    take = try self.eatOutputConfigNumber(lx.OutputConfig.take);
+                    runOnly = try self.eatOutputConfigParam(lx.OutputConfig.runOnly);
+                    filterSingle = try self.eatOutputConfigText(lx.OutputConfig.filterSingle);
+                }
+
+                return .{
+                    .format = format.value.output_format,
+                    .basePath = basePath,
+                    .filter = filter,
+                    .take = take,
+                    .runOnly = runOnly,
+                    .filterSingle = filterSingle,
+                };
             } else {
-                break;
+                something_else = true;
             }
         }
-    }
-
-    const CommandFields = std.meta.fields(Command);
-    const FilterFields = std.meta.fields(Filter);
-
-    fn nextToken(self: *Lexer) !?Token {
-        self.skipWhitespace();
-        if (self.inext > self.text.len) {
-            return null;
-        }
-
-        if (self.inext == self.text.len) {
-            self.inext += 1;
-            return .{
-                .tag = TokenTag.Eof,
-                .line = self.line_no,
-                .column = self.column_no,
-                .value = undefined,
-            };
-        }
-
-        if (self.peekNextChar()) |char| {
-            if (char == ':') {
-                self.inext += 1;
-                self.column_no += 1;
-                return .{
-                    .tag = TokenTag.Colon,
-                    .line = self.line_no,
-                    .column = self.column_no - 1,
-                    .value = .{ .char = ':' },
-                };
-            }
-
-            if (char == '=') {
-                self.inext += 1;
-                self.column_no += 1;
-                return .{
-                    .tag = TokenTag.Equals,
-                    .line = self.line_no,
-                    .column = self.column_no - 1,
-                    .value = .{ .char = '=' },
-                };
-            }
-
-            if (char == '-') {
-                self.inext += 1;
-                self.column_no += 1;
-                return .{
-                    .tag = TokenTag.Dash,
-                    .line = self.line_no,
-                    .column = self.column_no - 1,
-                    .value = .{ .char = '-' },
-                };
-            }
-
-            if (char == '.') {
-                self.inext += 1;
-                self.column_no += 1;
-                return .{
-                    .tag = TokenTag.Dot,
-                    .line = self.line_no,
-                    .column = self.column_no - 1,
-                    .value = .{ .char = '.' },
-                };
-            }
-
-            if (char == '/') {
-                self.inext += 1;
-                self.column_no += 1;
-                return .{
-                    .tag = TokenTag.PathJoin,
-                    .line = self.line_no,
-                    .column = self.column_no - 1,
-                    .value = .{ .char = '/' },
-                };
-            }
-        }
-
-        const id: usize = findid: {
-            var base: usize = 1;
-            var iid: usize = 0;
-            while (self.peekNextChar()) |char| {
-                if (std.ascii.isDigit(char)) {
-                    iid += (char - '0') * base;
-                    base *= 10;
-
-                    self.inext += 1;
-                    self.column_no += 1;
-                } else {
-                    break;
-                }
-            }
-
-            break :findid iid;
-        };
-
-        if (id != 0) {
-            return .{
-                .tag = TokenTag.Number,
-                .line = self.line_no,
-                .column = self.column_no - 1,
-                .value = .{ .number = id },
-            };
-        }
-
-        const column_no = self.column_no;
-        inline for (CommandFields, 0..) |tag, i| {
-            if (std.mem.startsWith(u8, self.text[self.inext..], tag.name)) {
-                self.inext += tag.name.len;
-                self.column_no += tag.name.len;
-
-                return .{
-                    .tag = TokenTag.Command,
-                    .line = self.line_no,
-                    .column = column_no,
-                    .value = .{ .command = @enumFromInt(i) },
-                };
-            }
-        }
-
-        inline for (FilterFields, 0..) |tag, i| {
-            if (std.mem.startsWith(u8, self.text[self.inext..], tag.name)) {
-                self.inext += tag.name.len;
-                self.column_no += tag.name.len;
-
-                return .{
-                    .tag = TokenTag.Filter,
-                    .line = self.line_no,
-                    .column = column_no,
-                    .value = .{ .filter = @enumFromInt(i) },
-                };
-            }
-        }
-
-        const findword: []const u8 = findword: {
-            const start = self.inext;
-            while (self.peekNextChar()) |char| {
-                if (!std.ascii.isWhitespace(char)) {
-                    self.inext += 1;
-                    self.column_no += 1;
-                } else {
-                    break;
-                }
-            }
-            break :findword self.text[start..self.inext];
-        };
-
-        if (findword.len > 0) {
-            return .{
-                .tag = TokenTag.Word,
-                .line = self.line_no,
-                .column = column_no,
-                .value = .{ .text = findword },
-            };
-        }
-
         return errors.UnknownToken;
     }
 
-    pub fn toOwnedTokens(self: *Lexer, allocator: Allocator) ![]Token {
-        var tokens: std.ArrayList(Token) = .empty;
-        errdefer tokens.deinit(allocator);
+    fn eatOutputConfigPath(self: *Self, config: lx.OutputConfig) !?[]const u8 {
+        _ = self;
+        _ = config;
+        return null;
+    }
+    fn eatOutputConfigFilter(self: *Self, config: lx.OutputConfig) !?FilterKind {
+        _ = self;
+        _ = config;
+        return null;
+    }
+    fn eatOutputConfigNumber(self: *Self, config: lx.OutputConfig) !?usize {
+        _ = self;
+        _ = config;
+        return null;
+    }
+    fn eatOutputConfigParam(self: *Self, config: lx.OutputConfig) !?bool {
+        _ = self;
+        _ = config;
+        return null;
+    }
+    fn eatOutputConfigText(self: *Self, config: lx.OutputConfig) !?[]const u8 {
+        _ = self;
+        _ = config;
+        return null;
+    }
 
-        while (try self.nextToken()) |token| {
-            try tokens.append(allocator, token);
+    fn parseVariation(self: *Self, allocator: Allocator) !?VariationInRef {
+        _ = self;
+        _ = allocator;
+        return null;
+    }
+
+    fn parsePath(self: *Self, allocator: Allocator) ![]const u8 {
+        var result: ArrayList(u8) = .empty;
+        defer result.deinit(allocator);
+
+        var can_see_word = true;
+        while (can_see_word) {
+            const word = try self.eatWord();
+            try result.appendSlice(allocator, word);
+            can_see_word = false;
+
+            if (try self.eatTag(lx.TokenTag.Dot) != null) {
+                try result.append(allocator, '.');
+                can_see_word = true;
+            }
+
+            if (try self.eatTag(lx.TokenTag.PathJoin) != null) {
+                try result.append(allocator, '/');
+                can_see_word = true;
+            }
         }
 
-        return tokens.toOwnedSlice(allocator);
+        return try result.toOwnedSlice(allocator);
+    }
+
+    fn eatTag(self: *Self, tag: lx.TokenTag) !?lx.Token {
+        const next = self.tokens[self.inext];
+        if (next.tag != tag) {
+            return null;
+        }
+
+        self.inext += 1;
+        return self.tokens[self.inext - 1];
+    }
+
+    fn eatCommand(self: *Self, command: lx.Command) ?void {
+        const next = self.tokens[self.inext];
+        if (next.tag != lx.TokenTag.Command or next.value.command != command) {
+            return null;
+        }
+
+        self.inext += 1;
+    }
+
+    fn eatWord(self: *Self) ![]const u8 {
+        const next = self.tokens[self.inext];
+        if (next.tag != lx.TokenTag.Word) {
+            return errors.UnknownToken;
+        }
+
+        self.inext += 1;
+
+        return self.tokens[self.inext - 1].value.text;
+    }
+
+    pub fn toOwnedParse(self: *Self, allocator: Allocator) !Orch {
+        try self.parse(allocator);
+
+        var orchs: ArrayList(Db) = .empty;
+        errdefer orchs.deinit(allocator);
+
+        for (self.dbs.items) |dbs| {
+            var variations: ArrayList(Variation) = .empty;
+            errdefer variations.deinit(allocator);
+
+            for (dbs.variation.off..dbs.variation.off + dbs.variation.len) |i| {
+                const inref = self.variations.items[i];
+
+                const output =
+                    if (inref.output) |ref| self.outputs.items[ref] else null;
+
+                const variation = Variation{
+                    .name = inref.name,
+                    .script_path = inref.script_path,
+                    .output = output,
+                    .unify = self.unifies.items[inref.unify.off .. inref.unify.off + inref.unify.len],
+                };
+
+                try variations.append(allocator, variation);
+            }
+
+            const db = Db{
+                .db_path = dbs.db_path,
+                .output = self.outputs.items[dbs.output],
+                .variation = try variations.toOwnedSlice(allocator),
+            };
+            try orchs.append(allocator, db);
+        }
+
+        return .{ .dbs = try orchs.toOwnedSlice(allocator) };
     }
 };
 
-test "basic usage" {
+test "basic parser usage" {
     const ally = testing.allocator;
 
-    var lexer = Lexer.init(
-        \\
-        \\run: scripts/variation1.gof
+    var parser = try Parser.init(ally,
         \\db: data/athousand_sorted.csv
-        \\output: .output
-        \\- filter: fullMatch
-        \\- take: 15
-        \\- runOnly
-        \\variation: 
-        \\== rook king
-        \\: scripts/variation2.gof
-        \\: scripts/variation3.gof
-        \\: scripts/variation4.gof
-        \\run: scripts/script1.gof
-        \\db: data/athousand_sorted.csv
-        \\output: scripts/output/script1.csv
-        \\- filter: fullMatch
-        \\run: scripts/script2.gof
-        \\db: scripts/output/script1.csv
-        \\output: scripts/script2.csv
-        \\- filter: fullMatch
-        \\- format: csv
-    );
-
-    const tokens = try lexer.toOwnedTokens(ally);
-    defer ally.free(tokens);
-}
-
-pub const Db = struct { db_path: []const u8, output: Output, variation: []Variation };
-
-pub const Variation = struct {
-    script_path: []const u8,
-    output: ?Output,
-};
-
-pub const FilterKind = enum { fullMatch };
-
-pub const Output = struct {
-    basePath: ?[]const u8,
-    extension: []const u8,
-    filter: ?[]FilterKind,
-    take: ?usize,
-    runOnly: ?bool,
-};
-
-pub const Parser = struct {};
-
-test "basic usage" {
-    const ally = testing.allocator;
-
-    const parser = Parser.init(ally,
-        \\ db: data/athousand_sorted.csv
-        \\- output: .output
-        \\   - basePath: scripts/output/
-        \\   - filter: fullMatch
-        \\   - take: 15
-        \\   - runOnly
-        \\variation: 
-        \\  : scripts/variation1.gof
-        \\      - output: .output
+        \\   output:
+        \\      preview:
+        \\         - basePath: scripts/output/
+        \\         - filter: fullMatch
+        \\         - filterSingle: 0f1ave
+        \\         - skip: 10
+        \\         - take: 15
+        \\         - runOnly
+        \\      db:
+        \\         - basePath: scripts/output/
         \\         - filter: fullMatch
         \\         - take: 15
         \\         - runOnly
-        \\  : scripts/variation2.gof
-        \\  == rook king
-        \\  : scripts/variation3.gof
-        \\  : scripts/variation4.gof
+        \\   variation: 
+        \\     mainline: scripts/variation1.gof
+        \\         output:
+        \\           preview:
+        \\            - filter: fullMatch
+        \\            - take: 15
+        \\            - runOnly
+        \\     variation1: scripts/variation2.gof
+        \\         unify:
+        \\           rook: mainline.rook
+        \\           king: mainline.king
+        \\     variation2: scripts/variation3.gof
+        \\         unify:
+        \\           rook: mainline.rook
+        \\           king: mainline.king
+        \\           bishop: variation1.bishop
+        \\     variation3: scripts/variation4.gof
+        \\
     );
+
+    defer parser.deinit(ally);
+
+    var orch_file = try parser.toOwnedParse(ally);
+    defer orch_file.deinit(ally);
 }
+
+pub const Defaults = struct {
+    pub const output: Output = .{
+        .format = lx.OutputFormat.preview,
+        .basePath = null,
+        .filter = null,
+        .take = null,
+        .runOnly = null,
+        .filterSingle = null,
+    };
+};

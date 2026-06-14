@@ -4,16 +4,19 @@ db: data/athousand_sorted.csv
       preview:
          - basePath: scripts/output/
          - filter: fullMatch
+         - filterSingle: 0f1ave
+         - skip: 10
          - take: 15
          - runOnly
-      export:
+      db:
          - basePath: scripts/output/
          - filter: fullMatch
          - take: 15
          - runOnly
    variation: 
      mainline: scripts/variation1.gof
-         - output: .output
+         output:
+           preview:
             - filter: fullMatch
             - take: 15
             - runOnly
