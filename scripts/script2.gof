@@ -1,2 +1,1 @@
-rook_t *Checks king_o *becomes rook2
-king .isInBackrankWall
+bishop *Forks king *and rook
