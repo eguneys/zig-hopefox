@@ -2,7 +2,6 @@ input: data/athousand_sorted.csv
    output:
       preview:
          - basePath: scripts/output/
-         - filter: fullMatch
          - runOnly:
    variation: 
      mainline: scripts/script2.gof

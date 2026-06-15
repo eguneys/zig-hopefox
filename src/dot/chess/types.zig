@@ -120,6 +120,10 @@ pub const Piece = enum(u8) {
     pub fn fromColors(color: Color, role: Role) Piece {
         return @enumFromInt(@as(u8, @intFromEnum(color)) * 6 + @intFromEnum(role));
     }
+
+    pub fn promote(self: Piece, role: MovePromotionRole) Piece {
+        return Piece.fromColors(self.colorOf(), @enumFromInt(@intFromEnum(role)));
+    }
 };
 
 test "piece" {
@@ -1075,6 +1079,15 @@ pub const Position = packed struct(u512) {
         return captured;
     }
 
+    pub fn make_promotion_move(self: *Position, from: Square, to: Square, promotion: MovePromotionRole) ?Piece {
+        const from_piece = self.pieceOn(from).?;
+        const captured = self.pieceOn(to);
+        self.remove_piece(from);
+        self.remove_piece(to);
+        self.put_piece(to, from_piece.promote(promotion));
+        return captured;
+    }
+
     pub fn make_move(self: *Position, move: Move) ?Piece {
         switch (move.kind) {
             MoveType.Normal => {
@@ -1084,7 +1097,7 @@ pub const Position = packed struct(u512) {
                 return null;
             },
             MoveType.Promotion => {
-                return null;
+                return self.make_promotion_move(@enumFromInt(move.from), @enumFromInt(move.to), move.promotion);
             },
             MoveType.EnPassant => {
                 return null;

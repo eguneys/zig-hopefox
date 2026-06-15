@@ -191,6 +191,22 @@ test "print builder" {
     try std.testing.expectEqualStrings("e4 e6 Nf3 Nc6 Bc4 e5", builder.string.items);
 }
 
+test "promotion" {
+    const ally = std.testing.allocator;
+
+    var builder = try PrintBuilder.init(ally);
+    defer builder.deinit(ally);
+
+    builder.resetPosition(types.Fen.parse("8/P1R4p/5pk1/4q1p1/5P2/6KP/5QP1/7r b - - 0 51"));
+
+    try builder.appendMove(ally, Uci.move("e5c7").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("a7a8q").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("c7c3").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("a8f3").toMove(builder.position));
+
+    try std.testing.expectEqualStrings("Qxc7 a8=Q Qc3 Qf3", builder.string.items);
+}
+
 pub const Uci = struct {
     from: types.Square,
     to: types.Square,

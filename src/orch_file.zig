@@ -11,6 +11,7 @@ const DotUsage = @import("dot/usage2.zig").DotUsage;
 const dfile = @import("db_file.zig");
 const chess = @import("dot/chess/types.zig");
 const san = @import("dot/chess/san.zig");
+const log = @import("dot/logs.zig");
 
 const errors = error{InvalidPath};
 

@@ -15,6 +15,7 @@ pub const OutputFormat = enum {
 };
 
 pub const FilterKind = enum {
+    negativeMatch,
     fullMatch,
     single,
 };
