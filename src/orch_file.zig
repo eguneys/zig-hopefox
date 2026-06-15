@@ -111,12 +111,6 @@ pub const DbVariationWriter = struct {
                 }
             }
 
-            if (append_newline) _ = try writer.interface.write("\n");
-            append_newline = true;
-            _ = try writer.interface.write("https://lichess.org/training/");
-            _ = try writer.interface.write(&meta_id);
-            _ = try writer.interface.write("\n");
-
             const position = try db_reader.readPosition(i);
             dot.runner.runOnPosition(allocator, position) catch {
                 _ = try writer.interface.write("Error running position ");
@@ -130,6 +124,11 @@ pub const DbVariationWriter = struct {
                     continue;
                 }
             }
+            if (append_newline) _ = try writer.interface.write("\n");
+            append_newline = true;
+            _ = try writer.interface.write("https://lichess.org/training/");
+            _ = try writer.interface.write(&meta_id);
+            _ = try writer.interface.write("\n");
 
             const output = dot.printLines(allocator) catch {
                 _ = try writer.interface.write("Error writing output ");

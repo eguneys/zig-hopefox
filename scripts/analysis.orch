@@ -2,7 +2,7 @@ input: data/test_b_forks_kr.csv
    output:
       preview:
          - basePath: scripts/output/hello
-         - take: 30
+         - take: 300
          - filter: fullMatch
          - runOnly:
    variation: 
