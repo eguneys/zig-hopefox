@@ -82,6 +82,7 @@ pub const Matcher = struct {
     }
 
     fn dispatch_checks(allocator: Allocator, history: *History, slice: Slice, star: par.Becomes) !void {
+        const checks_symbol = history.program.symbols[star.action.tag];
         const from_symbol = history.program.symbols[star.from];
         const to_symbol = history.program.symbols[star.to];
         const checked_symbol = history.program.symbols[star.action.one];
@@ -102,7 +103,7 @@ pub const Matcher = struct {
                 var bb_checked2 = bb_checked
                     .bitand(Symbols.bitboard(checked_symbol, position));
                 while (bb_checked2.next()) |sq_checked| {
-                    const aa_checked = Symbols.checks(from_symbol, sq_from, sq_checked, position.occupied());
+                    const aa_checked = Symbols.checks(from_symbol, sq_from, sq_checked, position.occupied(), checks_symbol);
                     var bb_to2 = bb_to
                         .bitand(aa_checked);
                     while (bb_to2.next()) |sq_to| {
@@ -216,7 +217,7 @@ pub const Symbols = struct {
         };
     }
 
-    fn checks(symbol: par.Symbol, from: chess.Square, check: chess.Square, occupied: chess.Bitboard) chess.Bitboard {
+    fn checks(symbol: par.Symbol, from: chess.Square, check: chess.Square, occupied: chess.Bitboard, checks_symbol: par.Symbol) chess.Bitboard {
         var bb_to = switch (symbol.identity.tag) {
             lx.SymbolTag.bishop => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.Diagonal),
             lx.SymbolTag.rook => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.Straight),
@@ -246,7 +247,10 @@ pub const Symbols = struct {
             }
         }
 
-        return result;
+        return if (checks_symbol.props.vacant)
+            result.bitdiff(occupied)
+        else
+            result;
     }
 };
 

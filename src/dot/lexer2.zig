@@ -31,6 +31,7 @@ pub const SymbolIdentity = struct { tag: SymbolTag, id: usize };
 pub const SymbolProperties = struct {
     turn: bool = false,
     opponent: bool = false,
+    vacant: bool = false,
 };
 
 pub const Symbol = struct { identity: SymbolIdentity, props: SymbolProperties };
@@ -157,6 +158,11 @@ pub const Lexer = struct {
                             },
                             'o' => {
                                 props.opponent = true;
+                                self.inext += 1;
+                                self.column_no += 1;
+                            },
+                            'v' => {
+                                props.vacant = true;
                                 self.inext += 1;
                                 self.column_no += 1;
                             },

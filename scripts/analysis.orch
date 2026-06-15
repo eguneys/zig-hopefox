@@ -1,8 +1,7 @@
 input: data/athousand_sorted.csv
    output:
       preview:
-         - basePath: scripts/output/hello
-         - take: 300
+         - basePath: scripts/output/
          - filter: fullMatch
          - runOnly:
    variation: 

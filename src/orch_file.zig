@@ -62,16 +62,16 @@ pub const DbVariationWriter = struct {
 
         if (variation.output) |outputs| {
             for (outputs) |output| {
-                try DbVariationWriter.writeOutput(io, allocator, &db_reader, script_file, output);
+                try DbVariationWriter.writeOutput(io, allocator, &db_reader, script_file, output, variation.name);
             }
         }
         for (db.output) |output| {
-            try DbVariationWriter.writeOutput(io, allocator, &db_reader, script_file, output);
+            try DbVariationWriter.writeOutput(io, allocator, &db_reader, script_file, output, variation.name);
         }
     }
 
-    fn writeOutput(io: std.Io, allocator: Allocator, db_reader: *dfile.DbReader, script_file: ReadFile, output: orch.Output) !void {
-        const output_path = try DbVariationWriter.outputFormatPathJoin(allocator, output.basePath orelse "", output.format);
+    fn writeOutput(io: std.Io, allocator: Allocator, db_reader: *dfile.DbReader, script_file: ReadFile, output: orch.Output, variation_name: []const u8) !void {
+        const output_path = try DbVariationWriter.outputFormatPathJoin(allocator, output.basePath orelse "", output.format, variation_name);
         defer allocator.free(output_path);
 
         var output_buffer: [OrchFile.OutputFileCapacity]u8 = undefined;
@@ -159,11 +159,12 @@ pub const DbVariationWriter = struct {
 
         try writer.end();
     }
-    fn outputFormatPathJoin(allocator: Allocator, base_path: []const u8, format: orch_lx.OutputFormat) ![]const u8 {
-        var result = try ArrayList(u8).initCapacity(allocator, base_path.len + 10);
+    fn outputFormatPathJoin(allocator: Allocator, base_path: []const u8, format: orch_lx.OutputFormat, variation_name: []const u8) ![]const u8 {
+        var result = try ArrayList(u8).initCapacity(allocator, base_path.len + variation_name.len + 30);
         errdefer result.deinit(allocator);
 
         try result.appendSlice(allocator, base_path);
+        try result.appendSlice(allocator, variation_name);
         switch (format) {
             orch_lx.OutputFormat.csv => try result.appendSlice(allocator, ".csv"),
             orch_lx.OutputFormat.db => try result.appendSlice(allocator, ".db"),
