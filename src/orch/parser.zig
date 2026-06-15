@@ -529,6 +529,7 @@ test "regression1" {
         \\   output:
         \\      preview:
         \\         - filter: fullMatch
+        \\         - filterSingle: _i0123
         \\         - take: 15
         \\         - runOnly:
         \\   variation: 
@@ -539,4 +540,6 @@ test "regression1" {
 
     var orch_file = try parser.toOwnedParse(ally);
     defer orch_file.deinit(ally);
+
+    try testing.expectEqualStrings("_i0123", orch_file.dbs[0].output[0].filterSingle.?);
 }

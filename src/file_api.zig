@@ -10,7 +10,7 @@ pub const ReadFile = struct {
 
     pub fn readCapacity(io: std.Io, allocator: std.mem.Allocator, path: []const u8, capacity: usize) !ReadFile {
         _ = capacity;
-        const buffer = try allocator.alloc(u8, 4096);
+        const buffer = try allocator.alloc(u8, 40096);
         var result: ReadFile = .{ .buffer = buffer, .content = undefined };
         const script_file = try (std.Io.Dir.cwd()
             .openFile(io, path, .{ .mode = .read_only }));

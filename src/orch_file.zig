@@ -13,27 +13,28 @@ const dfile = @import("db_file.zig");
 const errors = error{InvalidPath};
 
 pub const OrchFile = struct {
-    pub const OrchFileCapacity = 2048;
-    pub const ScriptFileCapacity = 4096;
-    pub const OutputFileCapacity = 4096;
+    pub const OrchFileCapacity: usize = 20048;
+    pub const ScriptFileCapacity: usize = 40096;
+    pub const OutputFileCapacity: usize = 60096;
 
+    orch_file: ReadFile,
     orch: Orch,
     io: std.Io,
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
         self.orch.deinit(allocator);
+        self.orch_file.deinit(allocator);
     }
 
     pub fn init(io: std.Io, allocator: Allocator, orch_path: []const u8) !Self {
-        var orch_file = try files.ReadFile.readCapacity(io, allocator, orch_path, OrchFile.OrchFileCapacity);
-        defer orch_file.deinit(allocator);
+        const orch_file = try files.ReadFile.readCapacity(io, allocator, orch_path, OrchFile.OrchFileCapacity);
 
         var orch_parser = try orch.Parser.init(allocator, orch_file.content);
         defer orch_parser.deinit(allocator);
 
         try orch_parser.parse(allocator);
 
-        return .{ .io = io, .orch = try orch_parser.toOwnedParse(allocator) };
+        return .{ .io = io, .orch_file = orch_file, .orch = try orch_parser.toOwnedParse(allocator) };
     }
 
     const Self = @This();
@@ -90,8 +91,9 @@ pub const DbVariationWriter = struct {
         if (skip) |s| start = s;
         if (take) |t| end = start + t;
 
+        var append_newline = false;
+
         for (start..end) |i| {
-            if (i > 0) _ = try writer.interface.write("\n");
             const meta = try db_reader.readMeta(i);
             const meta_id: [5]u8 = @bitCast(meta.id);
 
@@ -101,6 +103,8 @@ pub const DbVariationWriter = struct {
                 }
             }
 
+            if (append_newline) _ = try writer.interface.write("\n");
+            append_newline = true;
             _ = try writer.interface.write("https://lichess.org/training/");
             _ = try writer.interface.write(&meta_id);
             _ = try writer.interface.write("\n");
