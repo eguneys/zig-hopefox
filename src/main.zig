@@ -1,6 +1,5 @@
 const std = @import("std");
-const BuildDb = @import("db_file.zig").BuildDb;
-const LiveFile = @import("live_file.zig").LiveFile;
+const OrchFile = @import("orch_file.zig").OrchFile;
 
 pub fn main(init: std.process.Init) !void {
     var stdout = std.Io.File.stdout().writer(init.io, &.{});
@@ -9,18 +8,9 @@ pub fn main(init: std.process.Init) !void {
     var gpa: std.heap.DebugAllocator(.{}) = .init;
     const allocator = gpa.allocator();
 
-    const csv_path = "data/athousand_sorted.csv";
+    var orch_file = try OrchFile.init(init.io, allocator, "scripts/analysis.orch");
 
-    const db_path = "data/athousand.pos.db";
-    const meta_path = "data/athousand.meta.db";
-
-    try BuildDb.read_csv_to_build_db_if_doesnt_exists(init.io, csv_path, db_path, meta_path);
-
-    const script_path = "scripts/script1.gof";
-    const output_path = "scripts/script1.output";
-    var live = try LiveFile.open(init.io, db_path, meta_path, script_path, output_path);
-
-    try live.loop(init.io, allocator, &stdout);
+    try orch_file.step(allocator);
 }
 
 test "imports" {

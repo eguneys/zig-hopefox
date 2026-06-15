@@ -24,12 +24,16 @@ pub const OrchFile = struct {
         self.orch.deinit(allocator);
     }
 
-    pub fn init(io: std.Io, allocator: Allocator, orch_path: []const u8) Self {
-        const orch_file = files.ReadFile.readCapacity(io, orch_path, OrchFile.OrchFileCapacity);
-        const orch_parser = try orch.Parser.init(allocator, orch_file.contents);
-        orch_parser.parse(allocator);
+    pub fn init(io: std.Io, allocator: Allocator, orch_path: []const u8) !Self {
+        var orch_file = try files.ReadFile.readCapacity(io, allocator, orch_path, OrchFile.OrchFileCapacity);
+        defer orch_file.deinit(allocator);
 
-        return .{ .io = io, .orch = orch_parser.toOwnedParse(allocator) };
+        var orch_parser = try orch.Parser.init(allocator, orch_file.content);
+        defer orch_parser.deinit(allocator);
+
+        try orch_parser.parse(allocator);
+
+        return .{ .io = io, .orch = try orch_parser.toOwnedParse(allocator) };
     }
 
     const Self = @This();
@@ -37,7 +41,7 @@ pub const OrchFile = struct {
     pub fn step(self: *Self, allocator: Allocator) !void {
         for (self.orch.dbs) |db| {
             for (db.variation) |variation| {
-                DbVariationWriter.write(self.io, allocator, db, variation);
+                try DbVariationWriter.write(self.io, allocator, db, variation);
             }
         }
     }
@@ -45,36 +49,36 @@ pub const OrchFile = struct {
 
 pub const DbVariationWriter = struct {
     fn write(io: std.Io, allocator: Allocator, db: orch.Db, variation: orch.Variation) !void {
-        const script_file = ReadFile.readCapacity(io, variation.script_path, OrchFile.ScriptFileCapacity);
-        const db_reader = AllDbReaders.initFromPath(io, allocator, db.db_path);
+        var script_file = try ReadFile.readCapacity(io, allocator, variation.script_path, OrchFile.ScriptFileCapacity);
+        defer script_file.deinit(allocator);
+
+        var db_reader = try AllDbReaders.initFromPath(io, allocator, db.db_path);
 
         if (variation.output) |outputs| {
             for (outputs) |output| {
-                try DbVariationWriter.writeOutput(io, allocator, db_reader, script_file, output);
+                try DbVariationWriter.writeOutput(io, allocator, &db_reader, script_file, output);
             }
         } else {
             for (db.output) |output| {
-                try DbVariationWriter.writeOutput(io, allocator, db_reader, script_file, output);
+                try DbVariationWriter.writeOutput(io, allocator, &db_reader, script_file, output);
             }
         }
     }
 
-    fn writeOutput(io: std.Io, allocator: Allocator, db_reader: dfile.DbReader, script_file: ReadFile, output: orch.Output) !void {
-        const output_path = DbVariationWriter.outputFormatPathJoin(allocator, output.basePath, output.format);
+    fn writeOutput(io: std.Io, allocator: Allocator, db_reader: *dfile.DbReader, script_file: ReadFile, output: orch.Output) !void {
+        const output_path = try DbVariationWriter.outputFormatPathJoin(allocator, output.basePath orelse "", output.format);
 
-        const output_buffer: [OrchFile.OutputFileCapacity]u8 = undefined;
+        var output_buffer: [OrchFile.OutputFileCapacity]u8 = undefined;
         const output_file = try std.Io.Dir.cwd().createFile(io, output_path, .{});
-        const output_writer = output_file.writer(io, &output_buffer);
+        var output_writer = output_file.writer(io, &output_buffer);
 
-        try DbVariationWriter.processContent(allocator, db_reader, script_file.content, output.skip, output.take, output.filterSingle, output_writer);
+        try DbVariationWriter.processContent(allocator, db_reader, script_file.content, output.skip, output.take, output.filterSingle, &output_writer);
     }
 
-    fn processContent(allocator: Allocator, db_reader: dfile.DbReader, script: []const u8, skip: ?usize, take: ?usize, single: ?[]const u8, writer: *std.Io.Writer) !void {
-        const usage = try DotUsage.init(allocator, script);
-
+    fn processContent(allocator: Allocator, db_reader: *dfile.DbReader, script: []const u8, skip: ?usize, take: ?usize, single: ?[]const u8, writer: *std.Io.File.Writer) !void {
         var dot = DotUsage.init(allocator, script) catch {
             std.debug.print("couldn't parse gof script", .{});
-            try writer.write("couldn't parse gof script");
+            _ = try writer.interface.write("couldn't parse gof script");
             try writer.end();
             return;
         };
@@ -89,23 +93,23 @@ pub const DbVariationWriter = struct {
             const meta = try db_reader.readMeta(i);
             const meta_id: [5]u8 = @bitCast(meta.id);
 
-            if (single) {
-                if (!std.mem.containsAtLeast(u8, single, 1, meta_id, single)) {
+            if (single) |single_id| {
+                if (!std.mem.containsAtLeast(u8, single_id, 1, &meta_id)) {
                     continue;
                 }
             }
 
             const position = try db_reader.readPosition(i);
-            usage.runner.runOnPosition(allocator, position) catch {
+            dot.runner.runOnPosition(allocator, position) catch {
                 _ = try writer.interface.write("Error running position ");
-                _ = try writer.interface.write(meta_id);
+                _ = try writer.interface.write(&meta_id);
                 _ = try writer.interface.write("\n");
                 return;
             };
 
             const output = dot.printLines(allocator) catch {
                 _ = try writer.interface.write("Error writing output ");
-                _ = try writer.interface.write(meta_id);
+                _ = try writer.interface.write(&meta_id);
                 _ = try writer.interface.write("\n");
                 return;
             };
@@ -113,17 +117,17 @@ pub const DbVariationWriter = struct {
             _ = try writer.interface.write(output);
         }
     }
-    fn outputFormatPathJoin(allocator: Allocator, base_path: []const u8, format: orch_lx.OutputFormat) []const u8 {
-        const result = try ArrayList(u8).initCapacity(base_path.len + 10);
-
+    fn outputFormatPathJoin(allocator: Allocator, base_path: []const u8, format: orch_lx.OutputFormat) ![]const u8 {
+        var result = try ArrayList(u8).initCapacity(allocator, base_path.len + 10);
         errdefer result.deinit(allocator);
-        result.appendSlice(base_path);
+
+        try result.appendSlice(allocator, base_path);
         switch (format) {
-            orch_lx.OutputFormat.csv => result.appendSlice(".csv"),
-            orch_lx.OutputFormat.db => result.appendSlice(".db"),
-            orch_lx.OutputFormat.preview => result.appendSlice(".output"),
+            orch_lx.OutputFormat.csv => try result.appendSlice(allocator, ".csv"),
+            orch_lx.OutputFormat.db => try result.appendSlice(allocator, ".db"),
+            orch_lx.OutputFormat.preview => try result.appendSlice(allocator, ".output"),
         }
-        return result.toOwnedSlice(allocator);
+        return try result.toOwnedSlice(allocator);
     }
 };
 
@@ -142,16 +146,24 @@ pub const AllDbReaders = struct {
         const name = path[0..extension_start];
         const extension = path[extension_start + 1 ..];
 
-        const db_file = try std.mem.join(allocator, ".", name, "db");
-        const meta_file = try std.mem.join(allocator, ".", name, "meta");
+        const db_file = try std.mem.join(allocator, ".", &[2][]const u8{ name, "db" });
+        defer allocator.free(db_file);
+        const meta_file = try std.mem.join(allocator, ".", &[2][]const u8{ name, "meta" });
+        defer allocator.free(meta_file);
 
-        if (std.mem.eql("csv", extension)) {
+        if (std.mem.eql(u8, "csv", extension)) {
             const csv_file = path;
-            dfile.BuildDb.read_csv_to_build_db_if_doesnt_exists(io, csv_file, db_file, meta_file);
+            try dfile.BuildDb.read_csv_to_build_db_if_doesnt_exists(io, csv_file, db_file, meta_file);
         }
-        if (std.mem.eql("db", extension)) {}
+        if (std.mem.eql(u8, "db", extension)) {}
         return dfile.DbReader.open(io, db_file, meta_file);
     }
 };
 
-test "basic usage" {}
+test "basic usage" {
+    const ally = std.testing.allocator;
+    var file = try OrchFile.init(std.testing.io, ally, "scripts/analysis.orch");
+    defer file.deinit(ally);
+
+    try file.step(ally);
+}

@@ -520,3 +520,23 @@ pub const Defaults = struct {
         .filterSingle = null,
     };
 };
+
+test "regression1" {
+    const ally = testing.allocator;
+
+    var parser = try Parser.init(ally,
+        \\input: data/athousand_sorted.csv
+        \\   output:
+        \\      preview:
+        \\         - filter: fullMatch
+        \\         - take: 15
+        \\         - runOnly:
+        \\   variation: 
+        \\     mainline: scripts/script1.gof
+    );
+
+    defer parser.deinit(ally);
+
+    var orch_file = try parser.toOwnedParse(ally);
+    defer orch_file.deinit(ally);
+}

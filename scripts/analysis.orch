@@ -1,23 +1,9 @@
-run: scripts/variation1.gof
-db: data/athousand_sorted.csv
-output: .output
-   - filter: full-match
-   - take: 15
-   - run-only
-variation: 
-  == rook king
-  : scripts/variation2.gof
-  : scripts/variation3.gof
-  : scripts/variation4.gof
-
-run: scripts/script1.gof
-db: data/athousand_sorted.csv
-output: scripts/output/script1.csv
-   - filter: full-match
-
-
-run: scripts/script2.gof
-db: scripts/output/script1.csv
-output: scripts/script2.csv
-  - filter: full-match
-  - format: csv
+input: data/athousand_sorted.csv
+   output:
+      preview:
+         - filter: fullMatch
+         - take: 15
+         - runOnly:
+   variation: 
+     mainline: scripts/script1.gof
+ 
