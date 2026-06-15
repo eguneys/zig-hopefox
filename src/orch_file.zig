@@ -58,15 +58,15 @@ pub const DbVariationWriter = struct {
             for (outputs) |output| {
                 try DbVariationWriter.writeOutput(io, allocator, &db_reader, script_file, output);
             }
-        } else {
-            for (db.output) |output| {
-                try DbVariationWriter.writeOutput(io, allocator, &db_reader, script_file, output);
-            }
+        }
+        for (db.output) |output| {
+            try DbVariationWriter.writeOutput(io, allocator, &db_reader, script_file, output);
         }
     }
 
     fn writeOutput(io: std.Io, allocator: Allocator, db_reader: *dfile.DbReader, script_file: ReadFile, output: orch.Output) !void {
         const output_path = try DbVariationWriter.outputFormatPathJoin(allocator, output.basePath orelse "", output.format);
+        defer allocator.free(output_path);
 
         var output_buffer: [OrchFile.OutputFileCapacity]u8 = undefined;
         const output_file = try std.Io.Dir.cwd().createFile(io, output_path, .{});
@@ -82,6 +82,7 @@ pub const DbVariationWriter = struct {
             try writer.end();
             return;
         };
+        defer dot.deinit(allocator);
 
         var start: usize = 0;
         var end = db_reader.header.count;
@@ -90,6 +91,7 @@ pub const DbVariationWriter = struct {
         if (take) |t| end = start + t;
 
         for (start..end) |i| {
+            if (i > 0) _ = try writer.interface.write("\n");
             const meta = try db_reader.readMeta(i);
             const meta_id: [5]u8 = @bitCast(meta.id);
 
@@ -98,6 +100,10 @@ pub const DbVariationWriter = struct {
                     continue;
                 }
             }
+
+            _ = try writer.interface.write("https://lichess.org/training/");
+            _ = try writer.interface.write(&meta_id);
+            _ = try writer.interface.write("\n");
 
             const position = try db_reader.readPosition(i);
             dot.runner.runOnPosition(allocator, position) catch {
@@ -116,6 +122,8 @@ pub const DbVariationWriter = struct {
 
             _ = try writer.interface.write(output);
         }
+
+        try writer.end();
     }
     fn outputFormatPathJoin(allocator: Allocator, base_path: []const u8, format: orch_lx.OutputFormat) ![]const u8 {
         var result = try ArrayList(u8).initCapacity(allocator, base_path.len + 10);

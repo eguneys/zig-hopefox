@@ -1,6 +1,7 @@
 input: data/athousand_sorted.csv
    output:
       preview:
+         - basePath: scripts/output/
          - filter: fullMatch
          - take: 15
          - runOnly:

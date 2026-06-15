@@ -2,6 +2,7 @@ const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const ReadNumber = @import("tool.zig").ReadNumber;
 
 const errors = error{UnknownToken};
 
@@ -163,12 +164,10 @@ pub const Lexer = struct {
         }
 
         const id: usize = findid: {
-            var base: usize = 1;
-            var iid: usize = 0;
+            var number: ReadNumber = .{};
             while (self.peekNextChar()) |char| {
                 if (std.ascii.isDigit(char)) {
-                    iid += (char - '0') * base;
-                    base *= 10;
+                    number.appendDigit(char - '0');
 
                     self.inext += 1;
                     self.column_no += 1;
@@ -177,7 +176,7 @@ pub const Lexer = struct {
                 }
             }
 
-            break :findid iid;
+            break :findid number.toOwnedNumber();
         };
 
         if (id != 0) {
@@ -277,6 +276,8 @@ pub const Lexer = struct {
             };
         }
 
+        std.debug.print("{d} {d} {c} {s} sadf", .{ self.column_no, self.line_no, self.text[self.inext], "hey" });
+
         return errors.UnknownToken;
     }
 
@@ -296,27 +297,16 @@ test "basic usage" {
     const ally = testing.allocator;
 
     var lexer = Lexer.init(
-        \\
-        \\run: scripts/variation1.gof
-        \\db: data/athousand_sorted.csv
-        \\output: .output
-        \\- filter: fullMatch
-        \\- take: 15
-        \\- runOnly
-        \\variation: 
-        \\== rook king
-        \\: scripts/variation2.gof
-        \\: scripts/variation3.gof
-        \\: scripts/variation4.gof
-        \\run: scripts/script1.gof
-        \\db: data/athousand_sorted.csv
-        \\output: scripts/output/script1.csv
-        \\- filter: fullMatch
-        \\run: scripts/script2.gof
-        \\db: scripts/output/script1.csv
-        \\output: scripts/script2.csv
-        \\- filter: fullMatch
-        \\- format: csv
+        \\input: data/athousand_sorted.csv
+        \\   output:
+        \\      preview:
+        \\         - basePath: scripts/output/
+        \\         - filter: fullMatch
+        \\         - take: 15
+        \\         - runOnly:
+        \\   variation: 
+        \\     mainline: scripts/script1.gof
+        \\ 
     );
 
     const tokens = try lexer.toOwnedTokens(ally);
