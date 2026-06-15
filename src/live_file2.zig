@@ -24,7 +24,6 @@ pub const LiveOrchFile = struct {
     const Self = @This();
 
     pub fn loop(self: *Self, io: std.Io, allocator: std.mem.Allocator) !void {
-        try self.orch_file.step(allocator);
         // 2. Continuous loop
         while (true) {
             // 3. Stat the file to check metadata

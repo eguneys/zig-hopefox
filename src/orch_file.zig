@@ -40,6 +40,7 @@ pub const OrchFile = struct {
     const Self = @This();
 
     pub fn step(self: *Self, allocator: Allocator) !void {
+        std.debug.print("{d}", .{self.orch.dbs.len});
         for (self.orch.dbs) |db| {
             for (db.variation) |variation| {
                 try DbVariationWriter.write(self.io, allocator, db, variation);

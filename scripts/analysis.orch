@@ -3,6 +3,7 @@ input: data/athousand_sorted.csv
       preview:
          - basePath: scripts/output/
          - filter: fullMatch
+         - filterSingle: _01Vbe
          - runOnly:
    variation: 
      mainline: scripts/script1.gof
