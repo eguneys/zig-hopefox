@@ -23,3 +23,7 @@ pub fn move(a: cs.Move) void {
 pub fn d(a: usize) void {
     std.debug.print("D:{d} ", .{a});
 }
+
+pub fn str(a: []const u8) void {
+    std.debug.print("{s} ", .{a});
+}

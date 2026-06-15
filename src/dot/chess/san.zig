@@ -52,7 +52,7 @@ pub const San = struct {
     ambiguity: bool,
     piece: types.Piece,
     promotion: ?types.MovePromotionRole,
-    castling: ?types.Castling,
+    castling: ?types.CastlingRights,
     capture: ?types.Square,
     check: bool,
     checkmate: bool,
@@ -70,11 +70,40 @@ pub const San = struct {
             .to = to,
             .ambiguity = false,
             .promotion = if (move.kind == types.MoveType.Promotion) move.promotion else null,
-            .castling = null,
+            .castling = if (move.kind == types.MoveType.Castling)
+                CastlingFind.fromMove(position, move)
+            else
+                null,
             .capture = if (position.pieceOn(to) != null) to else null,
             .check = check,
             .checkmate = false,
         };
+    }
+};
+
+pub const CastlingFind = struct {
+    pub fn fromMove(position: types.Position, move: types.Move) ?types.CastlingRights {
+        if (move.kind == types.MoveType.Castling) {
+            return CastlingFind.fromPosition(position, @enumFromInt(move.from), @enumFromInt(move.to));
+        }
+        return null;
+    }
+
+    pub fn fromPosition(position: types.Position, from: types.Square, to: types.Square) ?types.CastlingRights {
+        if (from.king_distance(to) == 2) {
+            if (position.bb_king.has(from)) {
+                return if (@intFromEnum(from.toFile()) < @intFromEnum(to.toFile()))
+                    if (position.bb_white.has(from))
+                        types.CastlingRights.whiteCastles(types.CastlingSide.King)
+                    else
+                        types.CastlingRights.blackCastles(types.CastlingSide.King)
+                else if (position.bb_white.has(from))
+                    types.CastlingRights.whiteCastles(types.CastlingSide.Queen)
+                else
+                    types.CastlingRights.blackCastles(types.CastlingSide.Queen);
+            }
+        }
+        return null;
     }
 };
 
@@ -100,6 +129,10 @@ pub const Prints = struct {
     }
 
     pub fn fromSan(self: Prints, san: San) []const u8 {
+        if (san.castling) |castling| {
+            return if (castling.white_queenside or castling.black_queenside) "O-O-O" else "O-O";
+        }
+
         var i: usize = 0;
         if (san.piece.roleOf() != types.Role.Pawn) {
             self.single[i] = types.Prints.role(san.piece.roleOf());
@@ -204,7 +237,24 @@ test "promotion" {
     try builder.appendMove(ally, Uci.move("c7c3").toMove(builder.position));
     try builder.appendMove(ally, Uci.move("a8f3").toMove(builder.position));
 
-    try std.testing.expectEqualStrings("Qxc7 a8=Q Qc3 Qf3", builder.string.items);
+    try std.testing.expectEqualStrings("Qxc7 a8=Q Qc3+ Qf3", builder.string.items);
+}
+
+test "castling" {
+    const ally = std.testing.allocator;
+
+    var builder = try PrintBuilder.init(ally);
+    defer builder.deinit(ally);
+
+    builder.resetPosition(types.Fen.parse("r3k2r/p1ppqp1p/4p1p1/3BQ3/8/2P5/2P2PPP/4R1K1 b kq - 0 24"));
+
+    //e8c8 e1b1 d8e8 d5b7 c8d8 b7a
+    try builder.appendMove(ally, Uci.move("e8c8").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("e1b1").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("d8e8").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("d5b7").toMove(builder.position));
+
+    try std.testing.expectEqualStrings("O-O-O Rb1 Re8 Bb7+", builder.string.items);
 }
 
 pub const Uci = struct {
@@ -262,9 +312,15 @@ pub const Uci = struct {
     }
 
     pub fn toMove(self: Uci, position: types.Position) types.Move {
-        _ = position;
-        const kind = if (self.promotion != null) types.MoveType.Promotion else types.MoveType.Normal;
+        const kind =
+            if (self.promotion != null)
+                types.MoveType.Promotion
+            else if (CastlingFind.fromPosition(position, self.from, self.to) != null)
+                types.MoveType.Castling
+            else
+                types.MoveType.Normal;
         const promotion = self.promotion orelse types.MovePromotionRole.Queen;
+
         return .{ .from = @intCast(@intFromEnum(self.from)), .to = @intCast(@intFromEnum(self.to)), .kind = kind, .promotion = promotion };
     }
 };

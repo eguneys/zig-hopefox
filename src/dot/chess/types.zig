@@ -1,7 +1,37 @@
 const std = @import("std");
 
-pub const File = enum(u8) { A, B, C, D, E, F, G, H };
-pub const Rank = enum(u8) { R1, R2, R3, R4, R5, R6, R7, R8 };
+pub const File = enum(u8) {
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+
+    pub fn distance(self: File, other: File) usize {
+        const a = @intFromEnum(self);
+        const b = @intFromEnum(other);
+        return if (a > b) a - b else b - a;
+    }
+};
+pub const Rank = enum(u8) {
+    R1,
+    R2,
+    R3,
+    R4,
+    R5,
+    R6,
+    R7,
+    R8,
+
+    pub fn distance(self: Rank, other: Rank) usize {
+        const a = @intFromEnum(self);
+        const b = @intFromEnum(other);
+        return if (a > b) a - b else b - a;
+    }
+};
 
 pub const Files = [8]File{ File.A, File.B, File.C, File.D, File.E, File.F, File.G, File.H };
 pub const Ranks = [8]Rank{ Rank.R1, Rank.R2, Rank.R3, Rank.R4, Rank.R5, Rank.R6, Rank.R7, Rank.R8 };
@@ -83,7 +113,18 @@ pub const Square = enum(u8) {
     pub fn fromCoord(file: File, rank: Rank) Square {
         return @enumFromInt(@intFromEnum(file) + @intFromEnum(rank) * 8);
     }
+
+    pub fn king_distance(self: Square, other: Square) usize {
+        const dx: usize = self.toFile().distance(other.toFile());
+        const dy: usize = self.toRank().distance(other.toRank());
+        return @max(dx, dy);
+    }
 };
+
+test "square king distance" {
+    try std.testing.expectEqual(7, Square.A1.king_distance(Square.H8));
+    try std.testing.expectEqual(5, Square.H8.king_distance(Square.C8));
+}
 
 pub const Squares = [64]Square{ Square.A1, Square.B1, Square.C1, Square.D1, Square.E1, Square.F1, Square.G1, Square.H1, Square.A2, Square.B2, Square.C2, Square.D2, Square.E2, Square.F2, Square.G2, Square.H2, Square.A3, Square.B3, Square.C3, Square.D3, Square.E3, Square.F3, Square.G3, Square.H3, Square.A4, Square.B4, Square.C4, Square.D4, Square.E4, Square.F4, Square.G4, Square.H4, Square.A5, Square.B5, Square.C5, Square.D5, Square.E5, Square.F5, Square.G5, Square.H5, Square.A6, Square.B6, Square.C6, Square.D6, Square.E6, Square.F6, Square.G6, Square.H6, Square.A7, Square.B7, Square.C7, Square.D7, Square.E7, Square.F7, Square.G7, Square.H7, Square.A8, Square.B8, Square.C8, Square.D8, Square.E8, Square.F8, Square.G8, Square.H8 };
 
@@ -122,7 +163,7 @@ pub const Piece = enum(u8) {
     }
 
     pub fn promote(self: Piece, role: MovePromotionRole) Piece {
-        return Piece.fromColors(self.colorOf(), @enumFromInt(@intFromEnum(role)));
+        return Piece.fromColors(self.colorOf(), @enumFromInt(@intFromEnum(role) + 1));
     }
 };
 
@@ -1088,12 +1129,28 @@ pub const Position = packed struct(u512) {
         return captured;
     }
 
+    pub fn make_castling_move(self: *Position, kingFrom: Square, kingTo: Square) void {
+        const from_king = self.getPiece(kingFrom);
+        const side = CastlingSide.fromKingTo(kingTo);
+        const rookToFile = if (side == CastlingSide.King) File.F else File.D;
+        const rookTo = Square.fromCoord(rookToFile, kingFrom.toRank());
+        const rookFromFile = if (side == CastlingSide.King) File.H else File.A;
+        const rookFrom = Square.fromCoord(rookFromFile, kingFrom.toRank());
+        const from_rook = self.getPiece(rookFrom);
+
+        self.remove_piece(kingFrom);
+        self.remove_piece(rookFrom);
+        self.put_piece(kingTo, from_king);
+        self.put_piece(rookTo, from_rook);
+    }
+
     pub fn make_move(self: *Position, move: Move) ?Piece {
         switch (move.kind) {
             MoveType.Normal => {
                 return self.make_normal_move(@enumFromInt(move.from), @enumFromInt(move.to));
             },
             MoveType.Castling => {
+                self.make_castling_move(@enumFromInt(move.from), @enumFromInt(move.to));
                 return null;
             },
             MoveType.Promotion => {
@@ -1229,7 +1286,7 @@ test "Fen" {
 
 pub const MoveType = enum(u2) { Normal, Castling, Promotion, EnPassant };
 
-pub const MovePromotionRole = enum(u2) { Queen, Knight, Rook, Bishop };
+pub const MovePromotionRole = enum(u2) { Queen, Rook, Bishop, Knight };
 
 pub const Move = packed struct(u16) {
     from: u6,
@@ -1326,9 +1383,30 @@ test "parses position" {
     ));
 }
 
-pub const Castling = packed struct(u4) {
-    white_kingside: bool,
-    white_queenside: bool,
-    black_kingside: bool,
-    black_queenside: bool,
+pub const CastlingSide = enum(u2) {
+    King,
+    Queen,
+
+    pub fn fromKingTo(kingTo: Square) CastlingSide {
+        return if (kingTo.toFile() == File.C) CastlingSide.Queen else CastlingSide.King;
+    }
+};
+
+pub const CastlingRights = packed struct(u4) {
+    white_kingside: bool = false,
+    white_queenside: bool = false,
+    black_kingside: bool = false,
+    black_queenside: bool = false,
+
+    pub fn full() CastlingRights {
+        return .{ .white_kingside = true, .white_queenside = true, .black_kingside = true, .black_queenside = true };
+    }
+
+    pub fn whiteCastles(side: CastlingSide) CastlingRights {
+        return .{ .white_kingside = side == CastlingSide.King, .white_queenside = side == CastlingSide.Queen };
+    }
+
+    pub fn blackCastles(side: CastlingSide) CastlingRights {
+        return .{ .black_kingside = side == CastlingSide.King, .black_queenside = side == CastlingSide.Queen };
+    }
 };

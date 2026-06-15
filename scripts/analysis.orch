@@ -1,8 +1,8 @@
-input: data/athousand_sorted.csv
+input: data/lichess_db_puzzle.csv
    output:
       preview:
          - basePath: scripts/output/
-         - filter: negativeMatch
+         - filter: fullMatch
          - runOnly:
    variation: 
      mainline: scripts/script2.gof
