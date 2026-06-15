@@ -17,6 +17,7 @@ pub const OrchFile = struct {
     pub const ScriptFileCapacity: usize = 40096;
     pub const OutputFileCapacity: usize = 60096;
 
+    mainline_script_path: []const u8,
     orch_file: ReadFile,
     orch: Orch,
     io: std.Io,
@@ -34,13 +35,14 @@ pub const OrchFile = struct {
 
         try orch_parser.parse(allocator);
 
-        return .{ .io = io, .orch_file = orch_file, .orch = try orch_parser.toOwnedParse(allocator) };
+        const script_path = orch_parser.variations.items[0].script_path;
+
+        return .{ .io = io, .orch_file = orch_file, .orch = try orch_parser.toOwnedParse(allocator), .mainline_script_path = script_path };
     }
 
     const Self = @This();
 
     pub fn step(self: *Self, allocator: Allocator) !void {
-        std.debug.print("{d}", .{self.orch.dbs.len});
         for (self.orch.dbs) |db| {
             for (db.variation) |variation| {
                 try DbVariationWriter.write(self.io, allocator, db, variation);

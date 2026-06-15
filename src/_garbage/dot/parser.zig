@@ -214,8 +214,6 @@ pub const ProgramBuilder = struct {
                 }
             }
 
-            std.debug.print("{d} {d}", .{ dot.token.begin_column_no, dot.token.line_no });
-
             return errors.ExpectingDotWord;
         }
     }

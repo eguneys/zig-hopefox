@@ -8,8 +8,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
-    //const chess_mod = b.createModule(.{ .root_source_file = b.path("src/gof/chess/types.zig") });
-
     const exe = b.addExecutable(.{
         .name = "zig_hopefox",
         .root_module = b.createModule(.{
