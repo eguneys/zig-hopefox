@@ -14,12 +14,16 @@ const PuzzleMeta = packed struct(u1096) {
 
         var solution: u1024 = undefined;
         var size: u16 = 0;
-        var move: u16 = 0;
+        var firstMove: u16 = 0;
         var parts = std.mem.splitScalar(u8, s_moves, ' ');
+        var position2 = position;
         while (parts.next()) |part| {
-            const res: u16 = @bitCast(san.Uci.move(part).toMove(position));
-            if (move == 0) {
-                move = res;
+            const move = san.Uci.move(part).toMove(position2);
+            const res: u16 = @bitCast(move);
+            _ = position2.make_move(move);
+            position2.flipTurn();
+            if (firstMove == 0) {
+                firstMove = res;
             } else {
                 var words: *[64]u16 = @ptrCast(&solution);
                 words[size] = res;
@@ -27,7 +31,7 @@ const PuzzleMeta = packed struct(u1096) {
             }
         }
 
-        return PuzzleMeta{ .id = id, .move = move, .solution = solution, .size = size };
+        return PuzzleMeta{ .id = id, .move = firstMove, .solution = solution, .size = size };
     }
 
     pub fn moves(self: PuzzleMeta) [64]types.Move {

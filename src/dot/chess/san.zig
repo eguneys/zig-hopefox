@@ -257,6 +257,23 @@ test "castling" {
     try std.testing.expectEqualStrings("O-O-O Rb1 Re8 Bb7+", builder.string.items);
 }
 
+test "more castling A0QQJ" {
+    const ally = std.testing.allocator;
+
+    var builder = try PrintBuilder.init(ally);
+    defer builder.deinit(ally);
+
+    builder.resetPosition(types.Fen.parse("8/pp6/5k2/4b2n/1P4P1/5PK1/P7/4R3 w - - 0 43"));
+
+    //g3h4 e5g3 h4h5 g3e1
+    try builder.appendMove(ally, Uci.move("g3h4").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("e5g3").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("h4h5").toMove(builder.position));
+    try builder.appendMove(ally, Uci.move("g3e1").toMove(builder.position));
+
+    try std.testing.expectEqualStrings("Kh4 Bg3+ Kxh5 Bxe1", builder.string.items);
+}
+
 pub const Uci = struct {
     from: types.Square,
     to: types.Square,

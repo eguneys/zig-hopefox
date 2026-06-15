@@ -162,8 +162,14 @@ pub const Piece = enum(u8) {
         return @enumFromInt(@as(u8, @intFromEnum(color)) * 6 + @intFromEnum(role));
     }
 
-    pub fn promote(self: Piece, role: MovePromotionRole) Piece {
-        return Piece.fromColors(self.colorOf(), @enumFromInt(@intFromEnum(role) + 1));
+    pub fn promote(self: Piece, prole: MovePromotionRole) Piece {
+        const role = switch (prole) {
+            MovePromotionRole.Queen => Role.Queen,
+            MovePromotionRole.Bishop => Role.Bishop,
+            MovePromotionRole.Knight => Role.Knight,
+            MovePromotionRole.Rook => Role.Rook,
+        };
+        return Piece.fromColors(self.colorOf(), role);
     }
 };
 

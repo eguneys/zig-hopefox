@@ -109,6 +109,8 @@ pub const DbVariationWriter = struct {
                 }
             }
 
+            log.str(&meta_id);
+            log.str("\n");
             const position = try db_reader.readPosition(i);
             dot.runner.runOnPosition(allocator, position) catch {
                 _ = try writer.interface.write("Error running position ");
@@ -209,6 +211,14 @@ pub const AllDbReaders = struct {
 test "basic usage" {
     const ally = std.testing.allocator;
     var file = try OrchFile.init(std.testing.io, ally, "scripts/analysis.orch");
+    defer file.deinit(ally);
+
+    try file.step(ally);
+}
+
+test "castling regression" {
+    const ally = std.testing.allocator;
+    var file = try OrchFile.init(std.testing.io, ally, "scripts/one.orch");
     defer file.deinit(ally);
 
     try file.step(ally);
