@@ -1,1 +1,3 @@
-bishop *Forks king *and rook
+bishop_t *Checks king_o *becomes bishop2
+         .Forks king .and rook
+                             .hanging

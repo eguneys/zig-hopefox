@@ -17,6 +17,9 @@ pub const Matcher = struct {
             lx.SymbolTag.Forks => {
                 try Filters.dispatch_forks(allocator, history, slice, dot);
             },
+            lx.SymbolTag.hanging => {
+                try Filters.dispatch_hanging(allocator, history, slice, dot);
+            },
             else => {},
         }
     }
@@ -248,6 +251,49 @@ pub const Symbols = struct {
 };
 
 pub const Filters = struct {
+    fn dispatch_hanging(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const From = history.table.getColumn(from_symbol.identity);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from
+                .bitand(Symbols.bitboard(from_symbol, position));
+
+            while (bb_from2.next()) |sq_from| {
+                var bb_defender_candidates =
+                    if (position.colorOnFast(sq_from) == chess.Color.White)
+                        position.bb_white
+                    else
+                        position.bb_black();
+
+                var has_defender = false;
+                while (bb_defender_candidates.next()) |candidate| {
+                    const candidate_piece = position.getPiece(candidate);
+                    const aa_candidate = chess.Attacks.piece_ray(candidate, position.occupied(), candidate_piece);
+                    if (aa_candidate.has(sq_from)) {
+                        has_defender = true;
+                        break;
+                    }
+                }
+                if (has_defender) {
+                    continue;
+                }
+
+                try history.table.duplicateLastRow(allocator);
+
+                history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+
+                const move = chess.Move.none;
+                const ref = try history.tree.appendChild(allocator, off, move);
+                try history.nodes.append(allocator, ref);
+            }
+        }
+    }
+
     fn dispatch_forks(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
         const from_symbol = history.program.symbols[star.from];
         const fork_a_symbol = history.program.symbols[star.action.one];

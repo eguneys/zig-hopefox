@@ -127,7 +127,7 @@ pub const DbVariationWriter = struct {
 
             if (fullMatch) {
                 if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len == 0) {
-                    return;
+                    continue;
                 }
             }
 

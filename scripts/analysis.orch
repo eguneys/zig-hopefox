@@ -1,8 +1,9 @@
-input: data/athousand_sorted.csv
+input: data/test_b_forks_kr.csv
    output:
       preview:
          - basePath: scripts/output/hello
-         - take: 3
+         - take: 30
+         - filter: fullMatch
          - runOnly:
    variation: 
      mainline: scripts/script2.gof

@@ -86,3 +86,69 @@ test "forks nonexistent" {
         \\........
     );
 }
+
+test "bishop forks king and rook" {
+    try expectVisuals(
+        \\1: {Rc8+}
+        \\2: {Rc8+ Rd8}
+        \\3: {Rc8+ Rd8 Rxd8+}
+        \\4: 
+    ,
+        \\rook_t *Checks king_o *becomes rook2
+        \\rook3_t *Blocks Check *becomes rook4
+        \\rook2 *Captures rook4 *becomes rook5
+        \\      .Forks king .and queen
+        \\
+    ,
+        \\.....k..
+        \\........
+        \\...r.b..
+        \\........
+        \\........
+        \\........
+        \\..R.....
+        \\........
+    );
+}
+
+test "moves to" {
+    try expectVisuals(
+        \\1: {Rc8+}
+        \\2: {Rc8+ Rd8}
+        \\3: {Rc8+ Rd8 Rxd8+}
+        \\4: 
+    ,
+        \\rook_t *MovesTo sq *becomes bishop2
+    ,
+        \\.....k..
+        \\........
+        \\...r.b..
+        \\........
+        \\........
+        \\........
+        \\..R.....
+        \\........
+    );
+}
+
+test "hanging" {
+    try expectVisuals(
+        \\1: {Be7+}{Bg7+}
+        \\2: {Be7+}
+        \\3: {Be7+}
+    ,
+        \\bishop_t *Checks king_o *becomes bishop2
+        \\         .Forks king .and rook
+        \\                            .hanging
+        \\
+    ,
+        \\.....k..
+        \\........
+        \\.....B..
+        \\........
+        \\........
+        \\r.......
+        \\........
+        \\........
+    );
+}

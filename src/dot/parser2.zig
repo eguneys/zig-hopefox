@@ -302,19 +302,20 @@ pub const Parser = struct {
         const tag = (try self.takeSymbolAfter(allocator, line_no, column_no)) orelse
             return errors.ExpectingSymbolAfterDot;
 
-        const one = (try self.takeSymbolAfter(allocator, tag.token.line_no, tag.token.end_column_no)) orelse
-            return errors.ExpectingSymbolAfterDotAction;
+        const one = try self.takeSymbolAfter(allocator, tag.token.line_no, tag.token.end_column_no);
 
         const two: ?GetSymbol = findtwo: {
-            if (self.tokens
-                .getAfter(one.token.line_no, one.token.end_column_no)) |star|
-            {
-                if (star.token.tag == lx.TokenTag.Dot) {
-                    if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.and_)) |toand| {
-                        break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
-                    }
-                    if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.to)) |toand| {
-                        break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
+            if (one) |ones| {
+                if (self.tokens
+                    .getAfter(ones.token.line_no, ones.token.end_column_no)) |star|
+                {
+                    if (star.token.tag == lx.TokenTag.Dot) {
+                        if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.and_)) |toand| {
+                            break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
+                        }
+                        if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.to)) |toand| {
+                            break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
+                        }
                     }
                 }
             }
@@ -322,10 +323,11 @@ pub const Parser = struct {
         };
 
         const tworef = if (two) |ref| ref.ref else 0;
+        const oneref = if (one) |ref| ref.ref else 0;
 
         const side_effect = SideEffects{
             .from = from,
-            .action = .{ .tag = tag.ref, .one = one.ref, .two = tworef },
+            .action = .{ .tag = tag.ref, .one = oneref, .two = tworef },
         };
 
         try self.instructions.append(allocator, .{ .sideEffects = self.side_effects.items.len });
@@ -514,4 +516,22 @@ test "symbol names" {
     try testing.expectEqual(lx.SymbolTag.rook, program.symbols[11].identity.tag);
 
     try testing.expectEqual(11, program.side_effects[program.instructions[3].sideEffects].from);
+}
+
+test "hanging instruction" {
+    const ally = testing.allocator;
+    const script =
+        \\bishop_t *Checks king_o *becomes bishop2
+        \\         .Forks king .and rook
+        \\                             .hanging
+    ;
+
+    var parser = try Parser.init(ally, script);
+    defer parser.deinit(ally);
+
+    const program = try parser.toOwnedProgram(ally);
+    defer program.deinit(ally);
+
+    const hangingSymbolRef = program.side_effects[program.instructions[2].sideEffects].action.tag;
+    try testing.expectEqual(lx.SymbolTag.hanging, program.symbols[hangingSymbolRef].identity.tag);
 }
