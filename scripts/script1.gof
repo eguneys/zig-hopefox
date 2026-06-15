@@ -2,4 +2,3 @@ rook_t *Checks king_o *becomes rook2
 rook3_t *Blocks Check *becomes rook4
 rook2 *Captures rook4 *becomes rook5
       .Forks king .and queen
-      .defendedby bishop

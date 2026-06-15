@@ -1,2 +1,2 @@
 rook_t *Checks king_o *becomes rook2
-bishop *Captures rook2 *becomes bishop2
+king .isInBackrankWall
