@@ -79,14 +79,10 @@ pub const DbVariationWriter = struct {
         const output_file = try std.Io.Dir.cwd().createFile(io, output_path, .{});
         var output_writer = output_file.writer(io, &output_buffer);
 
-        var fullMatch = false;
-
-        if (output.filter) |filter| fullMatch = filter == orch_lx.FilterKind.fullMatch;
-
-        try DbVariationWriter.processContent(allocator, db_reader, script_file.content, output.skip, output.take, output.filterSingle, fullMatch, &output_writer);
+        try DbVariationWriter.processContent(allocator, db_reader, script_file.content, output.skip, output.take, output.filterSingle, output.filter, &output_writer);
     }
 
-    fn processContent(allocator: Allocator, db_reader: *dfile.DbReader, script: []const u8, skip: ?usize, take: ?usize, single: ?[]const u8, fullMatch: bool, writer: *std.Io.File.Writer) !void {
+    fn processContent(allocator: Allocator, db_reader: *dfile.DbReader, script: []const u8, skip: ?usize, take: ?usize, single: ?[]const u8, mfilter: ?orch_lx.FilterKind, writer: *std.Io.File.Writer) !void {
         var dot = DotUsage.init(allocator, script) catch {
             std.debug.print("couldn't parse gof script", .{});
             _ = try writer.interface.write("couldn't parse gof script");
@@ -121,9 +117,15 @@ pub const DbVariationWriter = struct {
                 return;
             };
 
-            if (fullMatch) {
-                if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len == 0) {
-                    continue;
+            if (mfilter) |filter| {
+                if (filter == orch_lx.FilterKind.fullMatch) {
+                    if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len == 0) {
+                        continue;
+                    }
+                } else if (filter == orch_lx.FilterKind.negativeMatch) {
+                    if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len > 0) {
+                        continue;
+                    }
                 }
             }
 
