@@ -1,10 +1,9 @@
 input: data/athousand_sorted.csv
    output:
       preview:
-         - basePath: scripts/output/
+         - basePath: scripts/output/hello
          - filter: fullMatch
-         - take: 20
-         - skip: 3
+         - filterSingle: _01Vbe
          - runOnly:
    variation: 
      mainline: scripts/script1.gof

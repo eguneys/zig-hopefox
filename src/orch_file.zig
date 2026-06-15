@@ -9,6 +9,7 @@ const ReadFile = files.ReadFile;
 const WriteFile = files.WriteFile;
 const DotUsage = @import("dot/usage2.zig").DotUsage;
 const dfile = @import("db_file.zig");
+const chess = @import("dot/chess/types.zig");
 
 const errors = error{InvalidPath};
 
@@ -76,10 +77,14 @@ pub const DbVariationWriter = struct {
         const output_file = try std.Io.Dir.cwd().createFile(io, output_path, .{});
         var output_writer = output_file.writer(io, &output_buffer);
 
-        try DbVariationWriter.processContent(allocator, db_reader, script_file.content, output.skip, output.take, output.filterSingle, &output_writer);
+        var fullMatch = false;
+
+        if (output.filter) |filter| fullMatch = filter == orch_lx.FilterKind.fullMatch;
+
+        try DbVariationWriter.processContent(allocator, db_reader, script_file.content, output.skip, output.take, output.filterSingle, fullMatch, &output_writer);
     }
 
-    fn processContent(allocator: Allocator, db_reader: *dfile.DbReader, script: []const u8, skip: ?usize, take: ?usize, single: ?[]const u8, writer: *std.Io.File.Writer) !void {
+    fn processContent(allocator: Allocator, db_reader: *dfile.DbReader, script: []const u8, skip: ?usize, take: ?usize, single: ?[]const u8, fullMatch: bool, writer: *std.Io.File.Writer) !void {
         var dot = DotUsage.init(allocator, script) catch {
             std.debug.print("couldn't parse gof script", .{});
             _ = try writer.interface.write("couldn't parse gof script");
@@ -119,6 +124,12 @@ pub const DbVariationWriter = struct {
                 _ = try writer.interface.write("\n");
                 return;
             };
+
+            if (fullMatch) {
+                if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len == 0) {
+                    return;
+                }
+            }
 
             const output = dot.printLines(allocator) catch {
                 _ = try writer.interface.write("Error writing output ");
