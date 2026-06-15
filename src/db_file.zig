@@ -30,21 +30,23 @@ const PuzzleMeta = packed struct(u1096) {
         return PuzzleMeta{ .id = id, .move = move, .solution = solution, .size = size };
     }
 
-    pub fn moves(self: *PuzzleMeta) []const types.Move {
-        const array: [64]types.Move = @bitCast(self.solution);
-        return array[0..self.size];
+    pub fn moves(self: PuzzleMeta) [64]types.Move {
+        return @bitCast(self.solution);
     }
 };
 
 test "basic usage" {
     const ally = std.testing.allocator;
     const position = types.Fen.parse(types.Fen.Initial);
-    var meta = PuzzleMeta.parse(position, "abcdef", "e2e4 e7e5");
+    var meta = PuzzleMeta.parse(position, "abcdef", "e2e4 e7e5 b1c3");
 
-    try std.testing.expectEqual(1, meta.moves().len);
+    //try std.testing.expectEqual(2, meta.moves().len);
     const res = try types.Prints.moveFromTo(ally, meta.moves()[0]);
     defer ally.free(res);
     try std.testing.expectEqualStrings("e7e5", res);
+    const res2 = try types.Prints.moveFromTo(ally, meta.moves()[1]);
+    defer ally.free(res2);
+    try std.testing.expectEqualStrings("b1c3", res2);
 }
 
 const DbHeader = packed struct(u128) { magic: u32 = 0x5a7a70, version: u32 = 1, count: u64 };
@@ -185,3 +187,94 @@ pub const DbReader = struct {
         self.meta_file.close(io);
     }
 };
+
+test "db writer db reader" {
+    const ally = std.testing.allocator;
+    var writer: DbWriter = undefined;
+    try writer.open(std.testing.io, "data/test.pos.db", "data/test.meta.db");
+
+    var meta = PuzzleMeta.parse(types.Fen.parse(types.Fen.Initial), "abcdef", "e2e4 e7e5 b1c3");
+    try writer.add(types.Fen.parse(types.Fen.Initial), meta);
+
+    try writer.close(std.testing.io);
+
+    var reader = try DbReader.open(std.testing.io, "data/test.pos.db", "data/test.meta.db");
+
+    try std.testing.expectEqual(1, reader.header.count);
+
+    var meta2 = try reader.readMeta(0);
+
+    const position = types.Fen.parse(types.Fen.Initial);
+    const move1: types.Move = @bitCast(meta.move);
+    try std.testing.expectEqual(san.Uci.move("e2e4").toMove(position), move1);
+    try std.testing.expectEqual(2, meta.size);
+    const res = try types.Prints.moveFromTo(ally, meta.moves()[0]);
+    defer ally.free(res);
+    try std.testing.expectEqualStrings("e7e5", res);
+    try std.testing.expectEqual(san.Uci.move("e7e5").toMove(position), meta.moves()[0]);
+
+    const move: types.Move = @bitCast(meta2.move);
+    try std.testing.expectEqual(san.Uci.move("e2e4").toMove(position), move);
+    try std.testing.expectEqual(2, meta2.size);
+    try std.testing.expectEqual(san.Uci.move("e7e5").toMove(position), meta2.moves()[0]);
+    try std.testing.expectEqual(san.Uci.move("b1c3").toMove(position), meta2.moves()[1]);
+}
+
+test "moves not working" {
+    const ally = std.testing.allocator;
+    var writer: DbWriter = undefined;
+    try writer.open(std.testing.io, "data/test.pos.db", "data/test.meta.db");
+
+    var meta = PuzzleMeta.parse(types.Fen.parse(types.Fen.Initial), "abcdef", "e7c7 c5d6 f3f4 d6c7");
+    try writer.add(types.Fen.parse(types.Fen.Initial), meta);
+
+    try writer.close(std.testing.io);
+    var reader = try DbReader.open(std.testing.io, "data/test.pos.db", "data/test.meta.db");
+
+    try std.testing.expectEqual(1, reader.header.count);
+
+    var meta2 = try reader.readMeta(0);
+
+    //"e7c7 c5d6 f3f4 d6c7";
+    const position = types.Fen.parse(types.Fen.Initial);
+    const move1: types.Move = @bitCast(meta.move);
+    try std.testing.expectEqual(san.Uci.move("e7c7").toMove(position), move1);
+    try std.testing.expectEqual(3, meta.size);
+    const res = try types.Prints.moveFromTo(ally, meta.moves()[0]);
+    defer ally.free(res);
+    try std.testing.expectEqualStrings("c5d6", res);
+    try std.testing.expectEqual(san.Uci.move("c5d6").toMove(position), meta.moves()[0]);
+
+    const move: types.Move = @bitCast(meta2.move);
+    try std.testing.expectEqual(san.Uci.move("e7c7").toMove(position), move);
+    try std.testing.expectEqual(3, meta2.size);
+    try std.testing.expectEqual(san.Uci.move("c5d6").toMove(position), meta2.moves()[0]);
+    try std.testing.expectEqual(san.Uci.move("f3f4").toMove(position), meta2.moves()[1]);
+}
+
+test "moves not working 2" {
+    const ally = std.testing.allocator;
+
+    var reader = try DbReader.open(std.testing.io, "data/athousand.pos.db", "data/athousand.meta.db");
+
+    try std.testing.expectEqual(1000, reader.header.count);
+
+    const position = try reader.readPosition(39);
+    var meta = try reader.readMeta(39);
+
+    const res = try types.Prints.moveFromTo(ally, meta.moves()[0]);
+    defer ally.free(res);
+    try std.testing.expectEqualStrings("c5d6", res);
+
+    const res2 = try types.Prints.moveFromTo(ally, meta.moves()[1]);
+    defer ally.free(res2);
+    try std.testing.expectEqualStrings("f3f4", res2);
+
+    var builder = try san.PrintBuilder.init(ally);
+    defer builder.deinit(ally);
+    builder.resetPosition(position);
+
+    for (meta.moves()[0..meta.size]) |move| {
+        try builder.appendMove(ally, move);
+    }
+}

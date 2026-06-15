@@ -136,8 +136,9 @@ pub const DbVariationWriter = struct {
             defer builder.deinit(allocator);
             builder.resetPosition(position);
 
-            for (meta.moves()) |move|
+            for (meta.moves()[0..meta.size]) |move| {
                 try builder.appendMove(allocator, move);
+            }
 
             const sanMoves = builder.string.items;
 

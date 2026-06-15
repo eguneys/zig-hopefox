@@ -25,4 +25,6 @@ test "imports" {
     _ = @import("dot/usage2.zig");
 
     _ = @import("orch/parser.zig");
+
+    _ = @import("db_file.zig");
 }
