@@ -21,15 +21,31 @@ const PuzzleMeta = packed struct(u1096) {
             if (move == 0) {
                 move = res;
             } else {
-                var array: *[64]u16 = @ptrCast(&solution);
-                array[size] = res;
+                var words: *[64]u16 = @ptrCast(&solution);
+                words[size] = res;
                 size += 1;
             }
         }
 
         return PuzzleMeta{ .id = id, .move = move, .solution = solution, .size = size };
     }
+
+    pub fn moves(self: *PuzzleMeta) []const types.Move {
+        const array: [64]types.Move = @bitCast(self.solution);
+        return array[0..self.size];
+    }
 };
+
+test "basic usage" {
+    const ally = std.testing.allocator;
+    const position = types.Fen.parse(types.Fen.Initial);
+    var meta = PuzzleMeta.parse(position, "abcdef", "e2e4 e7e5");
+
+    try std.testing.expectEqual(1, meta.moves().len);
+    const res = try types.Prints.moveFromTo(ally, meta.moves()[0]);
+    defer ally.free(res);
+    try std.testing.expectEqualStrings("e7e5", res);
+}
 
 const DbHeader = packed struct(u128) { magic: u32 = 0x5a7a70, version: u32 = 1, count: u64 };
 

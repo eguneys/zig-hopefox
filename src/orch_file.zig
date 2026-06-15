@@ -10,6 +10,7 @@ const WriteFile = files.WriteFile;
 const DotUsage = @import("dot/usage2.zig").DotUsage;
 const dfile = @import("db_file.zig");
 const chess = @import("dot/chess/types.zig");
+const san = @import("dot/chess/san.zig");
 
 const errors = error{InvalidPath};
 
@@ -102,7 +103,7 @@ pub const DbVariationWriter = struct {
         var append_newline = false;
 
         for (start..end) |i| {
-            const meta = try db_reader.readMeta(i);
+            var meta = try db_reader.readMeta(i);
             const meta_id: [5]u8 = @bitCast(meta.id);
 
             if (single) |single_id| {
@@ -124,10 +125,25 @@ pub const DbVariationWriter = struct {
                     continue;
                 }
             }
+
             if (append_newline) _ = try writer.interface.write("\n");
             append_newline = true;
             _ = try writer.interface.write("https://lichess.org/training/");
             _ = try writer.interface.write(&meta_id);
+            _ = try writer.interface.write("\n");
+
+            var builder = try san.PrintBuilder.init(allocator);
+            defer builder.deinit(allocator);
+            builder.resetPosition(position);
+
+            for (meta.moves()) |move|
+                try builder.appendMove(allocator, move);
+
+            const sanMoves = builder.string.items;
+
+            _ = try writer.interface.write("[");
+            _ = try writer.interface.write(sanMoves);
+            _ = try writer.interface.write("]");
             _ = try writer.interface.write("\n");
 
             const output = dot.printLines(allocator) catch {

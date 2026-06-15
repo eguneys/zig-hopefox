@@ -764,6 +764,14 @@ pub const Prints = struct {
             Piece.Black_Pawn => 'p',
         };
     }
+
+    pub fn moveFromTo(allocator: std.mem.Allocator, move: Move) ![]const u8 {
+        const invalid_move: []const u8 = "--";
+        return switch (move.kind) {
+            MoveType.Normal => try std.mem.join(allocator, "", &[2][]const u8{ &Prints.fromSquare(@enumFromInt(move.from)), &Prints.fromSquare(@enumFromInt(move.to)) }),
+            else => invalid_move,
+        };
+    }
 };
 
 test "bitboards" {
