@@ -22,7 +22,7 @@ pub const LiveOrchFile = struct {
     }
 
     fn reloadOrchFile(self: *LiveOrchFile, allocator: std.mem.Allocator) !void {
-        self.orch_file.deinit(allocator);
+        //self.orch_file.deinit(allocator);
 
         const orch_file = try OrchFile.init(self.io, allocator, self.orch_path);
         self.orch_file = orch_file;
@@ -47,6 +47,7 @@ pub const LiveOrchFile = struct {
         std.debug.print("Watching {?s} and {?s}..\n", .{ self.watch_file_path1, self.watch_file_path2 });
         // 2. Continuous loop
         while (true) {
+            var should_run_step = false;
             // 3. Stat the file to check metadata
             if (self.watch_file_path1) |watch_file_path1| {
                 const stat = std.Io.Dir.cwd().statFile(io, watch_file_path1, .{}) catch |err| {
@@ -65,7 +66,7 @@ pub const LiveOrchFile = struct {
 
                     std.debug.print("{s} changed, updating.\n", .{watch_file_path1});
                     try self.reloadOrchFile(allocator);
-                    try self.orch_file.step(allocator);
+                    should_run_step = true;
                 }
             }
 
@@ -84,10 +85,11 @@ pub const LiveOrchFile = struct {
                 if (mtime != self.last_mtime2) {
                     self.last_mtime2 = mtime;
 
-                    try self.orch_file.step(allocator);
+                    should_run_step = true;
                 }
             }
 
+            if (should_run_step) try self.orch_file.step(allocator);
             // 5. Sleep between checks
             try std.Io.sleep(io, std.Io.Duration.fromMilliseconds(Self.poll_interval_ms), std.Io.Clock.awake);
         }

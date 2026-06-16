@@ -11,6 +11,7 @@ pub const Orch = struct {
 
     pub fn deinit(self: *Orch, allocator: Allocator) void {
         for (self.dbs) |*db| db.deinit(allocator);
+        std.debug.print("deinit free", .{});
         allocator.free(self.dbs);
     }
 };
@@ -21,7 +22,10 @@ pub const Db = struct {
     variation: []Variation,
 
     pub fn deinit(self: *Db, allocator: Allocator) void {
+        std.debug.print("deinit vv", .{});
+        std.debug.print("vlen:{d}", .{self.variation.len});
         for (self.variation) |*v| v.deinit(allocator);
+        std.debug.print("deinit xx", .{});
         for (self.output) |*o| o.deinit(allocator);
         allocator.free(self.variation);
         allocator.free(self.output);
@@ -36,9 +40,13 @@ pub const Variation = struct {
     unify: ?[]Unify,
 
     pub fn deinit(self: *Variation, allocator: Allocator) void {
+        std.debug.print("deinit unify", .{});
         if (self.unify) |unify| {
+            std.debug.print("here", .{});
             allocator.free(unify);
+            std.debug.print("no", .{});
         }
+        std.debug.print("deinit unify", .{});
         if (self.output) |output| {
             for (output) |*o| o.deinit(allocator);
             allocator.free(output);

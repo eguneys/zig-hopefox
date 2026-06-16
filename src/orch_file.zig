@@ -26,7 +26,9 @@ pub const OrchFile = struct {
     io: std.Io,
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
+        std.debug.print("deinit 1", .{});
         self.orch.deinit(allocator);
+        std.debug.print("deinit 2", .{});
         self.orch_file.deinit(allocator);
     }
 
@@ -99,7 +101,17 @@ pub const DbVariationWriter = struct {
 
         var append_newline = false;
 
+        const total = db_reader.header.count;
+
+        const ftotal: f64 = @floatFromInt(total);
+
+        const totalStep: f64 = @mod(ftotal, 100);
+
         for (start..end) |i| {
+            const fi: f64 = @floatFromInt(i);
+            if (@mod(fi, totalStep) == 0) {
+                std.debug.print("\rProgress: %{d:.0}", .{fi / ftotal * 100});
+            }
             var meta = try db_reader.readMeta(i);
             const meta_id: [5]u8 = @bitCast(meta.id);
 
@@ -109,8 +121,6 @@ pub const DbVariationWriter = struct {
                 }
             }
 
-            log.str(&meta_id);
-            log.str("\n");
             const position = try db_reader.readPosition(i);
             dot.runner.runOnPosition(allocator, position) catch {
                 _ = try writer.interface.write("Error running position ");
