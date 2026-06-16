@@ -17,6 +17,7 @@ pub const SymbolTag = enum {
     Checks,
     Captures,
     becomes,
+    inZone,
     defendedby,
     hanging,
     Forks,

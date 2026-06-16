@@ -73,10 +73,13 @@ pub const DotUsage = struct {
     visual: Visual,
     buffer: ArrayList(u8),
 
+    move_buffer: ArrayList(chess.Move),
+
     pub fn deinit(self: *DotUsage, allocator: Allocator) void {
         self.runner.deinit(allocator);
         self.visual.deinit(allocator);
         self.buffer.deinit(allocator);
+        self.move_buffer.deinit(allocator);
     }
 
     pub fn init(allocator: Allocator, script: []const u8) !DotUsage {
@@ -86,6 +89,7 @@ pub const DotUsage = struct {
         const program = try builder.toOwnedProgram(allocator);
 
         return .{
+            .move_buffer = .empty,
             .buffer = try std.ArrayList(u8).initCapacity(allocator, 1024),
             .runner = try Runner.init(allocator, program, 2048),
             .visual = try Visual.init(allocator),
@@ -126,6 +130,22 @@ pub const DotUsage = struct {
             _ = try self.printInstructionLine(allocator, slice);
         }
         return self.buffer.items;
+    }
+
+    pub fn getLastLine(self: *DotUsage, allocator: Allocator) ![]const chess.Move {
+        self.move_buffer.clearRetainingCapacity();
+        for (0..self.runner.slices.items.len) |i| {
+            const slice = self.runner.slices.items[self.runner.slices.items.len - 1 - i];
+            if (slice.len > 0) {
+                const history = self.runner.history.tree.getHistoryReversed(slice.off);
+                for (0..history.len) |j| {
+                    const move = self.runner.history.tree.getNode(history[history.len - 1 - j]).value;
+                    try self.move_buffer.append(allocator, move);
+                }
+                break;
+            }
+        }
+        return self.move_buffer.items;
     }
 };
 

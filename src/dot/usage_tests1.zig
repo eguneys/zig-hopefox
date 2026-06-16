@@ -152,3 +152,26 @@ test "hanging" {
         \\........
     );
 }
+
+test "inZone" {
+    try expectVisuals(
+        \\1: {Be7+}{Bg7+}
+        \\2: {Be7+}
+        \\3: {Be7+}
+    ,
+        \\bishop_t *Checks king_o *becomes bishop2
+        \\         .Forks king .and rook
+        \\                            .hanging
+        \\         .inZone king
+        \\
+    ,
+        \\.....k..
+        \\........
+        \\.....B..
+        \\........
+        \\........
+        \\r.......
+        \\........
+        \\........
+    );
+}

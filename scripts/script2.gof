@@ -1,3 +1,4 @@
 bishop_t *Checks_v king_o *becomes bishop2
          .Forks king .and rook_t
                              .hanging
+         .inZone king

@@ -1,4 +1,4 @@
-input: data/lichess_db_puzzle.csv
+input: data/test_b_forks_kr.csv
    output:
       preview:
          - basePath: scripts/output/

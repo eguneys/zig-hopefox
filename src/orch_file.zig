@@ -140,6 +140,11 @@ pub const DbVariationWriter = struct {
                     }
                 }
 
+                const played = try dot.getLastLine(allocator);
+                const solution = meta.moves()[0..meta.size];
+
+                const solution_match_type = PuzzleSolutionMatchType.fromSolution(solution, played);
+
                 if (append_newline) _ = try writer.interface.write("\n");
                 append_newline = true;
                 _ = try writer.interface.write("https://lichess.org/training/");
@@ -158,7 +163,8 @@ pub const DbVariationWriter = struct {
 
                 _ = try writer.interface.write("[");
                 _ = try writer.interface.write(sanMoves);
-                _ = try writer.interface.write("]");
+                _ = try writer.interface.write("] ");
+                _ = try writer.interface.write(solution_match_type.string());
                 _ = try writer.interface.write("\n");
 
                 const output = dot.printLines(allocator) catch {
@@ -188,6 +194,45 @@ pub const DbVariationWriter = struct {
             orch_lx.OutputFormat.preview => try result.appendSlice(allocator, ".output"),
         }
         return try result.toOwnedSlice(allocator);
+    }
+};
+
+pub const PuzzleSolutionMatchType = enum {
+    firstMoveMatch,
+    fullMatch,
+    negative,
+    falseMatch,
+
+    pub fn string(self: PuzzleSolutionMatchType) []const u8 {
+        return switch (self) {
+            PuzzleSolutionMatchType.firstMoveMatch => "firstMoveMatch",
+            PuzzleSolutionMatchType.fullMatch => "fullMatch",
+            PuzzleSolutionMatchType.negative => "negative",
+            PuzzleSolutionMatchType.falseMatch => "falseMatch",
+        };
+    }
+
+    pub fn fromSolution(solution: []const chess.Move, lines: []const chess.Move) PuzzleSolutionMatchType {
+        var result = PuzzleSolutionMatchType.negative;
+        for (0..solution.len) |j| {
+            if (j >= lines.len) {
+                return result;
+            }
+            if (solution[j] == lines[j]) {
+                if (result == PuzzleSolutionMatchType.negative) {
+                    result = PuzzleSolutionMatchType.firstMoveMatch;
+                }
+                if (j == solution.len - 1) {
+                    result = PuzzleSolutionMatchType.fullMatch;
+                }
+            } else {
+                if (result == PuzzleSolutionMatchType.negative) {
+                    result = PuzzleSolutionMatchType.falseMatch;
+                    break;
+                }
+            }
+        }
+        return result;
     }
 };
 
