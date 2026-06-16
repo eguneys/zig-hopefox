@@ -309,7 +309,7 @@ pub const PuzzleSolutionMatchType = enum {
             if (j >= lines.len) {
                 return result;
             }
-            if (solution[j] == lines[j]) {
+            if (solution[j].equals(lines[j])) {
                 if (result == PuzzleSolutionMatchType.negative) {
                     result = PuzzleSolutionMatchType.firstMoveMatch;
                 }

@@ -1310,6 +1310,13 @@ pub const Move = packed struct(u16) {
     pub fn isNone(self: Move) bool {
         return self == Move.none;
     }
+
+    pub fn equals(self: Move, other: Move) bool {
+        const froms = self.from == other.from and self.to == other.to;
+        const kind = self.kind == other.kind;
+        const promotions = self.kind != MoveType.Promotion or self.promotion == other.promotion;
+        return froms and kind and promotions;
+    }
 };
 
 pub const Parses = struct {
