@@ -1,5 +1,5 @@
 const std = @import("std");
-const LiveFileW = @import("orch_reloadable.zig").LiveFileW;
+const LiveReloadable = @import("orch_live.zig").LiveOrchFile;
 
 pub fn main(init: std.process.Init) !void {
     var stdout = std.Io.File.stdout().writer(init.io, &.{});
@@ -8,14 +8,10 @@ pub fn main(init: std.process.Init) !void {
     var gpa: std.heap.DebugAllocator(.{}) = .init;
     const allocator = gpa.allocator();
 
-    defer std.debug.print("ok", .{});
-    var live_w = try LiveFileW.open(init.io, allocator, "scripts");
-    defer live_w.deinit(allocator);
-    defer std.debug.print("yes", .{});
+    var live_r = try LiveReloadable.open(init.io, allocator, "scripts");
+    defer live_r.deinit(allocator);
 
-    try live_w.step(allocator);
-    try live_w.reload(allocator);
-    try live_w.step(allocator);
+    try live_r.loop(init.io, allocator);
 }
 
 test "imports" {

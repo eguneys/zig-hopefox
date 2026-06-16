@@ -127,48 +127,52 @@ pub const DbVariationWriter = struct {
                 return;
             };
 
-            if (mfilter) |filter| {
-                if (filter == orch_lx.FilterKind.fullMatch) {
-                    if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len == 0) {
-                        continue;
-                    }
-                } else if (filter == orch_lx.FilterKind.negativeMatch) {
-                    if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len > 0) {
-                        continue;
+            if (true) {
+                if (mfilter) |filter| {
+                    if (filter == orch_lx.FilterKind.fullMatch) {
+                        if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len == 0) {
+                            continue;
+                        }
+                    } else if (filter == orch_lx.FilterKind.negativeMatch) {
+                        if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len > 0) {
+                            continue;
+                        }
                     }
                 }
-            }
 
-            if (append_newline) _ = try writer.interface.write("\n");
-            append_newline = true;
-            _ = try writer.interface.write("https://lichess.org/training/");
-            _ = try writer.interface.write(&meta_id);
-            _ = try writer.interface.write("\n");
-
-            var builder = try san.PrintBuilder.init(allocator);
-            defer builder.deinit(allocator);
-            builder.resetPosition(position);
-
-            for (meta.moves()[0..meta.size]) |move| {
-                try builder.appendMove(allocator, move);
-            }
-
-            const sanMoves = builder.string.items;
-
-            _ = try writer.interface.write("[");
-            _ = try writer.interface.write(sanMoves);
-            _ = try writer.interface.write("]");
-            _ = try writer.interface.write("\n");
-
-            const output = dot.printLines(allocator) catch {
-                _ = try writer.interface.write("Error writing output ");
+                if (append_newline) _ = try writer.interface.write("\n");
+                append_newline = true;
+                _ = try writer.interface.write("https://lichess.org/training/");
                 _ = try writer.interface.write(&meta_id);
                 _ = try writer.interface.write("\n");
-                return;
-            };
 
-            _ = try writer.interface.write(output);
+                var builder = try san.PrintBuilder.init(allocator);
+                defer builder.deinit(allocator);
+                builder.resetPosition(position);
+
+                for (meta.moves()[0..meta.size]) |move| {
+                    try builder.appendMove(allocator, move);
+                }
+
+                const sanMoves = builder.string.items;
+
+                _ = try writer.interface.write("[");
+                _ = try writer.interface.write(sanMoves);
+                _ = try writer.interface.write("]");
+                _ = try writer.interface.write("\n");
+
+                const output = dot.printLines(allocator) catch {
+                    _ = try writer.interface.write("Error writing output ");
+                    _ = try writer.interface.write(&meta_id);
+                    _ = try writer.interface.write("\n");
+                    return;
+                };
+
+                _ = try writer.interface.write(output);
+            }
         }
+
+        std.debug.print("\r\x1b[KDone!\n", .{});
 
         try writer.end();
     }

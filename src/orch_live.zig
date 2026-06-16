@@ -1,15 +1,13 @@
 const std = @import("std");
-const OrchFile = @import("orch_file.zig").OrchFile;
+const LiveFileW = @import("orch_reloadable.zig").LiveFileW;
 
 pub const LiveOrchFile = struct {
     file_path: []const u8,
-
-    orch_path: []const u8,
     watch_file_path1: ?[]const u8 = null,
     watch_file_path2: ?[]const u8 = null,
 
     io: std.Io,
-    orch_file: OrchFile,
+    live_w: LiveFileW,
 
     last_mtime: i128 = 0,
     last_mtime2: i128 = 0,
@@ -17,29 +15,24 @@ pub const LiveOrchFile = struct {
     const poll_interval_ms: u64 = 1000;
 
     pub fn deinit(self: *LiveOrchFile, allocator: std.mem.Allocator) void {
-        self.orch_file.deinit(allocator);
-        allocator.free(self.orch_path);
-    }
-
-    fn reloadOrchFile(self: *LiveOrchFile, allocator: std.mem.Allocator) !void {
-        self.orch_file.deinit(allocator);
-
-        const orch_file = try OrchFile.init(self.io, allocator, self.orch_path);
-        self.orch_file = orch_file;
-        self.watch_file_path2 = orch_file.mainline_script_path;
+        self.live_w.deinit(allocator);
     }
 
     pub fn open(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !LiveOrchFile {
-        const orch_path = try std.mem.join(allocator, "/", &[2][]const u8{ path, "one.orch" });
-        defer allocator.free(orch_path);
+        const live_w = try LiveFileW.open(io, allocator, path);
 
         return LiveOrchFile{
             .io = io,
             .file_path = path,
-            .orch_path = try allocator.dupe(u8, orch_path),
-            .orch_file = undefined,
-            .watch_file_path1 = orch_path,
+            .live_w = live_w,
+            .watch_file_path1 = live_w.orch_path,
+            .watch_file_path2 = live_w.getScriptPath(),
         };
+    }
+
+    fn reloadOrchFile(self: *LiveOrchFile, allocator: std.mem.Allocator) !void {
+        try self.live_w.reload(allocator);
+        self.watch_file_path2 = self.live_w.getScriptPath();
     }
 
     const Self = @This();
@@ -90,7 +83,7 @@ pub const LiveOrchFile = struct {
                 }
             }
 
-            if (should_run_step) try self.orch_file.step(allocator);
+            if (should_run_step) try self.live_w.step(allocator);
             // 5. Sleep between checks
             try std.Io.sleep(io, std.Io.Duration.fromMilliseconds(Self.poll_interval_ms), std.Io.Clock.awake);
         }
@@ -98,10 +91,7 @@ pub const LiveOrchFile = struct {
 };
 
 test "basic usage" {
-    const ally = std.testing.allocator;
-    const io = std.testing.io;
+    var live_r = try LiveOrchFile.open(std.testing.io, std.testing.allocator, "scripts");
 
-    var orch = try LiveOrchFile.open(io, ally, "scripts/analysis.orch");
-
-    orch.deinit(ally);
+    try live_r.loop(std.testing.io, std.testing.allocator);
 }

@@ -19,6 +19,10 @@ pub const LiveFileW = struct {
         self.orch_file = orch_file;
     }
 
+    pub fn getScriptPath(self: Self) []const u8 {
+        return self.orch_file.mainline_script_path;
+    }
+
     pub fn reload(self: *Self, allocator: Allocator) !void {
         var new_orch = try OrchFile.init(
             self.io,
