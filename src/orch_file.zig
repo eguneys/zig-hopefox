@@ -79,10 +79,12 @@ pub const DbVariationWriter = struct {
         const output_file = try std.Io.Dir.cwd().createFile(io, output_path, .{});
         var output_writer = output_file.writer(io, &output_buffer);
 
-        try DbVariationWriter.processContent(allocator, db_reader, script_file.content, output.skip, output.take, output.filterSingle, output.filter, &output_writer);
+        try DbVariationWriter.processContent(io, allocator, db_reader, script_file.content, output.skip, output.take, output.filterSingle, output.filter, &output_writer);
+
+        std.debug.print("{s} written.\n", .{output_path});
     }
 
-    fn processContent(allocator: Allocator, db_reader: *dfile.DbReader, script: []const u8, skip: ?usize, take: ?usize, single: ?[]const u8, mfilter: ?orch_lx.FilterKind, writer: *std.Io.File.Writer) !void {
+    fn processContent(io: std.Io, allocator: Allocator, db_reader: *dfile.DbReader, script: []const u8, skip: ?usize, take: ?usize, single: ?[]const u8, mfilter: ?orch_lx.FilterKind, writer: *std.Io.File.Writer) !void {
         var dot = DotUsage.init(allocator, script) catch {
             std.debug.print("couldn't parse gof script", .{});
             _ = try writer.interface.write("couldn't parse gof script");
@@ -105,10 +107,15 @@ pub const DbVariationWriter = struct {
 
         const totalStep: f64 = @mod(ftotal, 100);
 
+        var header = try CoverageHeader.init(allocator, std.Io.Timestamp.now(io, .awake), ftotal);
+        defer header.deinit(allocator);
+
         for (start..end) |i| {
             const fi: f64 = @floatFromInt(i);
             if (@mod(fi, totalStep) == 0) {
+                header.setNbPuzzles(fi + 1);
                 std.debug.print("\rProgress: %{d:.0}", .{fi / ftotal * 100});
+                try header.write(io, writer, false);
             }
             var meta = try db_reader.readMeta(i);
             const meta_id: [5]u8 = @bitCast(meta.id);
@@ -178,6 +185,8 @@ pub const DbVariationWriter = struct {
             }
         }
 
+        try header.write(io, writer, true);
+
         std.debug.print("\r\x1b[KDone!\n", .{});
 
         try writer.end();
@@ -194,6 +203,50 @@ pub const DbVariationWriter = struct {
             orch_lx.OutputFormat.preview => try result.appendSlice(allocator, ".output"),
         }
         return try result.toOwnedSlice(allocator);
+    }
+};
+
+pub const CoverageHeader = struct {
+    start: std.Io.Timestamp,
+    totalPuzzles: f64,
+    nbPuzzles: f64,
+    buffer: []u8,
+
+    const BufferSize = 40;
+
+    const Self = @This();
+
+    pub fn deinit(self: *Self, allocator: Allocator) void {
+        allocator.free(self.buffer);
+    }
+
+    pub fn init(allocator: Allocator, start: std.Io.Timestamp, totalPuzzles: f64) !Self {
+        const empty_header = [_]u8{' '} ** 40;
+        return .{ .start = start, .nbPuzzles = 0, .totalPuzzles = totalPuzzles, .buffer = try allocator.dupe(u8, &empty_header) };
+    }
+
+    pub fn setNbPuzzles(self: *Self, i: f64) void {
+        self.nbPuzzles = i;
+    }
+
+    pub fn write(self: *Self, io: std.Io, writer: *std.Io.File.Writer, isEnd: bool) !void {
+        for (0..self.buffer.len) |i| {
+            self.buffer[i] = ' ';
+        }
+
+        const pos = writer.logicalPos();
+        try writer.seekTo(0);
+        const totalMs: f64 = @floatFromInt(self.start.untilNow(io, .awake).toMilliseconds());
+        const progress = self.nbPuzzles / self.totalPuzzles * 100;
+        if (isEnd) {
+            _ = try std.fmt.bufPrint(self.buffer, "{d:.2} ms per puzzle, total {d:.0}ms\n", .{ totalMs / self.totalPuzzles, totalMs });
+        } else {
+            _ = try std.fmt.bufPrint(self.buffer, "Progress: {d:.2} {d:.2} ms per puzzle\n", .{ progress, totalMs / self.totalPuzzles });
+        }
+        _ = try writer.interface.write(self.buffer);
+        _ = try writer.interface.write("\n");
+        try writer.seekTo(@max(pos, 41));
+        //try writer.flush();
     }
 };
 
