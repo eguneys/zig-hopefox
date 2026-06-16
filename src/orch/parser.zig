@@ -59,6 +59,8 @@ pub const Output = struct {
     filter: ?lx.FilterKind,
     take: ?usize,
     skip: ?usize,
+    visualTake: ?usize,
+    visualSkip: ?usize,
     runOnly: ?bool,
     filterSingle: ?[]const u8,
 
@@ -157,6 +159,8 @@ pub const Parser = struct {
                 var filter: ?lx.FilterKind = null;
                 var take: ?usize = null;
                 var skip: ?usize = null;
+                var visualTake: ?usize = null;
+                var visualSkip: ?usize = null;
                 var runOnly: ?bool = null;
                 var filterSingle: ?[]const u8 = null;
                 while (try self.eatTag(lx.TokenTag.Dash) != null) {
@@ -172,6 +176,12 @@ pub const Parser = struct {
                     if (skip == null) {
                         skip = try self.eatOutputConfigNumber(lx.OutputConfig.skip);
                     }
+                    if (visualTake == null) {
+                        visualTake = try self.eatOutputConfigNumber(lx.OutputConfig.visualTake);
+                    }
+                    if (visualSkip == null) {
+                        visualSkip = try self.eatOutputConfigNumber(lx.OutputConfig.visualSkip);
+                    }
                     if (runOnly == null) {
                         runOnly = try self.eatOutputConfigParam(lx.OutputConfig.runOnly);
                     }
@@ -186,6 +196,8 @@ pub const Parser = struct {
                     .filter = filter,
                     .take = take,
                     .skip = skip,
+                    .visualTake = visualTake,
+                    .visualSkip = visualSkip,
                     .runOnly = runOnly,
                     .filterSingle = filterSingle,
                 };

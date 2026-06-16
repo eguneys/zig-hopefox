@@ -27,6 +27,8 @@ pub const OutputConfig = enum {
     take,
     skip,
     runOnly,
+    visualTake,
+    visualSkip,
 };
 
 pub const Command = enum {

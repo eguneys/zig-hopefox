@@ -79,12 +79,13 @@ pub const DbVariationWriter = struct {
         const output_file = try std.Io.Dir.cwd().createFile(io, output_path, .{});
         var output_writer = output_file.writer(io, &output_buffer);
 
-        try DbVariationWriter.processContent(io, allocator, db_reader, script_file.content, output.skip, output.take, output.filterSingle, output.filter, &output_writer);
+        try DbVariationWriter
+            .processContent(io, allocator, db_reader, script_file.content, output, &output_writer);
 
         std.debug.print("{s} written.\n", .{output_path});
     }
 
-    fn processContent(io: std.Io, allocator: Allocator, db_reader: *dfile.DbReader, script: []const u8, skip: ?usize, take: ?usize, single: ?[]const u8, mfilter: ?orch_lx.FilterKind, writer: *std.Io.File.Writer) !void {
+    fn processContent(io: std.Io, allocator: Allocator, db_reader: *dfile.DbReader, script: []const u8, output: orch.Output, writer: *std.Io.File.Writer) !void {
         var dot = DotUsage.init(allocator, script) catch {
             std.debug.print("couldn't parse gof script", .{});
             _ = try writer.interface.write("couldn't parse gof script");
@@ -96,8 +97,16 @@ pub const DbVariationWriter = struct {
         var start: usize = 0;
         var end = db_reader.header.count;
 
-        if (skip) |s| start = s;
-        if (take) |t| end = start + t;
+        if (output.skip) |s| start = s;
+        if (output.take) |t| end = start + t;
+
+        var iVisual: usize = 0;
+
+        var vStart: usize = 0;
+        var vEnd: usize = db_reader.header.count;
+
+        if (output.visualSkip) |s| vStart = s;
+        if (output.visualTake) |t| vEnd = vStart + t;
 
         var append_newline = false;
 
@@ -120,7 +129,7 @@ pub const DbVariationWriter = struct {
             var meta = try db_reader.readMeta(i);
             const meta_id: [5]u8 = @bitCast(meta.id);
 
-            if (single) |single_id| {
+            if (output.filterSingle) |single_id| {
                 if (!std.mem.containsAtLeast(u8, single_id, 1, &meta_id)) {
                     continue;
                 }
@@ -135,7 +144,7 @@ pub const DbVariationWriter = struct {
             };
 
             if (true) {
-                if (mfilter) |filter| {
+                if (output.filter) |filter| {
                     if (filter == orch_lx.FilterKind.fullMatch) {
                         if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len == 0) {
                             continue;
@@ -151,6 +160,14 @@ pub const DbVariationWriter = struct {
                 const solution = meta.moves()[0..meta.size];
 
                 const solution_match_type = PuzzleSolutionMatchType.fromSolution(solution, played);
+
+                header.incPuzzleMatch(solution_match_type);
+
+                if (iVisual < vStart or iVisual >= vEnd) {
+                    continue;
+                }
+
+                iVisual += 1;
 
                 if (append_newline) _ = try writer.interface.write("\n");
                 append_newline = true;
@@ -174,14 +191,14 @@ pub const DbVariationWriter = struct {
                 _ = try writer.interface.write(solution_match_type.string());
                 _ = try writer.interface.write("\n");
 
-                const output = dot.printLines(allocator) catch {
+                const out_string = dot.printLines(allocator) catch {
                     _ = try writer.interface.write("Error writing output ");
                     _ = try writer.interface.write(&meta_id);
                     _ = try writer.interface.write("\n");
                     return;
                 };
 
-                _ = try writer.interface.write(output);
+                _ = try writer.interface.write(out_string);
             }
         }
 
@@ -212,7 +229,12 @@ pub const CoverageHeader = struct {
     nbPuzzles: f64,
     buffer: []u8,
 
-    const BufferSize = 40;
+    nbFirstMatch: f64 = 0,
+    nbFullMatch: f64 = 0,
+    nbNegativeMatch: f64 = 0,
+    nbFalseMatch: f64 = 0,
+
+    const BufferSize = 200;
 
     const Self = @This();
 
@@ -221,12 +243,21 @@ pub const CoverageHeader = struct {
     }
 
     pub fn init(allocator: Allocator, start: std.Io.Timestamp, totalPuzzles: f64) !Self {
-        const empty_header = [_]u8{' '} ** 40;
+        const empty_header = [_]u8{' '} ** CoverageHeader.BufferSize;
         return .{ .start = start, .nbPuzzles = 0, .totalPuzzles = totalPuzzles, .buffer = try allocator.dupe(u8, &empty_header) };
     }
 
     pub fn setNbPuzzles(self: *Self, i: f64) void {
         self.nbPuzzles = i;
+    }
+
+    pub fn incPuzzleMatch(self: *Self, match_type: PuzzleSolutionMatchType) void {
+        switch (match_type) {
+            PuzzleSolutionMatchType.firstMoveMatch => self.nbFirstMatch += 1,
+            PuzzleSolutionMatchType.fullMatch => self.nbFullMatch += 1,
+            PuzzleSolutionMatchType.negative => self.nbNegativeMatch += 1,
+            PuzzleSolutionMatchType.falseMatch => self.nbFalseMatch += 1,
+        }
     }
 
     pub fn write(self: *Self, io: std.Io, writer: *std.Io.File.Writer, isEnd: bool) !void {
@@ -238,14 +269,21 @@ pub const CoverageHeader = struct {
         try writer.seekTo(0);
         const totalMs: f64 = @floatFromInt(self.start.untilNow(io, .awake).toMilliseconds());
         const progress = self.nbPuzzles / self.totalPuzzles * 100;
+        var left: usize = 0;
         if (isEnd) {
-            _ = try std.fmt.bufPrint(self.buffer, "{d:.2} ms per puzzle, total {d:.0}ms\n", .{ totalMs / self.totalPuzzles, totalMs });
+            left += (try std.fmt.bufPrint(self.buffer[left..], "{d:.2} ms per puzzle, took {d:.0}ms\n", .{ totalMs / self.totalPuzzles, totalMs })).len;
         } else {
-            _ = try std.fmt.bufPrint(self.buffer, "Progress: {d:.2} {d:.2} ms per puzzle\n", .{ progress, totalMs / self.totalPuzzles });
+            left += (try std.fmt.bufPrint(self.buffer[left..], "Progress: {d:.2} {d:.2} ms per puzzle\n", .{ progress, totalMs / self.totalPuzzles })).len;
         }
+
+        const Coverage = (1 - self.nbNegativeMatch / self.totalPuzzles) * 100;
+        const Accuracy = (self.nbFullMatch + self.nbFirstMatch) / self.totalPuzzles * 100;
+        left += (try std.fmt.bufPrint(self.buffer[left..], "FirstM:{d} N:{d} F:{d} T:{d}\n", .{ self.nbFirstMatch, self.nbNegativeMatch, self.nbFalseMatch, self.nbFullMatch })).len;
+        left += (try std.fmt.bufPrint(self.buffer[left..], "Coverage:{d:.2}% Accuracy:{d:.2}%\n", .{ Coverage, Accuracy })).len;
+        left += (try std.fmt.bufPrint(self.buffer[left..], "Total:{d}", .{self.totalPuzzles})).len;
         _ = try writer.interface.write(self.buffer);
         _ = try writer.interface.write("\n");
-        try writer.seekTo(@max(pos, 41));
+        try writer.seekTo(@max(pos, CoverageHeader.BufferSize + 1));
         //try writer.flush();
     }
 };

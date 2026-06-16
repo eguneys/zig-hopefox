@@ -1,8 +1,8 @@
-input: data/test_b_forks_kr.csv
+input: data/lichess_db_puzzle.csv
    output:
       preview:
          - basePath: scripts/output/
-         - take: 100
+         - visualTake: 100
          - runOnly:
    variation: 
      mainline: scripts/script2.gof
