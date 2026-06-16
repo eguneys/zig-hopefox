@@ -16,9 +16,9 @@ const log = @import("dot/logs.zig");
 const errors = error{InvalidPath};
 
 pub const OrchFile = struct {
-    pub const OrchFileCapacity: usize = 20048;
-    pub const ScriptFileCapacity: usize = 40096;
-    pub const OutputFileCapacity: usize = 60096;
+    pub const OrchFileCapacity: usize = 200048;
+    pub const ScriptFileCapacity: usize = 400096;
+    pub const OutputFileCapacity: usize = 9000096;
 
     mainline_script_path: []const u8,
     orch_file: ReadFile,
@@ -26,9 +26,7 @@ pub const OrchFile = struct {
     io: std.Io,
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
-        std.debug.print("deinit 1", .{});
         self.orch.deinit(allocator);
-        std.debug.print("deinit 2", .{});
         self.orch_file.deinit(allocator);
     }
 

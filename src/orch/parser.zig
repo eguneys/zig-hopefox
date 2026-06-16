@@ -10,6 +10,7 @@ pub const Orch = struct {
     dbs: []Db,
 
     pub fn deinit(self: *Orch, allocator: Allocator) void {
+        std.debug.print("deinit orch db {d}", .{self.dbs.len});
         for (self.dbs) |*db| db.deinit(allocator);
         std.debug.print("deinit free", .{});
         allocator.free(self.dbs);

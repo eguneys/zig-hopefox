@@ -22,7 +22,10 @@ pub const LiveOrchFile = struct {
     }
 
     fn reloadOrchFile(self: *LiveOrchFile, allocator: std.mem.Allocator) !void {
-        //self.orch_file.deinit(allocator);
+        std.debug.print("here", .{});
+        std.debug.print("here {d} afd", .{self.orch_file.orch.dbs.len});
+        self.orch_file.deinit(allocator);
+        std.debug.print("afetr", .{});
 
         const orch_file = try OrchFile.init(self.io, allocator, self.orch_path);
         self.orch_file = orch_file;
@@ -30,7 +33,8 @@ pub const LiveOrchFile = struct {
     }
 
     pub fn open(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !LiveOrchFile {
-        const orch_path = try std.mem.join(allocator, "/", &[2][]const u8{ path, "analysis.orch" });
+        const orch_path = try std.mem.join(allocator, "/", &[2][]const u8{ path, "one.orch" });
+        defer allocator.free(orch_path);
 
         return LiveOrchFile{
             .io = io,
@@ -96,4 +100,11 @@ pub const LiveOrchFile = struct {
     }
 };
 
-test "basic usage" {}
+test "basic usage" {
+    const ally = std.testing.allocator;
+    const io = std.testing.io;
+
+    var orch = try LiveOrchFile.open(io, ally, "scripts/analysis.orch");
+
+    orch.deinit(ally);
+}
