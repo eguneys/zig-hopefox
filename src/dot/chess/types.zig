@@ -35,6 +35,7 @@ pub const Rank = enum(u8) {
 
 pub const Files = [8]File{ File.A, File.B, File.C, File.D, File.E, File.F, File.G, File.H };
 pub const Ranks = [8]Rank{ Rank.R1, Rank.R2, Rank.R3, Rank.R4, Rank.R5, Rank.R6, Rank.R7, Rank.R8 };
+pub const RanksReversed = [8]Rank{ Rank.R8, Rank.R7, Rank.R6, Rank.R5, Rank.R4, Rank.R3, Rank.R2, Rank.R1 };
 
 pub const Square = enum(u8) {
     A1,
@@ -793,6 +794,13 @@ pub const Prints = struct {
     const FileNames = [8]u8{ 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h' };
     const RankNames = [8]u8{ '1', '2', '3', '4', '5', '6', '7', '8' };
 
+    pub fn color(self: Color) u8 {
+        return switch (self) {
+            Color.White => 'w',
+            Color.Black => 'b',
+        };
+    }
+
     pub fn file(self: File) u8 {
         return FileNames[@intFromEnum(self)];
     }
@@ -889,12 +897,49 @@ pub const Prints = struct {
         var builder: std.ArrayList(u8) = .empty;
         defer builder.deinit(allocator);
 
-        _ = pos;
-        try builder.appendSlice(allocator, "fen");
+        for (RanksReversed) |rank_| {
+            var empty: u8 = 0;
+            for (Files) |file_| {
+                const p = pos.pieceOn(Square.fromCoord(file_, rank_));
+
+                if (p) |piece_| {
+                    if (empty > 0) {
+                        try builder.append(allocator, empty + '0');
+                    }
+                    try builder.append(allocator, Prints.piece(piece_));
+                } else {
+                    empty += 1;
+                }
+            }
+            if (empty > 0) {
+                try builder.append(allocator, empty + '0');
+            }
+            if (rank_ != Rank.R1)
+                try builder.append(allocator, '/');
+        }
+
+        try builder.append(allocator, ' ');
+
+        try builder.append(allocator, Prints.color(pos.turn));
+        try builder.append(allocator, ' ');
+
+        try builder.appendSlice(allocator, "KQkq - 0 1");
 
         return try builder.toOwnedSlice(allocator);
     }
 };
+
+test "fen print" {
+    const ally = std.testing.allocator;
+
+    const empty_fen = try Prints.fen(std.testing.allocator, Position.empty());
+    defer ally.free(empty_fen);
+    try std.testing.expectEqualStrings("8/8/8/8/8/8/8/8 w KQkq - 0 1", empty_fen);
+
+    const initial_fen = try Prints.fen(std.testing.allocator, Fen.parse(Fen.Initial));
+    defer ally.free(initial_fen);
+    try std.testing.expectEqualStrings("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", initial_fen);
+}
 
 test "bitboards" {
     try std.testing.expectEqualStrings(&Prints.bitboard(Bitboard.Zero),

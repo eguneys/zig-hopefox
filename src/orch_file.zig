@@ -126,7 +126,9 @@ pub const DbVariationWriter = struct {
             if (@mod(fi, totalStep) == 0) {
                 header.setNbPuzzles(fi + 1);
                 std.debug.print("\rProgress: %{d:.0}", .{fi / ftotal * 100});
-                try header.write(io, writer, false);
+                if (output.format == orch_lx.OutputFormat.preview) {
+                    try header.write(io, writer, false);
+                }
             }
             var meta = try db_reader.readMeta(i);
             const meta_id: [5]u8 = @bitCast(meta.id);
@@ -192,6 +194,8 @@ pub const DbVariationWriter = struct {
             const sanMoves = builder.string.items;
             const uciMoves = builder.uci_string.items;
 
+            const uciMove = try san.Prints.fromMoveToUci(allocator, @bitCast(meta.move));
+
             if (output.format == orch_lx.OutputFormat.preview) {
                 if (append_newline) _ = try writer.interface.write("\n");
                 append_newline = true;
@@ -213,6 +217,8 @@ pub const DbVariationWriter = struct {
                 };
 
                 _ = try writer.interface.write(out_string);
+
+                try header.write(io, writer, true);
             } else if (output.format == orch_lx.OutputFormat.csv) {
                 if (append_newline) _ = try writer.interface.write("\n");
                 append_newline = true;
@@ -225,11 +231,15 @@ pub const DbVariationWriter = struct {
                 _ = try writer.interface.write(fen_str);
 
                 _ = try writer.interface.write(",");
+                _ = try writer.interface.write(uciMove);
+                _ = try writer.interface.write(" ");
                 _ = try writer.interface.write(uciMoves);
+
+                _ = try writer.interface.write(",");
+                _ = try writer.interface.write("https://lichess.org/training/");
+                _ = try writer.interface.write(&meta_id);
             }
         }
-
-        try header.write(io, writer, true);
 
         std.debug.print("\r\x1b[KDone!\n", .{});
 
