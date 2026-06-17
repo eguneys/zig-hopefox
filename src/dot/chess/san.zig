@@ -64,7 +64,7 @@ pub const CheckEvasions = struct {
 
         result.piece_captures = result.safe_escape.has(sq_checker);
 
-        const block_ray = types.Attacks.piece_eyes(sq_checker, occ.unset(sq_piece), checker);
+        const block_ray = types.Attacks.from_to(sq_checker, sq_piece).unset(sq_piece);
         var blockers = position.bb_color(piece.colorOf()).unset(sq_piece);
         while (blockers.next()) |blocker| {
             const blocker_ray = types.Attacks.piece_ray(blocker, occ, position.getPiece(blocker));
@@ -494,6 +494,17 @@ fn testSan(expected: []const u8, uci: []const u8, str_position: *const [71:0]u8)
     try std.testing.expectEqualStrings(expected, sans);
 }
 
+fn testSanFen(expected: []const u8, uci: []const u8, fen: []const u8) !void {
+    const ally = std.testing.allocator;
+    var prints = try Prints.init(ally, 80);
+    defer prints.deinit(ally);
+
+    const position = types.Fen.parse(fen);
+    const sans = prints.fromSan(San.fromMove(position, Uci.move(uci).toMove(position)));
+
+    try std.testing.expectEqualStrings(expected, sans);
+}
+
 test "king moves" {
     try testSan("Kf4", "e3f4",
         \\........
@@ -539,4 +550,8 @@ test "checkmate" {
         \\........
         \\........
     );
+}
+
+test "checkmate Bg2#" {
+    try testSanFen("Bg2#", "h3g2", "r4rk1/ppp3pp/2n5/1B1p4/3P3n/2P1qNPb/PP5P/R1BQ1R1K b - - 4 19");
 }
