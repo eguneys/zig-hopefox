@@ -195,6 +195,7 @@ pub const DbVariationWriter = struct {
             const uciMoves = builder.uci_string.items;
 
             const uciMove = try san.Prints.fromMoveToUci(allocator, @bitCast(meta.move));
+            defer allocator.free(uciMove);
 
             if (output.format == orch_lx.OutputFormat.preview) {
                 if (append_newline) _ = try writer.interface.write("\n");
@@ -222,7 +223,9 @@ pub const DbVariationWriter = struct {
             } else if (output.format == orch_lx.OutputFormat.csv) {
                 if (append_newline) _ = try writer.interface.write("\n");
                 append_newline = true;
-                const fen_str = try chess.Prints.fen(allocator, position);
+                var before_position = position;
+                before_position.unmake_move(@bitCast(meta.move), if (meta.captured > 15) null else @enumFromInt(meta.captured));
+                const fen_str = try chess.Prints.fen(allocator, before_position);
                 defer allocator.free(fen_str);
 
                 _ = try writer.interface.write(&meta_id);

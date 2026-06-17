@@ -163,6 +163,10 @@ pub const Piece = enum(u8) {
         return @enumFromInt(@as(u8, @intFromEnum(color)) * 6 + @intFromEnum(role));
     }
 
+    pub fn demote(self: Piece) Piece {
+        return Piece.fromColors(self.colorOf(), Role.Pawn);
+    }
+
     pub fn promote(self: Piece, prole: MovePromotionRole) Piece {
         const role = switch (prole) {
             MovePromotionRole.Queen => Role.Queen,
@@ -1292,6 +1296,55 @@ pub const Position = packed struct(u512) {
         const res = self.make_move(move);
         self.flipTurn();
         return res;
+    }
+
+    pub fn unmake_move_and_flip_turn(self: *Position, move: Move) ?Piece {
+        self.unmake_move(move);
+        self.flipTurn();
+    }
+
+    pub fn unmake_move(self: *Position, move: Move, captured: ?Piece) void {
+        switch (move.kind) {
+            MoveType.Normal => {
+                self.unmake_normal_move(@enumFromInt(move.from), @enumFromInt(move.to), captured);
+            },
+            MoveType.Castling => {
+                self.unmake_castling_move(@enumFromInt(move.from), @enumFromInt(move.to));
+            },
+            MoveType.Promotion => {
+                self.unmake_promotion_move(@enumFromInt(move.from), @enumFromInt(move.to), captured);
+            },
+            MoveType.EnPassant => {},
+        }
+    }
+
+    pub fn unmake_normal_move(self: *Position, from: Square, to: Square, captured: ?Piece) void {
+        const from_piece = self.getPiece(to);
+        self.remove_piece(to);
+        self.put_piece(from, from_piece);
+        if (captured) |c| self.put_piece(to, c);
+    }
+
+    pub fn unmake_promotion_move(self: *Position, from: Square, to: Square, captured: ?Piece) void {
+        const from_piece = self.getPiece(to);
+        self.remove_piece(to);
+        self.put_piece(from, from_piece.demote());
+        if (captured) |c| self.put_piece(to, c);
+    }
+
+    pub fn unmake_castling_move(self: *Position, kingFrom: Square, kingTo: Square) void {
+        const from_king = self.getPiece(kingFrom);
+        const side = CastlingSide.fromKingTo(kingTo);
+        const rookToFile = if (side == CastlingSide.King) File.F else File.D;
+        const rookTo = Square.fromCoord(rookToFile, kingFrom.toRank());
+        const rookFromFile = if (side == CastlingSide.King) File.H else File.A;
+        const rookFrom = Square.fromCoord(rookFromFile, kingFrom.toRank());
+        const from_rook = self.getPiece(rookFrom);
+
+        self.remove_piece(kingTo);
+        self.remove_piece(rookTo);
+        self.put_piece(kingFrom, from_king);
+        self.put_piece(rookFrom, from_rook);
     }
 };
 

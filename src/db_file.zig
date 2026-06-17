@@ -2,39 +2,46 @@ const std = @import("std");
 const types = @import("dot/chess/types.zig");
 const san = @import("dot/chess/san.zig");
 
-const SizeOfPuzzleMeta = 1096 / 8;
-const PuzzleMeta = packed struct(u1096) {
+const SizeOfPuzzleMeta = 400 / 8;
+const PuzzleMeta = packed struct(u400) {
     id: u40,
     move: u16,
-    solution: u1024,
+    solution: u320,
     size: u16,
+    captured: u8,
 
     fn parse(position: types.Position, s_id: []const u8, s_moves: []const u8) PuzzleMeta {
         const id = std.mem.readInt(u40, s_id[0..5], .native);
 
-        var solution: u1024 = undefined;
+        var solution: u320 = undefined;
         var size: u16 = 0;
         var firstMove: u16 = 0;
+        var capturedPiece: u8 = 99;
         var parts = std.mem.splitScalar(u8, s_moves, ' ');
         var position2 = position;
         while (parts.next()) |part| {
             const move = san.Uci.move(part).toMove(position2);
             const res: u16 = @bitCast(move);
-            _ = position2.make_move(move);
-            position2.flipTurn();
+            const captured = position2.make_move_and_flip_turn(move);
             if (firstMove == 0) {
                 firstMove = res;
+                if (captured) |c| {
+                    capturedPiece = @intFromEnum(c);
+                }
             } else {
-                var words: *[64]u16 = @ptrCast(&solution);
+                var words: *[20]u16 = @ptrCast(&solution);
                 words[size] = res;
                 size += 1;
+                if (size == 20) {
+                    break;
+                }
             }
         }
 
-        return PuzzleMeta{ .id = id, .move = firstMove, .solution = solution, .size = size };
+        return PuzzleMeta{ .id = id, .move = firstMove, .captured = capturedPiece, .solution = solution, .size = size };
     }
 
-    pub fn moves(self: PuzzleMeta) [64]types.Move {
+    pub fn moves(self: PuzzleMeta) [20]types.Move {
         return @bitCast(self.solution);
     }
 };
