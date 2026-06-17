@@ -40,7 +40,9 @@ pub const OrchFile = struct {
 
         const script_path = orch_parser.variations.items[0].script_path;
 
-        return .{ .io = io, .orch_file = orch_file, .orch = try orch_parser.toOwnedParse(allocator), .mainline_script_path = script_path };
+        const orch_ = try orch_parser.toOwnedParse(allocator);
+
+        return .{ .io = io, .orch_file = orch_file, .orch = orch_, .mainline_script_path = script_path };
     }
 
     const Self = @This();

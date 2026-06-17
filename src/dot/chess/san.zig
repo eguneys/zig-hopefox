@@ -68,6 +68,7 @@ pub const CheckEvasions = struct {
         var blockers = position.bb_color(piece.colorOf()).unset(sq_piece);
         while (blockers.next()) |blocker| {
             const blocker_ray = types.Attacks.piece_ray(blocker, occ, position.getPiece(blocker));
+
             if (!block_ray.bitand(blocker_ray).isEmpty()) {
                 result.checker_blockers = result.checker_blockers.set(blocker);
             }
@@ -554,4 +555,8 @@ test "checkmate" {
 
 test "checkmate Bg2#" {
     try testSanFen("Bg2#", "h3g2", "r4rk1/ppp3pp/2n5/1B1p4/3P3n/2P1qNPb/PP5P/R1BQ1R1K b - - 4 19");
+}
+
+test "checkmate Bf3#" {
+    try testSanFen("Bf3#", "d5f3", "4r3/3b4/p5p1/3B1p1k/2P2B1P/P5P1/1P2r3/5RK1 w - - 1 40");
 }

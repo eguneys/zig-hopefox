@@ -1,10 +1,10 @@
 input: data/test_b_forks_kr.csv
    output:
-      preview:
-         - basePath: scripts/output/
-         - visualTake: 100
-         - filter: trueMatch
-         - runOnly:
    variation: 
      mainline: scripts/script2.gof
+      output:
+         preview:
+            - basePath: scripts/output/
+            - visualTake: 100
+            - runOnly:
  

@@ -555,3 +555,27 @@ test "regression1" {
 
     try testing.expectEqualStrings("_i0123", orch_file.dbs[0].output[0].filterSingle.?);
 }
+
+test "regression 2" {
+    const ally = testing.allocator;
+
+    var parser = try Parser.init(ally,
+        \\input: data/athousand_sorted.csv
+        \\   output:
+        \\   variation: 
+        \\     mainline: scripts/script1.gof
+        \\        output:
+        \\           preview:
+        \\              - filter: fullMatch
+        \\              - filterSingle: _i0123
+        \\              - take: 15
+        \\              - runOnly:
+    );
+
+    defer parser.deinit(ally);
+
+    var orch_file = try parser.toOwnedParse(ally);
+    defer orch_file.deinit(ally);
+
+    try testing.expectEqual(1, parser.variations.items.len);
+}
