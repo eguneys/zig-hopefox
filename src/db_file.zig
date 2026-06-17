@@ -19,7 +19,6 @@ const PuzzleMeta = packed struct(u400) {
         var capturedPiece: u8 = 99;
         var parts = std.mem.splitScalar(u8, s_moves, ' ');
         var position2 = position;
-        std.debug.print("{s}\n", .{s_id});
         while (parts.next()) |part| {
             const move = san.Uci.move(part).toMove(position2);
             const res: u16 = @bitCast(move);
