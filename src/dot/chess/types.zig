@@ -440,6 +440,39 @@ pub const Attacks = struct {
         return res;
     }
 
+    const knight_masks = generate_knight_masks();
+
+    fn generate_knight_masks() [8][64]Bitboard {
+        var res: [8][64]Bitboard = undefined;
+
+        const df = [8]i8{ 1, 1, -2, 2, -1, 1, 1, -1 };
+        const dr = [8]i8{ 2, -2, 1, 1, 2, 2, -2, -2 };
+
+        for (Squares) |square| {
+            const start_file = @intFromEnum(square.toFile());
+            const start_rank = @intFromEnum(square.toRank());
+
+            for (0..8) |dir| {
+                var mask = Bitboard.Zero;
+                const f = @as(i8, start_file) + df[dir];
+                const r = @as(i8, start_rank) + dr[dir];
+
+                if (f >= 0 and f < 8 and r >= 0 and r < 8) {
+                    @setEvalBranchQuota(10000);
+                    const target_square = Square.fromCoord(@enumFromInt(f), @enumFromInt(r));
+                    mask = mask.bitor(Bitboard.fromSquare(target_square));
+                }
+
+                res[dir][@intFromEnum(square)] = mask;
+            }
+        }
+        return res;
+    }
+
+    pub fn knight(square: Square, direction: Direction) Bitboard {
+        return knight_masks[@intFromEnum(direction)][@intFromEnum(square)];
+    }
+
     pub fn directionOf(from: Square, to: Square) Direction {
         if (from.toFile() == to.toFile()) {
             return if (@intFromEnum(from.toRank()) < @intFromEnum(to.toRank())) Direction.Up else Direction.Down;
@@ -509,6 +542,8 @@ pub const Attacks = struct {
                 .bitor(Attacks.eye(square, occupied, Direction.Right))
                 .bitor(Attacks.eye(square, occupied, Direction.Left))
                 .bitor(Attacks.eye(square, occupied, Direction.Down)),
+            DirectionPlus.All => Attacks.eyes_plus(square, occupied, DirectionPlus.Diagonal)
+                .bitor(Attacks.eyes_plus(square, occupied, DirectionPlus.Straight)),
             else => Bitboard.Zero,
         };
     }
@@ -597,6 +632,20 @@ pub const Attacks = struct {
         };
     }
 
+    pub fn knight_plus(square: Square, plus: DirectionPlus) Bitboard {
+        return switch (plus) {
+            DirectionPlus.All => Attacks.knight(square, Direction.Up)
+                .bitor(Attacks.knight(square, Direction.Down))
+                .bitor(Attacks.knight(square, Direction.Left))
+                .bitor(Attacks.knight(square, Direction.Right))
+                .bitor(Attacks.knight(square, Direction.Up_Right))
+                .bitor(Attacks.knight(square, Direction.Up_Left))
+                .bitor(Attacks.knight(square, Direction.Down_Right))
+                .bitor(Attacks.knight(square, Direction.Down_Left)),
+            else => Bitboard.Zero,
+        };
+    }
+
     pub fn piece_ray(square: Square, occupied: Bitboard, piece: Piece) Bitboard {
         return switch (piece) {
             Piece.Black_Bishop, Piece.White_Bishop => Attacks.ray_plus(square, occupied, DirectionPlus.Diagonal),
@@ -615,7 +664,7 @@ pub const Attacks = struct {
             Piece.Black_Rook, Piece.White_Rook => Attacks.eyes_plus(square, occupied, DirectionPlus.Straight),
             Piece.Black_Queen, Piece.White_Queen => Attacks.eyes_plus(square, occupied, DirectionPlus.All),
             Piece.Black_King, Piece.White_King => Attacks.king_plus(square, DirectionPlus.All),
-            Piece.Black_Knight, Piece.White_Knight => Bitboard.Zero,
+            Piece.Black_Knight, Piece.White_Knight => Attacks.knight_plus(square, DirectionPlus.All),
             Piece.Black_Pawn => Attacks.pawn_plus(square, DirectionPlus.Backward),
             Piece.White_Pawn => Attacks.pawn_plus(square, DirectionPlus.Forward),
         };

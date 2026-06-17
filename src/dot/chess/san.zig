@@ -13,6 +13,7 @@ pub const CheckEvasions = struct {
     escape_attacks: Bitboard,
     checker_blockers: Bitboard,
     checker_captures: Bitboard,
+    piece_captures: bool,
 
     pub fn init(position: types.Position, sq_piece: Square, sq_checker: Square) ?CheckEvasions {
         const occ = position.occupied();
@@ -31,32 +32,38 @@ pub const CheckEvasions = struct {
             .escape_attacks = Bitboard.Zero,
             .checker_blockers = Bitboard.Zero,
             .checker_captures = Bitboard.Zero,
+            .piece_captures = false,
         };
 
         const piece = position.getPiece(sq_piece);
 
         result.escape = types.Attacks.piece_ray(sq_piece, occ, piece);
 
-        result.escape_blocks = position.bb_color(piece.colorOf());
+        result.escape_blocks = position.bb_color(piece.colorOf()).unset(sq_piece);
 
-        var attackers = position.bb_color(piece.colorOf().opposite());
+        var attackers = position.bb_color(checker.colorOf());
 
         while (attackers.next()) |attacker| {
-            const attacker_ray = types.Attacks.piece_eyes(attacker, occ.unset(sq_piece), position.getPiece(attacker));
+            const attacker_ray = types.Attacks
+                .piece_eyes(attacker, occ.unset(sq_piece), position.getPiece(attacker));
             result.escape_attacks = result.escape_attacks.bitor(attacker_ray);
         }
+        result.escape_attacks = result.escape_attacks.bitand(result.escape);
 
         result.safe_escape = result.escape
             .bitdiff(result.escape_attacks)
             .bitdiff(result.escape_blocks);
 
-        var capturers = position.bb_color(piece.colorOf());
+        var capturers = position.bb_color(piece.colorOf()).unset(sq_piece);
         while (capturers.next()) |capturer| {
             const capturer_ray = types.Attacks.piece_ray(capturer, occ, position.getPiece(capturer));
             if (capturer_ray.has(sq_checker)) {
                 result.checker_captures = result.checker_captures.set(capturer);
             }
         }
+
+        result.piece_captures = result.safe_escape.has(sq_checker);
+
         const block_ray = types.Attacks.piece_eyes(sq_checker, occ.unset(sq_piece), checker);
         var blockers = position.bb_color(piece.colorOf()).unset(sq_piece);
         while (blockers.next()) |blocker| {
@@ -76,7 +83,7 @@ pub const CheckEvasions = struct {
                 if (CheckEvasions.init(position, king, opponent)) |evasion| {
                     if (evasion.safe_escape.isEmpty() and
                         evasion.checker_blockers.isEmpty() and
-                        evasion.checker_captures.isEmpty())
+                        evasion.checker_captures.isEmpty() and !evasion.piece_captures)
                     {
                         return evasion;
                     }
@@ -518,6 +525,16 @@ test "checkmate" {
         \\........
         \\........
         \\...R....
+        \\........
+        \\........
+        \\........
+    );
+    try testSan("Bb7#", "a6b7",
+        \\k.......
+        \\p.......
+        \\B..Q....
+        \\N.......
+        \\........
         \\........
         \\........
         \\........
