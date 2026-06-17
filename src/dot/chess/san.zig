@@ -223,14 +223,7 @@ pub const Prints = struct {
     }
 
     pub fn fromMoveToUci(allocator: std.mem.Allocator, move: types.Move) ![]const u8 {
-        const a = try types.Prints.moveFromTo(allocator, move);
-        defer allocator.free(a);
-
-        if (move.kind == types.MoveType.Promotion) {
-            return std.fmt.allocPrint(allocator, "{s}={c}", .{ a, types.Prints.fromPromotionRole(move.promotion) });
-        } else {
-            return allocator.dupe(u8, a);
-        }
+        return try types.Prints.moveFromToUci(allocator, move);
     }
 
     pub fn fromSan(self: Prints, san: San) []const u8 {
@@ -581,4 +574,18 @@ test "checkmate Bg2#" {
 
 test "checkmate Bf3#" {
     try testSanFen("Bf3#", "d5f3", "4r3/3b4/p5p1/3B1p1k/2P2B1P/P5P1/1P2r3/5RK1 w - - 1 40");
+}
+
+test "promotion e8=Q" {
+    try testSanFen("e8=Q+", "e7e8q", "8/2PkP2P/3r4/p7/8/8/4p3/4K3 w - - 0 49");
+
+    const ally = std.testing.allocator;
+    var prints = try Prints.init(ally, 80);
+    defer prints.deinit(ally);
+
+    const position = types.Fen.parse("8/2PkP2P/3r4/p7/8/8/4p3/4K3 w - - 0 49");
+
+    const uciMove = try Prints.fromMoveToUci(ally, Uci.move("e7e8q").toMove(position));
+    defer ally.free(uciMove);
+    try std.testing.expectEqualStrings("e7e8q", uciMove);
 }

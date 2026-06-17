@@ -193,7 +193,7 @@ pub const DbVariationWriter = struct {
             const uciMove = try san.Prints.fromMoveToUci(allocator, @bitCast(meta.move));
             defer allocator.free(uciMove);
 
-            if (iVisual < vStart or iVisual >= vEnd) {
+            if (iVisual < vStart or iVisual > vEnd) {
                 continue;
             }
 
@@ -222,7 +222,7 @@ pub const DbVariationWriter = struct {
                 if (append_newline) _ = try writer.interface.write("\n");
                 append_newline = true;
                 var before_position = position;
-                before_position.unmake_move(@bitCast(meta.move), if (meta.captured > 15) null else @enumFromInt(meta.captured));
+                before_position.unmake_move_and_flip_turn(@bitCast(meta.move), if (meta.captured > 15) null else @enumFromInt(meta.captured));
                 const fen_str = try chess.Prints.fen(allocator, before_position);
                 defer allocator.free(fen_str);
 

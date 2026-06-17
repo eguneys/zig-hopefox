@@ -6,7 +6,17 @@ input: data/test_b_forks_kr.csv
          preview:
             - basePath: scripts/output/
             - filter: firstMoveMatch
-            - visualTake: 100
+            - visualTake: 10
          csv:
             - basePath: scripts/output/
             - filter: firstMoveMatch
+
+input: scripts/output/mainline.csv
+   output:
+   variation: 
+     mainline: scripts/script2.gof
+      output:
+         preview:
+            - basePath: scripts/output/
+            - filter: firstMoveMatch
+            - visualTake: 10

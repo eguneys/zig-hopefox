@@ -19,6 +19,7 @@ const PuzzleMeta = packed struct(u400) {
         var capturedPiece: u8 = 99;
         var parts = std.mem.splitScalar(u8, s_moves, ' ');
         var position2 = position;
+        std.debug.print("{s}\n", .{s_id});
         while (parts.next()) |part| {
             const move = san.Uci.move(part).toMove(position2);
             const res: u16 = @bitCast(move);
@@ -138,8 +139,7 @@ pub const BuildDb = struct {
 
             const meta = PuzzleMeta.parse(position, id, moves);
 
-            _ = position.make_move(@bitCast(meta.move));
-            position.flipTurn();
+            _ = position.make_move_and_flip_turn(@bitCast(meta.move));
 
             try writer.add(position, meta);
         }

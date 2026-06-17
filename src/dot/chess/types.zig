@@ -826,6 +826,15 @@ pub const Prints = struct {
         };
     }
 
+    pub fn fromPromotionRoleLower(self: MovePromotionRole) u8 {
+        return switch (self) {
+            MovePromotionRole.Bishop => 'b',
+            MovePromotionRole.Knight => 'n',
+            MovePromotionRole.Rook => 'r',
+            MovePromotionRole.Queen => 'q',
+        };
+    }
+
     pub fn bitboard(self: Bitboard) [71]u8 {
         var string: [71]u8 = undefined;
         for (&string, 0..) |*val, i| {
@@ -889,11 +898,10 @@ pub const Prints = struct {
         };
     }
 
-    pub fn moveFromTo(allocator: std.mem.Allocator, move: Move) ![]const u8 {
-        const invalid_move: []const u8 = "--";
+    pub fn moveFromToUci(allocator: std.mem.Allocator, move: Move) ![]const u8 {
         return switch (move.kind) {
-            MoveType.Normal => try std.mem.join(allocator, "", &[2][]const u8{ &Prints.fromSquare(@enumFromInt(move.from)), &Prints.fromSquare(@enumFromInt(move.to)) }),
-            else => try allocator.dupe(u8, invalid_move),
+            MoveType.EnPassant, MoveType.Castling, MoveType.Normal => std.fmt.allocPrint(allocator, "{s}{s}", .{ Prints.fromSquare(@enumFromInt(move.from)), Prints.fromSquare(@enumFromInt(move.to)) }),
+            MoveType.Promotion => std.fmt.allocPrint(allocator, "{s}{s}{c}", .{ Prints.fromSquare(@enumFromInt(move.from)), Prints.fromSquare(@enumFromInt(move.to)), Prints.fromPromotionRoleLower(move.promotion) }),
         };
     }
 
@@ -1299,8 +1307,8 @@ pub const Position = packed struct(u512) {
         return res;
     }
 
-    pub fn unmake_move_and_flip_turn(self: *Position, move: Move) ?Piece {
-        self.unmake_move(move);
+    pub fn unmake_move_and_flip_turn(self: *Position, move: Move, captured: ?Piece) void {
+        self.unmake_move(move, captured);
         self.flipTurn();
     }
 
