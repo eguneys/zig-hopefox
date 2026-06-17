@@ -3,8 +3,6 @@ input: data/test_b_forks_kr.csv
    variation: 
      mainline: scripts/script2.gof
       output:
-         preview:
+         db:
             - basePath: scripts/output/
             - visualTake: 100
-            - runOnly:
- 

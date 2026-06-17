@@ -881,8 +881,18 @@ pub const Prints = struct {
         const invalid_move: []const u8 = "--";
         return switch (move.kind) {
             MoveType.Normal => try std.mem.join(allocator, "", &[2][]const u8{ &Prints.fromSquare(@enumFromInt(move.from)), &Prints.fromSquare(@enumFromInt(move.to)) }),
-            else => invalid_move,
+            else => try allocator.dupe(u8, invalid_move),
         };
+    }
+
+    pub fn fen(allocator: std.mem.Allocator, pos: Position) ![]const u8 {
+        var builder: std.ArrayList(u8) = .empty;
+        defer builder.deinit(allocator);
+
+        _ = pos;
+        try builder.appendSlice(allocator, "fen");
+
+        return try builder.toOwnedSlice(allocator);
     }
 };
 

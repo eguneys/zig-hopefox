@@ -145,58 +145,59 @@ pub const DbVariationWriter = struct {
                 return;
             };
 
-            if (true) {
-                if (output.filter) |filter| {
-                    if (filter == orch_lx.FilterKind.fullMatch) {
-                        if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len == 0) {
-                            continue;
-                        }
-                    } else if (filter == orch_lx.FilterKind.negativeMatch) {
-                        if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len > 0) {
-                            continue;
-                        }
+            if (output.filter) |filter| {
+                if (filter == orch_lx.FilterKind.fullMatch) {
+                    if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len == 0) {
+                        continue;
                     }
-                }
-
-                const played = try dot.getLastLine(allocator);
-                const solution = meta.moves()[0..meta.size];
-
-                const solution_match_type = PuzzleSolutionMatchType.fromSolution(solution, played);
-
-                header.incPuzzleMatch(solution_match_type);
-
-                if (output.filter == orch_lx.FilterKind.firstMoveMatch) {
-                    if (solution_match_type != PuzzleSolutionMatchType.firstMoveMatch) {
+                } else if (filter == orch_lx.FilterKind.negativeMatch) {
+                    if (dot.runner.slices.items[dot.runner.slices.items.len - 1].len > 0) {
                         continue;
                     }
                 }
-                if (output.filter == orch_lx.FilterKind.trueMatch) {
-                    if (solution_match_type != PuzzleSolutionMatchType.trueMatch) {
-                        continue;
-                    }
-                }
+            }
 
-                if (iVisual < vStart or iVisual >= vEnd) {
+            const played = try dot.getLastLine(allocator);
+            const solution = meta.moves()[0..meta.size];
+
+            const solution_match_type = PuzzleSolutionMatchType.fromSolution(solution, played);
+
+            header.incPuzzleMatch(solution_match_type);
+
+            if (output.filter == orch_lx.FilterKind.firstMoveMatch) {
+                if (solution_match_type != PuzzleSolutionMatchType.firstMoveMatch) {
                     continue;
                 }
+            }
+            if (output.filter == orch_lx.FilterKind.trueMatch) {
+                if (solution_match_type != PuzzleSolutionMatchType.trueMatch) {
+                    continue;
+                }
+            }
 
-                iVisual += 1;
+            if (iVisual < vStart or iVisual >= vEnd) {
+                continue;
+            }
 
+            iVisual += 1;
+
+            var builder = try san.PrintBuilder.init(allocator);
+            defer builder.deinit(allocator);
+            builder.resetPosition(position);
+
+            for (meta.moves()[0..meta.size]) |move| {
+                try builder.appendMove(allocator, move);
+            }
+
+            const sanMoves = builder.string.items;
+            const uciMoves = builder.uci_string.items;
+
+            if (output.format == orch_lx.OutputFormat.preview) {
                 if (append_newline) _ = try writer.interface.write("\n");
                 append_newline = true;
                 _ = try writer.interface.write("https://lichess.org/training/");
                 _ = try writer.interface.write(&meta_id);
                 _ = try writer.interface.write("\n");
-
-                var builder = try san.PrintBuilder.init(allocator);
-                defer builder.deinit(allocator);
-                builder.resetPosition(position);
-
-                for (meta.moves()[0..meta.size]) |move| {
-                    try builder.appendMove(allocator, move);
-                }
-
-                const sanMoves = builder.string.items;
 
                 _ = try writer.interface.write("[");
                 _ = try writer.interface.write(sanMoves);
@@ -212,6 +213,19 @@ pub const DbVariationWriter = struct {
                 };
 
                 _ = try writer.interface.write(out_string);
+            } else if (output.format == orch_lx.OutputFormat.csv) {
+                if (append_newline) _ = try writer.interface.write("\n");
+                append_newline = true;
+                const fen_str = try chess.Prints.fen(allocator, position);
+                defer allocator.free(fen_str);
+
+                _ = try writer.interface.write(&meta_id);
+
+                _ = try writer.interface.write(",");
+                _ = try writer.interface.write(fen_str);
+
+                _ = try writer.interface.write(",");
+                _ = try writer.interface.write(uciMoves);
             }
         }
 

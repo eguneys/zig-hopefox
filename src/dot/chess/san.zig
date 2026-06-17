@@ -222,6 +222,17 @@ pub const Prints = struct {
         return .{ .single = try single.toOwnedSlice(allocator), .list = try list.toOwnedSlice(allocator) };
     }
 
+    pub fn fromMoveToUci(allocator: std.mem.Allocator, move: types.Move) ![]const u8 {
+        const a = try types.Prints.moveFromTo(allocator, move);
+        defer allocator.free(a);
+
+        if (move.kind == types.MoveType.Promotion) {
+            return std.fmt.allocPrint(allocator, "{s}={c}", .{ a, types.Prints.fromPromotionRole(move.promotion) });
+        } else {
+            return allocator.dupe(u8, a);
+        }
+    }
+
     pub fn fromSan(self: Prints, san: San) []const u8 {
         if (san.castling) |castling| {
             return if (castling.white_queenside or castling.black_queenside) "O-O-O" else "O-O";
@@ -268,27 +279,32 @@ pub const PrintBuilder = struct {
     position: types.Position,
     string: std.ArrayList(u8),
     prints: Prints,
+    uci_string: std.ArrayList(u8),
 
     pub fn deinit(self: *PrintBuilder, allocator: std.mem.Allocator) void {
         self.string.deinit(allocator);
         self.prints.deinit(allocator);
+        self.uci_string.deinit(allocator);
     }
 
     pub fn init(allocator: std.mem.Allocator) !PrintBuilder {
         return .{
             .prints = try Prints.init(allocator, 0),
             .position = undefined,
-            .string = try std.ArrayList(u8).initCapacity(allocator, 0),
+            .string = .empty,
+            .uci_string = .empty,
         };
     }
 
     pub fn clearRetainingPosition(self: *PrintBuilder) void {
         self.string.clearRetainingCapacity();
+        self.uci_string.clearRetainingCapacity();
     }
 
     pub fn resetPosition(self: *PrintBuilder, position: types.Position) void {
         self.position = position;
         self.string.clearRetainingCapacity();
+        self.uci_string.clearRetainingCapacity();
     }
 
     pub fn appendMove(self: *PrintBuilder, allocator: std.mem.Allocator, move: types.Move) !void {
@@ -297,9 +313,15 @@ pub const PrintBuilder = struct {
         }
         if (self.string.items.len > 0) {
             try self.string.append(allocator, ' ');
+            try self.uci_string.append(allocator, ' ');
         }
         try self.string.appendSlice(allocator, self.prints.fromSan(San.fromMove(self.position, move)));
+
+        const uci_move = try Prints.fromMoveToUci(allocator, move);
+        defer allocator.free(uci_move);
+        try self.uci_string.appendSlice(allocator, uci_move);
         _ = self.position.make_move(move);
+        self.position.flipTurn();
     }
 };
 
