@@ -608,6 +608,18 @@ pub const Attacks = struct {
             Piece.White_Pawn => Attacks.pawn_plus(square, DirectionPlus.Forward),
         };
     }
+
+    pub fn piece_eyes(square: Square, occupied: Bitboard, piece: Piece) Bitboard {
+        return switch (piece) {
+            Piece.Black_Bishop, Piece.White_Bishop => Attacks.eyes_plus(square, occupied, DirectionPlus.Diagonal),
+            Piece.Black_Rook, Piece.White_Rook => Attacks.eyes_plus(square, occupied, DirectionPlus.Straight),
+            Piece.Black_Queen, Piece.White_Queen => Attacks.eyes_plus(square, occupied, DirectionPlus.All),
+            Piece.Black_King, Piece.White_King => Attacks.king_plus(square, DirectionPlus.All),
+            Piece.Black_Knight, Piece.White_Knight => Bitboard.Zero,
+            Piece.Black_Pawn => Attacks.pawn_plus(square, DirectionPlus.Backward),
+            Piece.White_Pawn => Attacks.pawn_plus(square, DirectionPlus.Forward),
+        };
+    }
 };
 
 test "from_to" {
@@ -1026,6 +1038,10 @@ pub const Position = packed struct(u512) {
 
     pub fn bb_black_king(self: Position) Bitboard {
         return self.bb_black().bitand(self.bb_king);
+    }
+
+    pub fn bb_color(self: Position, color: Color) Bitboard {
+        return if (color == Color.White) self.bb_white else self.bb_black();
     }
 
     pub fn empty() Position {

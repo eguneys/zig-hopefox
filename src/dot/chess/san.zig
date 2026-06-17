@@ -1,7 +1,91 @@
 const std = @import("std");
 const types = @import("types.zig");
 const Bitboard = types.Bitboard;
+const Square = types.Square;
 const log = @import("logs.zig");
+
+pub const CheckEvasions = struct {
+    piece: Square,
+    checker: Square,
+    escape: Bitboard,
+    safe_escape: Bitboard,
+    escape_blocks: Bitboard,
+    escape_attacks: Bitboard,
+    checker_blockers: Bitboard,
+    checker_captures: Bitboard,
+
+    pub fn init(position: types.Position, sq_piece: Square, sq_checker: Square) ?CheckEvasions {
+        const occ = position.occupied();
+        const checker = position.getPiece(sq_checker);
+        const bb_check = types.Attacks.piece_ray(sq_checker, occ, checker);
+        if (!bb_check.has(sq_piece)) {
+            return null;
+        }
+
+        var result: CheckEvasions = .{
+            .piece = sq_piece,
+            .checker = sq_checker,
+            .escape = Bitboard.Zero,
+            .safe_escape = Bitboard.Zero,
+            .escape_blocks = Bitboard.Zero,
+            .escape_attacks = Bitboard.Zero,
+            .checker_blockers = Bitboard.Zero,
+            .checker_captures = Bitboard.Zero,
+        };
+
+        const piece = position.getPiece(sq_piece);
+
+        result.escape = types.Attacks.piece_ray(sq_piece, occ, piece);
+
+        result.escape_blocks = position.bb_color(piece.colorOf());
+
+        var attackers = position.bb_color(piece.colorOf().opposite());
+
+        while (attackers.next()) |attacker| {
+            const attacker_ray = types.Attacks.piece_eyes(attacker, occ.unset(sq_piece), position.getPiece(attacker));
+            result.escape_attacks = result.escape_attacks.bitor(attacker_ray);
+        }
+
+        result.safe_escape = result.escape
+            .bitdiff(result.escape_attacks)
+            .bitdiff(result.escape_blocks);
+
+        var capturers = position.bb_color(piece.colorOf());
+        while (capturers.next()) |capturer| {
+            const capturer_ray = types.Attacks.piece_ray(capturer, occ, position.getPiece(capturer));
+            if (capturer_ray.has(sq_checker)) {
+                result.checker_captures = result.checker_captures.set(capturer);
+            }
+        }
+        const block_ray = types.Attacks.piece_eyes(sq_checker, occ.unset(sq_piece), checker);
+        var blockers = position.bb_color(piece.colorOf()).unset(sq_piece);
+        while (blockers.next()) |blocker| {
+            const blocker_ray = types.Attacks.piece_ray(blocker, occ, position.getPiece(blocker));
+            if (!block_ray.bitand(blocker_ray).isEmpty()) {
+                result.checker_blockers = result.checker_blockers.set(blocker);
+            }
+        }
+
+        return result;
+    }
+
+    pub fn isCheckmate(position: types.Position) ?CheckEvasions {
+        if (position.bb_king.bitand(position.bb_turn()).single()) |king| {
+            var opp = position.bb_opponent();
+            while (opp.next()) |opponent| {
+                if (CheckEvasions.init(position, king, opponent)) |evasion| {
+                    if (evasion.safe_escape.isEmpty() and
+                        evasion.checker_blockers.isEmpty() and
+                        evasion.checker_captures.isEmpty())
+                    {
+                        return evasion;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+};
 
 pub const CheckFind = struct {
     black_bb: types.Bitboard,
@@ -62,7 +146,9 @@ pub const San = struct {
 
         var pos_after = position;
         _ = pos_after.make_move(move);
+        pos_after.flipTurn();
         const check = CheckFind.init(pos_after).isCheck();
+        const isCheckmate = CheckEvasions.isCheckmate(pos_after) != null;
 
         return .{
             .piece = position.getPiece(@enumFromInt(move.from)),
@@ -76,7 +162,7 @@ pub const San = struct {
                 null,
             .capture = if (position.pieceOn(to) != null) to else null,
             .check = check,
-            .checkmate = false,
+            .checkmate = isCheckmate,
         };
     }
 };
@@ -158,7 +244,10 @@ pub const Prints = struct {
             i += 1;
         }
 
-        if (san.check) {
+        if (san.checkmate) {
+            self.single[i] = '#';
+            i += 1;
+        } else if (san.check) {
             self.single[i] = '+';
             i += 1;
         }
@@ -417,6 +506,19 @@ test "king moves" {
         \\........
         \\........
         \\....q...
+        \\........
+        \\........
+    );
+}
+
+test "checkmate" {
+    try testSan("Rd8#", "d4d8",
+        \\......k.
+        \\.....ppp
+        \\........
+        \\........
+        \\...R....
+        \\........
         \\........
         \\........
     );
