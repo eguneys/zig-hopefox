@@ -909,6 +909,7 @@ pub const Prints = struct {
                 if (p) |piece_| {
                     if (empty > 0) {
                         try builder.append(allocator, empty + '0');
+                        empty = 0;
                     }
                     try builder.append(allocator, Prints.piece(piece_));
                 } else {
