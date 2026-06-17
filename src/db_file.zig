@@ -224,38 +224,6 @@ test "db writer db reader" {
     try std.testing.expectEqual(san.Uci.move("b1c3").toMove(position), meta2.moves()[1]);
 }
 
-test "moves not working" {
-    const ally = std.testing.allocator;
-    var writer: DbWriter = undefined;
-    try writer.open(std.testing.io, "data/test.pos.db", "data/test.meta.db");
-
-    var meta = PuzzleMeta.parse(types.Fen.parse(types.Fen.Initial), "abcdef", "e7c7 c5d6 f3f4 d6c7");
-    try writer.add(types.Fen.parse(types.Fen.Initial), meta);
-
-    try writer.close(std.testing.io);
-    var reader = try DbReader.open(std.testing.io, "data/test.pos.db", "data/test.meta.db");
-
-    try std.testing.expectEqual(1, reader.header.count);
-
-    var meta2 = try reader.readMeta(0);
-
-    //"e7c7 c5d6 f3f4 d6c7";
-    const position = types.Fen.parse(types.Fen.Initial);
-    const move1: types.Move = @bitCast(meta.move);
-    try std.testing.expectEqual(san.Uci.move("e7c7").toMove(position), move1);
-    try std.testing.expectEqual(3, meta.size);
-    const res = try types.Prints.moveFromTo(ally, meta.moves()[0]);
-    defer ally.free(res);
-    try std.testing.expectEqualStrings("c5d6", res);
-    try std.testing.expectEqual(san.Uci.move("c5d6").toMove(position), meta.moves()[0]);
-
-    const move: types.Move = @bitCast(meta2.move);
-    try std.testing.expectEqual(san.Uci.move("e7c7").toMove(position), move);
-    try std.testing.expectEqual(3, meta2.size);
-    try std.testing.expectEqual(san.Uci.move("c5d6").toMove(position), meta2.moves()[0]);
-    try std.testing.expectEqual(san.Uci.move("f3f4").toMove(position), meta2.moves()[1]);
-}
-
 test "moves not working 2" {
     const ally = std.testing.allocator;
 

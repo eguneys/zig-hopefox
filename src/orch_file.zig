@@ -163,6 +163,17 @@ pub const DbVariationWriter = struct {
 
                 header.incPuzzleMatch(solution_match_type);
 
+                if (output.filter == orch_lx.FilterKind.firstMoveMatch) {
+                    if (solution_match_type != PuzzleSolutionMatchType.firstMoveMatch) {
+                        continue;
+                    }
+                }
+                if (output.filter == orch_lx.FilterKind.trueMatch) {
+                    if (solution_match_type != PuzzleSolutionMatchType.trueMatch) {
+                        continue;
+                    }
+                }
+
                 if (iVisual < vStart or iVisual >= vEnd) {
                     continue;
                 }
@@ -254,7 +265,7 @@ pub const CoverageHeader = struct {
     pub fn incPuzzleMatch(self: *Self, match_type: PuzzleSolutionMatchType) void {
         switch (match_type) {
             PuzzleSolutionMatchType.firstMoveMatch => self.nbFirstMatch += 1,
-            PuzzleSolutionMatchType.fullMatch => self.nbFullMatch += 1,
+            PuzzleSolutionMatchType.trueMatch => self.nbFullMatch += 1,
             PuzzleSolutionMatchType.negative => self.nbNegativeMatch += 1,
             PuzzleSolutionMatchType.falseMatch => self.nbFalseMatch += 1,
         }
@@ -290,14 +301,14 @@ pub const CoverageHeader = struct {
 
 pub const PuzzleSolutionMatchType = enum {
     firstMoveMatch,
-    fullMatch,
+    trueMatch,
     negative,
     falseMatch,
 
     pub fn string(self: PuzzleSolutionMatchType) []const u8 {
         return switch (self) {
             PuzzleSolutionMatchType.firstMoveMatch => "firstMoveMatch",
-            PuzzleSolutionMatchType.fullMatch => "fullMatch",
+            PuzzleSolutionMatchType.trueMatch => "trueMatch",
             PuzzleSolutionMatchType.negative => "negative",
             PuzzleSolutionMatchType.falseMatch => "falseMatch",
         };
@@ -314,7 +325,7 @@ pub const PuzzleSolutionMatchType = enum {
                     result = PuzzleSolutionMatchType.firstMoveMatch;
                 }
                 if (j == solution.len - 1) {
-                    result = PuzzleSolutionMatchType.fullMatch;
+                    result = PuzzleSolutionMatchType.trueMatch;
                 }
             } else {
                 if (result == PuzzleSolutionMatchType.negative) {
