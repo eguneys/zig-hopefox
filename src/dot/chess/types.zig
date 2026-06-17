@@ -1334,13 +1334,13 @@ pub const Position = packed struct(u512) {
     }
 
     pub fn unmake_castling_move(self: *Position, kingFrom: Square, kingTo: Square) void {
-        const from_king = self.getPiece(kingFrom);
         const side = CastlingSide.fromKingTo(kingTo);
         const rookToFile = if (side == CastlingSide.King) File.F else File.D;
         const rookTo = Square.fromCoord(rookToFile, kingFrom.toRank());
         const rookFromFile = if (side == CastlingSide.King) File.H else File.A;
         const rookFrom = Square.fromCoord(rookFromFile, kingFrom.toRank());
-        const from_rook = self.getPiece(rookFrom);
+        const from_rook = self.getPiece(rookTo);
+        const from_king = self.getPiece(kingTo);
 
         self.remove_piece(kingTo);
         self.remove_piece(rookTo);

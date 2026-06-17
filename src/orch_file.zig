@@ -177,10 +177,6 @@ pub const DbVariationWriter = struct {
                 }
             }
 
-            if (iVisual < vStart or iVisual >= vEnd) {
-                continue;
-            }
-
             iVisual += 1;
 
             var builder = try san.PrintBuilder.init(allocator);
@@ -196,6 +192,10 @@ pub const DbVariationWriter = struct {
 
             const uciMove = try san.Prints.fromMoveToUci(allocator, @bitCast(meta.move));
             defer allocator.free(uciMove);
+
+            if (iVisual < vStart or iVisual >= vEnd) {
+                continue;
+            }
 
             if (output.format == orch_lx.OutputFormat.preview) {
                 if (append_newline) _ = try writer.interface.write("\n");
@@ -218,8 +218,6 @@ pub const DbVariationWriter = struct {
                 };
 
                 _ = try writer.interface.write(out_string);
-
-                try header.write(io, writer, true);
             } else if (output.format == orch_lx.OutputFormat.csv) {
                 if (append_newline) _ = try writer.interface.write("\n");
                 append_newline = true;
@@ -244,6 +242,9 @@ pub const DbVariationWriter = struct {
             }
         }
 
+        if (output.format == orch_lx.OutputFormat.preview) {
+            try header.write(io, writer, true);
+        }
         std.debug.print("\r\x1b[KDone!\n", .{});
 
         try writer.end();
