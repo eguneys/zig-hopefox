@@ -38,6 +38,7 @@ pub const Orch = struct {
 pub const Script = struct {
     path: []const u8,
     filters: Slice,
+    preview: ?Preview,
 
     pub fn deinit(self: *Script, allocator: Allocator) void {
         allocator.free(self.path);
@@ -143,6 +144,10 @@ pub const Parser = struct {
 
         if (self.eatTag(lx.TokenTag.Colon) == null) {
             return errors.ExpectingColon;
+        }
+
+        if (self.peekTag(lx.TokenTag.At) != null) {
+            result.preview = try self.parsePreview();
         }
 
         result.filters = try self.parseFilters(allocator, indent + 2);
@@ -306,7 +311,7 @@ test "basic usage" {
     //{ FirstMove, True, Negative, False, Full, Zero };
     var parser = try Parser.init(ally,
         \\src: database.db
-        \\script.gof:
+        \\script.gof: @preview(take=10)
         \\  FirstMove: @preview
         \\    script2.gof:
         \\      True
