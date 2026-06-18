@@ -10,7 +10,7 @@ pub const PuzzleMeta = packed struct(u400) {
     size: u16,
     captured: u8,
 
-    fn parse(position: types.Position, s_id: []const u8, s_moves: []const u8) PuzzleMeta {
+    pub fn parse(position: types.Position, s_id: []const u8, s_moves: []const u8) PuzzleMeta {
         const id = std.mem.readInt(u40, s_id[0..5], .native);
 
         var solution: u320 = undefined;
@@ -62,7 +62,7 @@ test "basic usage" {
 
 const DbHeader = packed struct(u128) { magic: u32 = 0x5a7a70, version: u32 = 1, count: u64 };
 
-const DbWriter = struct {
+pub const DbWriter = struct {
     meta_file: std.Io.File,
     file: std.Io.File,
     buffer: [4096]u8,
@@ -71,7 +71,8 @@ const DbWriter = struct {
     writer2: std.Io.File.Writer,
     header: DbHeader,
 
-    fn open(self: *DbWriter, io: std.Io, dir: std.Io.Dir, path: []const u8, meta_path: []const u8) !void {
+    pub fn open(io: std.Io, dir: std.Io.Dir, path: []const u8, meta_path: []const u8) !DbWriter {
+        var self: DbWriter = undefined;
         self.header = .{ .count = 0 };
         self.file = try dir.createFile(io, path, .{});
 
@@ -81,15 +82,17 @@ const DbWriter = struct {
         self.writer2 = self.meta_file.writer(io, &self.buffer2);
 
         try self.writer2.interface.writeStruct(self.header, .native);
+
+        return self;
     }
 
-    fn add(self: *DbWriter, position: types.Position, meta: PuzzleMeta) !void {
+    pub fn add(self: *DbWriter, position: types.Position, meta: PuzzleMeta) !void {
         try self.writer.interface.writeStruct(position, .native);
         try self.writer2.interface.writeStruct(meta, .native);
         self.header.count += 1;
     }
 
-    fn close(self: *DbWriter, io: std.Io) !void {
+    pub fn close(self: *DbWriter, io: std.Io) !void {
         try self.writer2.seekTo(0);
         try self.writer2.interface.writeStruct(self.header, .native);
         try self.writer2.flush();
@@ -105,15 +108,13 @@ pub const BuildDb = struct {
             if (err == error.FileNotFound) {
                 var stdout = std.Io.File.stdout().writer(io, &.{});
                 try stdout.interface.print("Building, Positions Db.\n", .{});
-                try read_csv_to_build_db(io, csv_file, db_file, meta_file);
+                try read_csv_to_build_db(io, dir, csv_file, db_file, meta_file);
             }
         };
     }
 
     fn read_csv_to_build_db(io: std.Io, dir: std.Io.Dir, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
-        var writer: DbWriter = undefined;
-
-        try writer.open(io, db_file, meta_file);
+        var writer = try DbWriter.open(io, dir, db_file, meta_file);
 
         var buffer: [500]u8 = undefined;
 
@@ -143,10 +144,6 @@ pub const BuildDb = struct {
         try writer.close(io);
     }
 };
-
-test "af" {
-    try BuildDb.read_csv_to_build_db_if_doesnt_exists(std.testing.io, "data/athousand_sorted.csv", "data/athousand.pos.db", "data/athousand.meta.db");
-}
 
 pub const DbReader = struct {
     meta_file: std.Io.File,
@@ -187,7 +184,7 @@ pub const DbReader = struct {
         return @bitCast(buffer);
     }
 
-    fn close(self: *DbWriter, io: std.Io) !void {
+    pub fn close(self: *DbReader, io: std.Io) void {
         self.file.close(io);
         self.meta_file.close(io);
     }
@@ -198,8 +195,7 @@ test "db writer db reader" {
 
     const tmp = std.testing.tmpDir(.{}).dir;
 
-    var writer: DbWriter = undefined;
-    try writer.open(std.testing.io, tmp, "test.pos.db", "test.meta.db");
+    var writer = try DbWriter.open(std.testing.io, tmp, "test.pos.db", "test.meta.db");
 
     var meta = PuzzleMeta.parse(types.Fen.parse(types.Fen.Initial), "abcdef", "e2e4 e7e5 b1c3");
     try writer.add(types.Fen.parse(types.Fen.Initial), meta);
@@ -226,31 +222,4 @@ test "db writer db reader" {
     try std.testing.expectEqual(2, meta2.size);
     try std.testing.expectEqual(san.Uci.move("e7e5").toMove(position), meta2.moves()[0]);
     try std.testing.expectEqual(san.Uci.move("b1c3").toMove(position), meta2.moves()[1]);
-}
-
-test "moves not working 2" {
-    const ally = std.testing.allocator;
-
-    var reader = try DbReader.open(std.testing.io, "data/athousand.pos.db", "data/athousand.meta.db");
-
-    try std.testing.expectEqual(1000, reader.header.count);
-
-    const position = try reader.readPosition(39);
-    var meta = try reader.readMeta(39);
-
-    const res = try types.Prints.moveFromToUci(ally, meta.moves()[0]);
-    defer ally.free(res);
-    try std.testing.expectEqualStrings("c5d6", res);
-
-    const res2 = try types.Prints.moveFromToUci(ally, meta.moves()[1]);
-    defer ally.free(res2);
-    try std.testing.expectEqualStrings("f3f4", res2);
-
-    var builder = try san.PrintBuilder.init(ally);
-    defer builder.deinit(ally);
-    builder.resetPosition(position);
-
-    for (meta.moves()[0..meta.size]) |move| {
-        try builder.appendMove(ally, move);
-    }
 }

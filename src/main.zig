@@ -1,5 +1,5 @@
 const std = @import("std");
-const LiveReloadable = @import("orch_live.zig").LiveOrchFile;
+const LiveOrchRunner = @import("orch_runner.zig").LiveOrchRunner;
 
 pub fn main(init: std.process.Init) !void {
     var stdout = std.Io.File.stdout().writer(init.io, &.{});
@@ -8,10 +8,8 @@ pub fn main(init: std.process.Init) !void {
     var gpa: std.heap.DebugAllocator(.{}) = .init;
     const allocator = gpa.allocator();
 
-    var live_r = try LiveReloadable.open(init.io, allocator, "scripts");
-    defer live_r.deinit(allocator);
-
-    try live_r.loop(init.io, allocator);
+    const liveOrch = try LiveOrchRunner.init(init.io, allocator, "analysis.orch");
+    defer liveOrch.deinit(allocator);
 }
 
 test "imports" {
@@ -24,7 +22,8 @@ test "imports" {
     _ = @import("dot/runner2.zig");
     _ = @import("dot/usage2.zig");
 
-    _ = @import("orch/parser.zig");
+    _ = @import("orch2/lexer.zig");
+    _ = @import("orch2/parser.zig");
 
     _ = @import("db_file.zig");
 }
