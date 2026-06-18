@@ -252,18 +252,30 @@ pub const Parser = struct {
 
         var can_see_word = true;
         while (can_see_word) {
-            if (self.eatWord(null)) |word| {
-                try result.appendSlice(allocator, word.value.text);
-                can_see_word = false;
-            } else {
-                break;
+            if (self.eatTag(lx.TokenTag.Dot) != null) {
+                try result.append(allocator, '.');
+                can_see_word = true;
             }
 
             if (self.eatTag(lx.TokenTag.Dot) != null) {
                 try result.append(allocator, '.');
                 can_see_word = true;
             }
+            if (self.eatTag(lx.TokenTag.PathJoin) != null) {
+                try result.append(allocator, '/');
+                can_see_word = true;
+            }
 
+            if (self.eatWord(null)) |word| {
+                try result.appendSlice(allocator, word.value.text);
+                can_see_word = false;
+            } else {
+                break;
+            }
+            if (self.eatTag(lx.TokenTag.Dot) != null) {
+                try result.append(allocator, '.');
+                can_see_word = true;
+            }
             if (self.eatTag(lx.TokenTag.PathJoin) != null) {
                 try result.append(allocator, '/');
                 can_see_word = true;
@@ -310,7 +322,7 @@ test "basic usage" {
 
     //{ FirstMove, True, Negative, False, Full, Zero };
     var parser = try Parser.init(ally,
-        \\src: database.db
+        \\src: ../data/database.db
         \\script.gof: @preview(take=10)
         \\  FirstMove: @preview
         \\    script2.gof:
@@ -336,4 +348,25 @@ test "basic usage" {
     try testing.expectEqual(3, orch.scripts_flat[2].filters.len);
     try testing.expectEqual(4, orch.scripts_flat[2].filters.off);
     try testing.expectEqual(1, orch.filters_flat[4].scripts.len);
+}
+
+test "regression" {
+    const ally = testing.allocator;
+
+    //{ FirstMove, True, Negative, False, Full, Zero };
+    var parser = try Parser.init(ally,
+        \\src: ../data/test_b_forks_kr2.csv
+        \\script.gof:
+        \\  Negative: @preview
+        \\    script2.gof:
+        \\      Zero
+        \\  Zero
+        \\  Full: @preview
+    );
+    defer parser.deinit(ally);
+
+    var orch = try parser.toOwnedOrch(ally);
+    defer orch.deinit(ally);
+
+    try testing.expectEqual(1, orch.scripts.len);
 }

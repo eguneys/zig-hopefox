@@ -1,0 +1,7 @@
+src: ../data/test_b_forks_kr.csv
+script1.gof:
+  Negative: @preview
+    script2.gof:
+      Zero
+  Zero
+  Full: @preview

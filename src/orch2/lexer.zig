@@ -225,7 +225,7 @@ pub const Lexer = struct {
         const findword: []const u8 = findword: {
             const start = self.inext;
             while (self.peekNextChar()) |char| {
-                if (std.ascii.isAlphanumeric(char)) {
+                if (std.ascii.isAlphanumeric(char) or char == '_' or char == '-') {
                     self.inext += 1;
                     self.column_no += 1;
                 } else {

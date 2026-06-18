@@ -103,22 +103,22 @@ pub const DbWriter = struct {
 };
 
 pub const BuildDb = struct {
-    pub fn read_csv_to_build_db_if_doesnt_exists(io: std.Io, dir: std.Io.Dir, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
-        dir.access(io, meta_file, .{}) catch |err| {
+    pub fn read_csv_to_build_db_if_doesnt_exists(io: std.Io, csv_dir: std.Io.Dir, db_dir: std.Io.Dir, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
+        db_dir.access(io, meta_file, .{}) catch |err| {
             if (err == error.FileNotFound) {
                 var stdout = std.Io.File.stdout().writer(io, &.{});
                 try stdout.interface.print("Building, Positions Db.\n", .{});
-                try read_csv_to_build_db(io, dir, csv_file, db_file, meta_file);
+                try read_csv_to_build_db(io, csv_dir, db_dir, csv_file, db_file, meta_file);
             }
         };
     }
 
-    fn read_csv_to_build_db(io: std.Io, dir: std.Io.Dir, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
-        var writer = try DbWriter.open(io, dir, db_file, meta_file);
+    fn read_csv_to_build_db(io: std.Io, csv_dir: std.Io.Dir, db_dir: std.Io.Dir, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
+        var writer = try DbWriter.open(io, db_dir, db_file, meta_file);
 
         var buffer: [500]u8 = undefined;
 
-        const file = try dir.openFile(io, csv_file, .{ .mode = .read_only });
+        const file = try csv_dir.openFile(io, csv_file, .{ .mode = .read_only });
 
         defer file.close(io);
         var reader = file.reader(io, &buffer);
