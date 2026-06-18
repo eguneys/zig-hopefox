@@ -92,11 +92,14 @@ pub const DbWriter = struct {
         self.header.count += 1;
     }
 
-    pub fn close(self: *DbWriter, io: std.Io) !void {
+    pub fn end(self: *DbWriter) !void {
         try self.writer2.seekTo(0);
         try self.writer2.interface.writeStruct(self.header, .native);
         try self.writer2.flush();
         try self.writer.flush();
+    }
+
+    pub fn close(self: *DbWriter, io: std.Io) void {
         self.file.close(io);
         self.meta_file.close(io);
     }
@@ -114,13 +117,14 @@ pub const BuildDb = struct {
     }
 
     fn read_csv_to_build_db(io: std.Io, csv_dir: std.Io.Dir, db_dir: std.Io.Dir, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
+        const file = try csv_dir.openFile(io, csv_file, .{ .mode = .read_only });
+        defer file.close(io);
+
         var writer = try DbWriter.open(io, db_dir, db_file, meta_file);
+        defer writer.close(io);
 
         var buffer: [500]u8 = undefined;
 
-        const file = try csv_dir.openFile(io, csv_file, .{ .mode = .read_only });
-
-        defer file.close(io);
         var reader = file.reader(io, &buffer);
 
         var i_reader = &reader.interface;
@@ -141,7 +145,7 @@ pub const BuildDb = struct {
             try writer.add(position, meta);
         }
 
-        try writer.close(io);
+        try writer.end();
     }
 };
 

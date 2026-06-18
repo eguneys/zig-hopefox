@@ -82,7 +82,6 @@ pub const OrchRunner = struct {
 
 const ScriptFilters = struct {
     script_path: []const u8,
-    src_path: []const u8,
 
     io: std.Io,
     preview: ?op.Preview,
@@ -125,7 +124,6 @@ const ScriptFilters = struct {
 
         return .{
             .script_path = script_path,
-            .src_path = src_path,
             .io = io,
             .preview = preview,
             .previewTagFiles = .init(allocator),
@@ -167,21 +165,25 @@ const ScriptFilters = struct {
     }
 
     fn preview_src_for_tag(self: Self, allocator: Allocator, tag: op_lx.FilterTag) ![]const u8 {
-        const script_path = self.script_path;
+        const script_path = try FindDbReader.extract_filename(self.script_path);
         const filter_path = @tagName(tag);
 
         const suffix = "output";
 
-        return std.mem.join(allocator, "._", &[4][]const u8{ self.src_path, script_path, filter_path, suffix });
+        const result = try std.mem.join(allocator, "._", &[3][]const u8{ script_path, filter_path, suffix });
+
+        return result;
     }
 
     fn db_src_for_tag(self: Self, allocator: Allocator, tag: op_lx.FilterTag) ![]const u8 {
-        const script_path = self.script_path;
+        const script_path = try FindDbReader.extract_filename(self.script_path);
         const filter_path = @tagName(tag);
 
         const suffix = "dbsrc.csv";
 
-        return std.mem.join(allocator, ".", &[4][]const u8{ self.src_path, script_path, filter_path, suffix });
+        const result = try std.mem.join(allocator, ".", &[3][]const u8{ script_path, filter_path, suffix });
+
+        return result;
     }
 
     fn initPreview(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, preview: op.Preview) !void {
@@ -361,6 +363,17 @@ const FindDbReader = struct {
         } else {
             return errors.BadDbSrcFile;
         }
+    }
+
+    fn extract_filename(path: []const u8) ![]const u8 {
+        var iterator = std.mem.splitBackwardsScalar(u8, path, '.');
+
+        const extension = iterator.next() orelse return errors.BadDbSrcFile;
+        _ = extension;
+        const rest = iterator.rest();
+        iterator = std.mem.splitBackwardsScalar(u8, rest, '/');
+        const filename = iterator.next() orelse return errors.BadDbSrcFile;
+        return filename;
     }
 };
 
