@@ -1,6 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
+const AutoHashMap = std.AutoHashMap;
 const op = @import("orch2/parser.zig");
 const op_lx = @import("orch2/lexer.zig");
 
@@ -64,16 +65,42 @@ const ScriptFilters = struct {
     src_path: []const u8,
     preview: ?op.Preview,
 
+    previewTagFiles: AutoHashMap(op_lx.FilterTag, FileWriter),
+    previewTagHeaders: AutoHashMap(op_lx.FilterTag, PreviewTagHeader),
+
+    tagFiles: AutoHashMap(op_lx.FilterTag, FileWriter),
+
     const Self = @This();
 
     fn deinit(self: *Self, allocator: Allocator) void {
-        _ = self;
-        _ = allocator;
+        const fieldIterator = self.previewTagHeaders.valueIterator();
+        while (fieldIterator.next()) |entry| {
+            entry.deinit(allocator);
+        }
+        const fieldIterator2 = self.tagFiles.valueIterator();
+        while (fieldIterator2.next()) |entry| {
+            entry.deinit(allocator);
+        }
+        const fieldIterator3 = self.previewTagFiles.valueIterator();
+        while (fieldIterator3.next()) |entry| {
+            entry.deinit(allocator);
+        }
+
+        self.previewTagFiles.deinit();
+        self.previewTagHeaders.deinit();
+        self.tagFiles.deinit();
     }
 
     fn init(allocator: Allocator, script_path: []const u8, src_path: []const u8, preview: ?op.Preview) !Self {
-        _ = allocator;
-        return .{ .script_path = script_path, .src_path = src_path, .preview = preview };
+        return .{
+            .script_path = script_path,
+            .src_path = src_path,
+            .preview = preview,
+            .previewTagFiles = .init(allocator),
+            .previewTagHeaders = .init(allocator),
+
+            .tagFiles = .init(allocator),
+        };
     }
 
     fn passFilters(self: *Self, allocator: Allocator, filters: []op.Filter) !void {
@@ -98,8 +125,8 @@ const ScriptFilters = struct {
         }
 
         for (filters) |filter| {
-            if (filter.preview) |preview| {
-                try self.endPreview(allocator, filter.tag, preview);
+            if (filter.preview != null) {
+                try self.endPreview(allocator, filter.tag);
             }
 
             try self.endTag(allocator, filter.tag);
@@ -125,44 +152,54 @@ const ScriptFilters = struct {
     }
 
     fn initPreview(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, preview: op.Preview) !void {
-        _ = self;
-        _ = allocator;
-        _ = tag;
-        _ = preview;
+        const src = try self.preview_src_for_tag(allocator, tag);
+        defer allocator.free(src);
+
+        const preview_tag_file = try FileWriter.init(allocator, src);
+        errdefer preview_tag_file.deinit(allocator);
+
+        self.previewTagFiles.put(allocator, tag, preview_tag_file);
+
+        const previewHeader = self.previewHeaderForTag(allocator, tag, preview);
+        self.previewTagHeaders.put(allocator, tag, previewHeader);
+
+        previewHeader.write(allocator, preview_tag_file);
     }
 
     fn initTag(self: *Self, allocator: Allocator, tag: op_lx.FilterTag) !void {
-        _ = self;
-        _ = allocator;
-        _ = tag;
+        const src = try self.db_src_for_tag(allocator, tag);
+        defer allocator.free(src);
+
+        const tag_file = try FileWriter.init(allocator, src);
+        errdefer tag_file.deinit(allocator);
+
+        self.tagFiles.put(allocator, tag, tag_file);
     }
 
     fn appendPreview(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, preview: op.Preview, runVisuals: RunVisuals) !void {
-        _ = self;
-        _ = allocator;
-        _ = tag;
-        _ = preview;
-        _ = runVisuals;
+        runVisuals.writePreview(allocator, self.previewFile, tag, preview);
+
+        const preview_tag_file = self.previewTagFiles.get(tag).?;
+
+        const previewHeader = self.previewTagHeaders.get(tag).?;
+        previewHeader.append(runVisuals);
+
+        previewHeader.write(allocator, preview_tag_file);
     }
 
     fn appendTag(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, runVisuals: RunVisuals) !void {
-        _ = self;
-        _ = allocator;
-        _ = tag;
-        _ = runVisuals;
+        const tagFile = self.tagFiles.get(tag).?;
+        runVisuals.writeTag(allocator, tagFile);
     }
 
-    fn endPreview(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, preview: op.Preview) !void {
-        _ = self;
-        _ = allocator;
-        _ = tag;
-        _ = preview;
+    fn endPreview(self: *Self, tag: op_lx.FilterTag) !void {
+        const preview_tag_file = self.previewTagFiles.get(tag).?;
+        preview_tag_file.end();
     }
 
-    fn endTag(self: *Self, allocator: Allocator, tag: op_lx.FilterTag) !void {
-        _ = self;
-        _ = allocator;
-        _ = tag;
+    fn endTag(self: *Self, tag: op_lx.FilterTag) !void {
+        const tagFile = self.tagFiles.get(tag);
+        tagFile.end();
     }
 
     fn runOnPosition(self: *Self, i: usize) !RunVisuals {
@@ -173,6 +210,9 @@ const ScriptFilters = struct {
 };
 
 const RunVisuals = struct {};
+const PreviewTagHeader = struct {};
+
+const FileWriter = struct {};
 
 test "basic usage" {
     const ally = testing.allocator;
