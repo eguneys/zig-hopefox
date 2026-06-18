@@ -4,9 +4,17 @@ const Allocator = std.mem.Allocator;
 const AutoHashMap = std.AutoHashMap;
 const op = @import("orch2/parser.zig");
 const op_lx = @import("orch2/lexer.zig");
+const chess = @import("dot/chess/types.zig");
+
+const DbReader = @import("db_file.zig").DbReader;
+const PuzzleMeta = @import("db_file.zig").PuzzleMeta;
 
 pub const OrchRunner = struct {
+    io: std.Io,
     orch: op.Orch,
+    dir: std.Io.Dir,
+
+    const DbBaseDir = ".db-cache";
 
     const Self = @This();
 
@@ -14,13 +22,13 @@ pub const OrchRunner = struct {
         self.orch.deinit(allocator);
     }
 
-    pub fn init(allocator: Allocator, text: []const u8) !OrchRunner {
+    pub fn init(io: std.Io, dir: std.Io.Dir, allocator: Allocator, text: []const u8) !OrchRunner {
         var parser = try op.Parser.init(allocator, text);
         defer parser.deinit(allocator);
 
         const orch = try parser.toOwnedOrch(allocator);
 
-        return .{ .orch = orch };
+        return .{ .io = io, .dir = dir, .orch = orch };
     }
 
     pub fn passStep(self: *Self, allocator: Allocator) !void {
@@ -36,7 +44,13 @@ pub const OrchRunner = struct {
     fn passScript(self: *Self, allocator: Allocator, ref: op.Ref, src_path: []const u8) anyerror!void {
         const script = self.orch.scripts_flat[ref];
 
-        var script_filters = try ScriptFilters.init(allocator, script.path, src_path, script.preview);
+        const scriptsDir = std.Io.Dir.openDir(self.dir, self.io, OrchRunner.DbBaseDir, .{}) catch tryagain: {
+            try std.Io.Dir.createDir(self.dir, self.io, OrchRunner.DbBaseDir, std.Io.Dir.Permissions.default_dir);
+
+            break :tryagain try std.Io.Dir.openDir(self.dir, self.io, OrchRunner.DbBaseDir, .{});
+        };
+
+        var script_filters = try ScriptFilters.init(self.io, scriptsDir, allocator, script.path, src_path, script.preview);
         defer script_filters.deinit(allocator);
 
         try self.passFilters(allocator, script.filters, &script_filters);
@@ -61,6 +75,7 @@ pub const OrchRunner = struct {
 };
 
 const ScriptFilters = struct {
+    io: std.Io,
     script_path: []const u8,
     src_path: []const u8,
     preview: ?op.Preview,
@@ -70,18 +85,20 @@ const ScriptFilters = struct {
 
     tagFiles: AutoHashMap(op_lx.FilterTag, FileWriter),
 
+    iterator: PositionIterator,
+
     const Self = @This();
 
     fn deinit(self: *Self, allocator: Allocator) void {
-        const fieldIterator = self.previewTagHeaders.valueIterator();
+        var fieldIterator = self.previewTagHeaders.valueIterator();
         while (fieldIterator.next()) |entry| {
             entry.deinit(allocator);
         }
-        const fieldIterator2 = self.tagFiles.valueIterator();
+        var fieldIterator2 = self.tagFiles.valueIterator();
         while (fieldIterator2.next()) |entry| {
             entry.deinit(allocator);
         }
-        const fieldIterator3 = self.previewTagFiles.valueIterator();
+        var fieldIterator3 = self.previewTagFiles.valueIterator();
         while (fieldIterator3.next()) |entry| {
             entry.deinit(allocator);
         }
@@ -91,8 +108,10 @@ const ScriptFilters = struct {
         self.tagFiles.deinit();
     }
 
-    fn init(allocator: Allocator, script_path: []const u8, src_path: []const u8, preview: ?op.Preview) !Self {
+    fn init(io: std.Io, dir: std.Io.Dir, allocator: Allocator, script_path: []const u8, src_path: []const u8, preview: ?op.Preview) !Self {
+        const iterator = try PositionIterator.init(io, dir, allocator, src_path);
         return .{
+            .io = io,
             .script_path = script_path,
             .src_path = src_path,
             .preview = preview,
@@ -100,6 +119,7 @@ const ScriptFilters = struct {
             .previewTagHeaders = .init(allocator),
 
             .tagFiles = .init(allocator),
+            .iterator = iterator,
         };
     }
 
@@ -112,8 +132,8 @@ const ScriptFilters = struct {
             try self.initTag(allocator, filter.tag);
         }
 
-        for (0..10) |i| {
-            const runVisuals = try self.runOnPosition(i);
+        for (0..self.iterator.db_reader.header.count) |i| {
+            const runVisuals = try self.iterator.runOnPosition(allocator, i);
 
             for (filters) |filter| {
                 if (filter.preview) |preview| {
@@ -126,10 +146,10 @@ const ScriptFilters = struct {
 
         for (filters) |filter| {
             if (filter.preview != null) {
-                try self.endPreview(allocator, filter.tag);
+                try self.endPreview(filter.tag);
             }
 
-            try self.endTag(allocator, filter.tag);
+            try self.endTag(filter.tag);
         }
     }
 
@@ -155,41 +175,40 @@ const ScriptFilters = struct {
         const src = try self.preview_src_for_tag(allocator, tag);
         defer allocator.free(src);
 
-        const preview_tag_file = try FileWriter.init(allocator, src);
+        const preview_tag_file = try FileWriter.init(self.io, allocator, src);
         errdefer preview_tag_file.deinit(allocator);
 
-        self.previewTagFiles.put(allocator, tag, preview_tag_file);
+        try self.previewTagFiles.put(tag, preview_tag_file);
 
-        const previewHeader = self.previewHeaderForTag(allocator, tag, preview);
-        self.previewTagHeaders.put(allocator, tag, previewHeader);
+        const previewHeader = PreviewTagHeader.init(allocator, tag, preview);
+        try self.previewTagHeaders.put(tag, previewHeader);
 
-        previewHeader.write(allocator, preview_tag_file);
+        try previewHeader.write(allocator, preview_tag_file);
     }
 
     fn initTag(self: *Self, allocator: Allocator, tag: op_lx.FilterTag) !void {
         const src = try self.db_src_for_tag(allocator, tag);
         defer allocator.free(src);
 
-        const tag_file = try FileWriter.init(allocator, src);
+        const tag_file = try FileWriter.init(self.io, allocator, src);
         errdefer tag_file.deinit(allocator);
 
-        self.tagFiles.put(allocator, tag, tag_file);
+        try self.tagFiles.put(tag, tag_file);
     }
 
     fn appendPreview(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, preview: op.Preview, runVisuals: RunVisuals) !void {
-        runVisuals.writePreview(allocator, self.previewFile, tag, preview);
-
+        _ = preview;
         const preview_tag_file = self.previewTagFiles.get(tag).?;
 
-        const previewHeader = self.previewTagHeaders.get(tag).?;
-        previewHeader.append(runVisuals);
+        var previewHeader = self.previewTagHeaders.getPtr(tag).?;
+        try previewHeader.*.append(allocator, runVisuals);
 
-        previewHeader.write(allocator, preview_tag_file);
+        try previewHeader.write(allocator, preview_tag_file);
     }
 
     fn appendTag(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, runVisuals: RunVisuals) !void {
-        const tagFile = self.tagFiles.get(tag).?;
-        runVisuals.writeTag(allocator, tagFile);
+        const tagFile = self.tagFiles.getPtr(tag).?;
+        try runVisuals.writeTag(allocator, tagFile);
     }
 
     fn endPreview(self: *Self, tag: op_lx.FilterTag) !void {
@@ -198,7 +217,7 @@ const ScriptFilters = struct {
     }
 
     fn endTag(self: *Self, tag: op_lx.FilterTag) !void {
-        const tagFile = self.tagFiles.get(tag);
+        const tagFile = self.tagFiles.getPtr(tag).?;
         tagFile.end();
     }
 
@@ -209,15 +228,96 @@ const ScriptFilters = struct {
     }
 };
 
-const RunVisuals = struct {};
-const PreviewTagHeader = struct {};
+const RunVisuals = struct {
+    position: chess.Position,
+    meta: PuzzleMeta,
 
-const FileWriter = struct {};
+    fn init(allocator: Allocator, position: chess.Position, meta: PuzzleMeta) RunVisuals {
+        _ = allocator;
+        return .{ .position = position, .meta = meta };
+    }
+
+    fn writeTag(self: RunVisuals, allocator: Allocator, writer: *FileWriter) !void {
+        _ = self;
+        _ = allocator;
+        _ = writer;
+    }
+};
+const PreviewTagHeader = struct {
+    fn deinit(self: *PreviewTagHeader, allocator: Allocator) void {
+        _ = self;
+        _ = allocator;
+    }
+
+    fn init(
+        allocator: Allocator,
+        tag: op_lx.FilterTag,
+        preview: op.Preview,
+    ) PreviewTagHeader {
+        _ = allocator;
+        _ = tag;
+        _ = preview;
+        return .{};
+    }
+
+    fn append(self: *PreviewTagHeader, allocator: Allocator, visuals: RunVisuals) !void {
+        _ = self;
+        _ = allocator;
+        _ = visuals;
+    }
+
+    fn write(self: PreviewTagHeader, allocator: Allocator, writer: FileWriter) !void {
+        _ = self;
+        _ = allocator;
+        _ = writer;
+    }
+};
+
+const FileWriter = struct {
+    fn deinit(self: FileWriter, allocator: Allocator) void {
+        _ = self;
+        _ = allocator;
+    }
+
+    fn init(io: std.Io, allocator: Allocator, src_path: []const u8) !FileWriter {
+        _ = io;
+        _ = allocator;
+        _ = src_path;
+        return .{};
+    }
+
+    fn end(self: FileWriter) void {
+        _ = self;
+    }
+};
+
+const PositionIterator = struct {
+    db_reader: DbReader,
+    fn init(io: std.Io, dir: std.Io.Dir, allocator: Allocator, base_path: []const u8) !PositionIterator {
+        const db_path = try std.mem.join(allocator, ".", &[2][]const u8{ base_path, "db" });
+        defer allocator.free(db_path);
+        const meta_path = try std.mem.join(allocator, ".", &[2][]const u8{ base_path, "meta" });
+        defer allocator.free(meta_path);
+
+        const db_reader = try DbReader.open(io, dir, db_path, meta_path);
+
+        return .{ .db_reader = db_reader };
+    }
+
+    fn runOnPosition(self: *PositionIterator, allocator: Allocator, i: usize) !RunVisuals {
+        const position = try self.db_reader.readPosition(i);
+        const meta = try self.db_reader.readMeta(i);
+
+        return RunVisuals.init(allocator, position, meta);
+    }
+};
 
 test "basic usage" {
     const ally = testing.allocator;
 
-    var runner = try OrchRunner.init(ally,
+    const tmp = testing.tmpDir(.{}).dir;
+
+    var runner = try OrchRunner.init(testing.io, tmp, ally,
         \\src: database.db
         \\script.gof:
         \\  FirstMove: @preview

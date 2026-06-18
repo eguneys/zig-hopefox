@@ -3,7 +3,7 @@ const types = @import("dot/chess/types.zig");
 const san = @import("dot/chess/san.zig");
 
 const SizeOfPuzzleMeta = 400 / 8;
-const PuzzleMeta = packed struct(u400) {
+pub const PuzzleMeta = packed struct(u400) {
     id: u40,
     move: u16,
     solution: u320,
@@ -52,10 +52,10 @@ test "basic usage" {
     var meta = PuzzleMeta.parse(position, "abcdef", "e2e4 e7e5 b1c3");
 
     //try std.testing.expectEqual(2, meta.moves().len);
-    const res = try types.Prints.moveFromTo(ally, meta.moves()[0]);
+    const res = try types.Prints.moveFromToUci(ally, meta.moves()[0]);
     defer ally.free(res);
     try std.testing.expectEqualStrings("e7e5", res);
-    const res2 = try types.Prints.moveFromTo(ally, meta.moves()[1]);
+    const res2 = try types.Prints.moveFromToUci(ally, meta.moves()[1]);
     defer ally.free(res2);
     try std.testing.expectEqualStrings("b1c3", res2);
 }
@@ -71,15 +71,13 @@ const DbWriter = struct {
     writer2: std.Io.File.Writer,
     header: DbHeader,
 
-    fn open(self: *DbWriter, io: std.Io, path: []const u8, meta_path: []const u8) !void {
+    fn open(self: *DbWriter, io: std.Io, dir: std.Io.Dir, path: []const u8, meta_path: []const u8) !void {
         self.header = .{ .count = 0 };
-        self.file = try std.Io.Dir.cwd()
-            .createFile(io, path, .{});
+        self.file = try dir.createFile(io, path, .{});
 
         self.writer = self.file.writer(io, &self.buffer);
 
-        self.meta_file = try std.Io.Dir.cwd()
-            .createFile(io, meta_path, .{});
+        self.meta_file = try dir.createFile(io, meta_path, .{});
         self.writer2 = self.meta_file.writer(io, &self.buffer2);
 
         try self.writer2.interface.writeStruct(self.header, .native);
@@ -102,8 +100,8 @@ const DbWriter = struct {
 };
 
 pub const BuildDb = struct {
-    pub fn read_csv_to_build_db_if_doesnt_exists(io: std.Io, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
-        std.Io.Dir.cwd().access(io, meta_file, .{}) catch |err| {
+    pub fn read_csv_to_build_db_if_doesnt_exists(io: std.Io, dir: std.Io.Dir, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
+        dir.access(io, meta_file, .{}) catch |err| {
             if (err == error.FileNotFound) {
                 var stdout = std.Io.File.stdout().writer(io, &.{});
                 try stdout.interface.print("Building, Positions Db.\n", .{});
@@ -112,15 +110,14 @@ pub const BuildDb = struct {
         };
     }
 
-    fn read_csv_to_build_db(io: std.Io, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
+    fn read_csv_to_build_db(io: std.Io, dir: std.Io.Dir, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
         var writer: DbWriter = undefined;
 
         try writer.open(io, db_file, meta_file);
 
         var buffer: [500]u8 = undefined;
 
-        const file = try std.Io.Dir.cwd()
-            .openFile(io, csv_file, .{ .mode = .read_only });
+        const file = try dir.openFile(io, csv_file, .{ .mode = .read_only });
 
         defer file.close(io);
         var reader = file.reader(io, &buffer);
@@ -160,15 +157,13 @@ pub const DbReader = struct {
     reader2: std.Io.File.Reader,
     header: DbHeader,
 
-    pub fn open(io: std.Io, path: []const u8, meta_path: []const u8) !DbReader {
+    pub fn open(io: std.Io, dir: std.Io.Dir, path: []const u8, meta_path: []const u8) !DbReader {
         var self: DbReader = undefined;
-        self.file = try std.Io.Dir.cwd()
-            .openFile(io, path, .{});
+        self.file = try dir.openFile(io, path, .{});
 
         self.reader = self.file.reader(io, &self.buffer);
 
-        self.meta_file = try std.Io.Dir.cwd()
-            .openFile(io, meta_path, .{});
+        self.meta_file = try dir.openFile(io, meta_path, .{});
         self.reader2 = self.meta_file.reader(io, &self.buffer2);
 
         var buffer: [@sizeOf(DbHeader)]u8 = undefined;
@@ -200,15 +195,18 @@ pub const DbReader = struct {
 
 test "db writer db reader" {
     const ally = std.testing.allocator;
+
+    const tmp = std.testing.tmpDir(.{}).dir;
+
     var writer: DbWriter = undefined;
-    try writer.open(std.testing.io, "data/test.pos.db", "data/test.meta.db");
+    try writer.open(std.testing.io, tmp, "test.pos.db", "test.meta.db");
 
     var meta = PuzzleMeta.parse(types.Fen.parse(types.Fen.Initial), "abcdef", "e2e4 e7e5 b1c3");
     try writer.add(types.Fen.parse(types.Fen.Initial), meta);
 
     try writer.close(std.testing.io);
 
-    var reader = try DbReader.open(std.testing.io, "data/test.pos.db", "data/test.meta.db");
+    var reader = try DbReader.open(std.testing.io, tmp, "test.pos.db", "test.meta.db");
 
     try std.testing.expectEqual(1, reader.header.count);
 
@@ -218,7 +216,7 @@ test "db writer db reader" {
     const move1: types.Move = @bitCast(meta.move);
     try std.testing.expectEqual(san.Uci.move("e2e4").toMove(position), move1);
     try std.testing.expectEqual(2, meta.size);
-    const res = try types.Prints.moveFromTo(ally, meta.moves()[0]);
+    const res = try types.Prints.moveFromToUci(ally, meta.moves()[0]);
     defer ally.free(res);
     try std.testing.expectEqualStrings("e7e5", res);
     try std.testing.expectEqual(san.Uci.move("e7e5").toMove(position), meta.moves()[0]);
@@ -240,11 +238,11 @@ test "moves not working 2" {
     const position = try reader.readPosition(39);
     var meta = try reader.readMeta(39);
 
-    const res = try types.Prints.moveFromTo(ally, meta.moves()[0]);
+    const res = try types.Prints.moveFromToUci(ally, meta.moves()[0]);
     defer ally.free(res);
     try std.testing.expectEqualStrings("c5d6", res);
 
-    const res2 = try types.Prints.moveFromTo(ally, meta.moves()[1]);
+    const res2 = try types.Prints.moveFromToUci(ally, meta.moves()[1]);
     defer ally.free(res2);
     try std.testing.expectEqualStrings("f3f4", res2);
 
