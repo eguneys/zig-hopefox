@@ -8,13 +8,10 @@ pub fn main(init: std.process.Init) !void {
     try stdout.interface.print("GofChess Meta v0.0.0\n", .{});
 
     var gpa: std.heap.DebugAllocator(.{}) = .init;
+
     const allocator = gpa.allocator();
 
-    const args: std.process.Args = undefined;
-    var iterator = try args.iterateAllocator(allocator);
-    defer iterator.deinit();
-
-    const scripts_path = iterator.next() orelse "scripts";
+    const scripts_path = "scripts";
 
     var liveOrch = LiveOrchRunner.init(init.io, allocator, scripts_path, "analysis.orch") catch |err| {
         switch (err) {

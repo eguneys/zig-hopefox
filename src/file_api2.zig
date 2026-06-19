@@ -36,6 +36,10 @@ pub const FileWriter = struct {
         return try self.writer.interface.write(content);
     }
 
+    pub fn flush(self: *FileWriter) !void {
+        try self.writer.interface.flush();
+    }
+
     pub fn writeToFile(io: std.Io, dir: std.Io.Dir, allocator: Allocator, sub_path: []const u8, content: []const u8) !void {
         var writer = try FileWriter.init(io, dir, allocator, sub_path, content.len);
         defer writer.deinit(allocator);
