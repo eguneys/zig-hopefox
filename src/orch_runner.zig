@@ -5,6 +5,7 @@ const AutoHashMap = std.AutoHashMap;
 const op = @import("orch2/parser.zig");
 const op_lx = @import("orch2/lexer.zig");
 const chess = @import("dot/chess/types.zig");
+const san = @import("dot/chess/san.zig");
 
 const BuildDb = @import("db_file.zig").BuildDb;
 const DbReader = @import("db_file.zig").DbReader;
@@ -86,35 +87,25 @@ const ScriptFilters = struct {
     io: std.Io,
     preview: ?op.Preview,
 
-    previewTagFiles: AutoHashMap(op_lx.FilterTag, FileWriter),
-    previewTagHeaders: AutoHashMap(op_lx.FilterTag, PreviewTagHeader),
-
-    tagFiles: AutoHashMap(op_lx.FilterTag, FileWriter),
+    previewTagAppenders: AutoHashMap(op_lx.FilterTag, PreviewTagAppender),
+    tagAppenders: AutoHashMap(op_lx.FilterTag, TagAppender),
 
     iterator: PositionIterator,
 
     const Self = @This();
 
-    const PreviewFileBufferSize: usize = 204800;
-    const TagFileBufferSize: usize = 2048000;
-
     fn deinit(self: *Self, allocator: Allocator) void {
-        var fieldIterator = self.previewTagHeaders.valueIterator();
+        var fieldIterator = self.previewTagAppenders.valueIterator();
         while (fieldIterator.next()) |entry| {
             entry.deinit(allocator);
         }
-        var fieldIterator2 = self.tagFiles.valueIterator();
+        var fieldIterator2 = self.tagAppenders.valueIterator();
         while (fieldIterator2.next()) |entry| {
             entry.deinit(allocator);
         }
-        var fieldIterator3 = self.previewTagFiles.valueIterator();
-        while (fieldIterator3.next()) |entry| {
-            entry.deinit(allocator);
-        }
 
-        self.previewTagFiles.deinit();
-        self.previewTagHeaders.deinit();
-        self.tagFiles.deinit();
+        self.previewTagAppenders.deinit();
+        self.tagAppenders.deinit();
 
         self.iterator.deinit(self.io, allocator);
     }
@@ -126,29 +117,28 @@ const ScriptFilters = struct {
             .script_path = script_path,
             .io = io,
             .preview = preview,
-            .previewTagFiles = .init(allocator),
-            .previewTagHeaders = .init(allocator),
-
-            .tagFiles = .init(allocator),
+            .previewTagAppenders = .init(allocator),
+            .tagAppenders = .init(allocator),
             .iterator = iterator,
         };
     }
 
     fn passFilters(self: *Self, allocator: Allocator, filters: []op.Filter) !void {
+        const total = self.iterator.find_db_reader.db_reader.header.count;
         for (filters) |filter| {
             if (filter.preview) |preview| {
-                try self.initPreview(allocator, filter.tag, preview);
+                try self.initPreview(allocator, filter.tag, preview, total);
             }
 
             try self.initTag(allocator, filter.tag);
         }
 
-        for (0..self.iterator.find_db_reader.db_reader.header.count) |i| {
+        for (0..total) |i| {
             const runVisuals = try self.iterator.runOnPosition(allocator, i);
 
             for (filters) |filter| {
-                if (filter.preview) |preview| {
-                    try self.appendPreview(allocator, filter.tag, preview, runVisuals);
+                if (filter.preview != null) {
+                    try self.appendPreview(allocator, filter.tag, runVisuals);
                 }
 
                 try self.appendTag(allocator, filter.tag, runVisuals);
@@ -186,22 +176,14 @@ const ScriptFilters = struct {
         return result;
     }
 
-    fn initPreview(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, preview: op.Preview) !void {
+    fn initPreview(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, preview: op.Preview, total: usize) !void {
         const src = try self.preview_src_for_tag(allocator, tag);
         defer allocator.free(src);
 
         const db_dir = self.iterator.find_db_reader.db_dir;
+        const appender = try PreviewTagAppender.init(self.io, db_dir, allocator, src, tag, preview, total);
 
-        var preview_tag_file = try FileWriter.init(self.io, db_dir, allocator, src, Self.PreviewFileBufferSize);
-        errdefer preview_tag_file.deinit(allocator);
-
-        try self.previewTagFiles.put(tag, preview_tag_file);
-
-        var previewHeader = PreviewTagHeader.init(allocator, tag, preview);
-        errdefer previewHeader.deinit(allocator);
-        try self.previewTagHeaders.put(tag, previewHeader);
-
-        try previewHeader.write(allocator, preview_tag_file);
+        try self.previewTagAppenders.put(tag, appender);
     }
 
     fn initTag(self: *Self, allocator: Allocator, tag: op_lx.FilterTag) !void {
@@ -209,34 +191,29 @@ const ScriptFilters = struct {
         defer allocator.free(src);
 
         const db_dir = self.iterator.find_db_reader.db_dir;
-        var tag_file = try FileWriter.init(self.io, db_dir, allocator, src, Self.TagFileBufferSize);
-        errdefer tag_file.deinit(allocator);
+        const tag_file = try TagAppender.init(self.io, db_dir, allocator, src, tag);
 
-        try self.tagFiles.put(tag, tag_file);
+        try self.tagAppenders.put(tag, tag_file);
     }
 
-    fn appendPreview(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, preview: op.Preview, runVisuals: RunVisuals) !void {
-        _ = preview;
-        const preview_tag_file = self.previewTagFiles.get(tag).?;
+    fn appendPreview(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, runVisuals: RunVisuals) !void {
+        const preview_tag_file = self.previewTagAppenders.getPtr(tag).?;
 
-        var previewHeader = self.previewTagHeaders.getPtr(tag).?;
-        try previewHeader.*.append(allocator, runVisuals);
-
-        try previewHeader.write(allocator, preview_tag_file);
+        try preview_tag_file.append(self.io, allocator, runVisuals);
     }
 
     fn appendTag(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, runVisuals: RunVisuals) !void {
-        const tagFile = self.tagFiles.getPtr(tag).?;
-        try runVisuals.writeTag(allocator, tagFile);
+        const tagAppender = self.tagAppenders.getPtr(tag).?;
+        try tagAppender.append(allocator, runVisuals);
     }
 
     fn endPreview(self: *Self, tag: op_lx.FilterTag) !void {
-        const preview_tag_file = self.previewTagFiles.getPtr(tag).?;
+        const preview_tag_file = self.previewTagAppenders.getPtr(tag).?;
         try preview_tag_file.end();
     }
 
     fn endTag(self: *Self, tag: op_lx.FilterTag) !void {
-        const tagFile = self.tagFiles.getPtr(tag).?;
+        const tagFile = self.tagAppenders.getPtr(tag).?;
         try tagFile.end();
     }
 
@@ -255,15 +232,154 @@ const RunVisuals = struct {
         _ = allocator;
         return .{ .position = position, .meta = meta };
     }
+};
 
-    fn writeTag(self: RunVisuals, allocator: Allocator, writer: *FileWriter) !void {
-        _ = self;
-        _ = allocator;
-        _ = writer;
+const TagAppender = struct {
+    tag_file: FileWriter,
+    tag: op_lx.FilterTag,
+
+    const TagFileBufferSize: usize = 2048000;
+
+    const Self = @This();
+
+    fn deinit(self: *Self, allocator: Allocator) void {
+        self.tag_file.deinit(allocator);
+    }
+
+    fn init(io: std.Io, db_dir: std.Io.Dir, allocator: Allocator, src: []const u8, tag: op_lx.FilterTag) !Self {
+        const tag_file = try FileWriter.init(io, db_dir, allocator, src, Self.TagFileBufferSize);
+
+        return .{ .tag_file = tag_file, .tag = tag };
+    }
+
+    fn end(self: *Self) !void {
+        try self.tag_file.end();
+    }
+
+    fn append(self: *Self, allocator: Allocator, visual: RunVisuals) !void {
+        try self.writeTag(allocator, visual);
+    }
+
+    fn writeTag(self: *Self, allocator: Allocator, visual: RunVisuals) !void {
+        const meta = visual.meta;
+        const position = visual.position;
+
+        var builder = try san.PrintBuilder.init(allocator);
+        defer builder.deinit(allocator);
+        builder.resetPosition(position);
+
+        for (meta.moves()[0..meta.size]) |move| {
+            try builder.appendMove(allocator, move);
+        }
+
+        const uciMoves = builder.uci_string.items;
+
+        var before_position = position;
+        before_position.unmake_move_and_flip_turn(@bitCast(meta.move), if (meta.captured > 15) null else @enumFromInt(meta.captured));
+        const fen_str = try chess.Prints.fen(allocator, before_position);
+        defer allocator.free(fen_str);
+
+        const uciMove = try san.Prints.fromMoveToUci(allocator, @bitCast(meta.move));
+        defer allocator.free(uciMove);
+
+        const meta_id: [5]u8 = @bitCast(meta.id);
+
+        var writer = self.tag_file;
+
+        _ = try writer.write(&meta_id);
+
+        _ = try writer.write(",");
+        _ = try writer.write(fen_str);
+
+        _ = try writer.write(",");
+        _ = try writer.write(uciMove);
+        _ = try writer.write(" ");
+        _ = try writer.write(uciMoves);
+
+        _ = try writer.write(",");
+        _ = try writer.write("https://lichess.org/training/");
+        _ = try writer.write(&meta_id);
     }
 };
+
+const PreviewTagAppender = struct {
+    preview: op.Preview,
+    tag_file: FileWriter,
+    header: PreviewTagHeader,
+    start: std.Io.Timestamp,
+
+    const TagFileBufferSize: usize = 2048000;
+
+    const Self = @This();
+
+    fn deinit(self: *Self, allocator: Allocator) void {
+        self.tag_file.deinit(allocator);
+        self.header.deinit(allocator);
+    }
+
+    fn init(io: std.Io, db_dir: std.Io.Dir, allocator: Allocator, src: []const u8, tag: op_lx.FilterTag, preview: op.Preview, total: usize) !Self {
+        var tag_file = try FileWriter.init(io, db_dir, allocator, src, Self.TagFileBufferSize);
+        errdefer tag_file.deinit(allocator);
+
+        var previewHeader = PreviewTagHeader.init(allocator, tag, preview, total);
+        errdefer previewHeader.deinit(allocator);
+
+        const start = std.Io.Timestamp.now(io, .awake);
+
+        return .{ .tag_file = tag_file, .header = previewHeader, .preview = preview, .start = start };
+    }
+
+    fn append(self: *Self, io: std.Io, allocator: Allocator, visuals: RunVisuals) !void {
+        try self.header.append(allocator, visuals);
+
+        const step: f64 = @mod(self.header.total, 100);
+        if (@mod(self.header.i, step) == 0) {
+            try self.write(io);
+        }
+    }
+
+    fn write(self: *Self, io: std.Io) !void {
+        var writer = self.tag_file;
+        const header = self.header;
+
+        var buffer: [300]u8 = .{' '} ** 300;
+        const isEnd = header.i == header.total;
+        var left: usize = 0;
+
+        try writer.seekTo(0);
+        const totalMs: f64 = @floatFromInt(self.start.untilNow(io, .awake).toMilliseconds());
+        const progress = header.i / header.total * 100;
+        if (isEnd) {
+            left += (try std.fmt.bufPrint(buffer[left..], "{d:.2} ms per puzzle, took {d:.0}ms\n", .{ totalMs / header.total, totalMs })).len;
+        } else {
+            left += (try std.fmt.bufPrint(buffer[left..], "Progress: {d:.2} {d:.2} ms per puzzle\n", .{ progress, totalMs / header.total })).len;
+        }
+
+        const Coverage = (1 - header.nbNegativeMatch / header.total) * 100;
+        const Accuracy = (header.nbFullMatch + header.nbFirstMatch) / header.total * 100;
+        left += (try std.fmt.bufPrint(buffer[left..], "FirstM:{d} N:{d} F:{d} T:{d}\n", .{ header.nbFirstMatch, header.nbNegativeMatch, header.nbFalseMatch, header.nbFullMatch })).len;
+        left += (try std.fmt.bufPrint(buffer[left..], "Coverage:{d:.2}% Accuracy:{d:.2}%\n", .{ Coverage, Accuracy })).len;
+        left += (try std.fmt.bufPrint(buffer[left..], "Total:{d}", .{header.total})).len;
+        _ = try writer.write(&buffer);
+    }
+
+    fn end(self: *Self) !void {
+        try self.tag_file.end();
+    }
+};
+
 const PreviewTagHeader = struct {
-    fn deinit(self: *PreviewTagHeader, allocator: Allocator) void {
+    total: f64,
+    i: f64,
+
+    nbNegativeMatch: f64 = 0,
+    nbFullMatch: f64 = 0,
+    nbFalseMatch: f64 = 0,
+    nbFirstMatch: f64 = 0,
+
+    const Self = @This();
+
+    fn deinit(self: *Self, allocator: Allocator) void {
         _ = self;
         _ = allocator;
     }
@@ -272,23 +388,19 @@ const PreviewTagHeader = struct {
         allocator: Allocator,
         tag: op_lx.FilterTag,
         preview: op.Preview,
-    ) PreviewTagHeader {
+        total: usize,
+    ) Self {
         _ = allocator;
         _ = tag;
         _ = preview;
-        return .{};
+        return .{ .total = @floatFromInt(total), .i = 0 };
     }
 
-    fn append(self: *PreviewTagHeader, allocator: Allocator, visuals: RunVisuals) !void {
-        _ = self;
+    fn append(self: *Self, allocator: Allocator, visuals: RunVisuals) !void {
         _ = allocator;
         _ = visuals;
-    }
 
-    fn write(self: PreviewTagHeader, allocator: Allocator, writer: FileWriter) !void {
-        _ = self;
-        _ = allocator;
-        _ = writer;
+        self.i += 1;
     }
 };
 

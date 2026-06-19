@@ -28,6 +28,10 @@ pub const FileWriter = struct {
         return result;
     }
 
+    pub fn seekTo(self: *FileWriter, offset: u64) !void {
+        try self.writer.seekTo(offset);
+    }
+
     pub fn write(self: *FileWriter, content: []const u8) !usize {
         return try self.writer.interface.write(content);
     }
