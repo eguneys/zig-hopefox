@@ -106,10 +106,13 @@ pub const DbWriter = struct {
 };
 
 pub const BuildDb = struct {
+    pub const errors = error{CsvFileNotFound};
     pub fn read_csv_to_build_db_if_doesnt_exists(io: std.Io, csv_dir: std.Io.Dir, db_dir: std.Io.Dir, csv_file: []const u8, db_file: []const u8, meta_file: []const u8) !void {
         db_dir.access(io, meta_file, .{}) catch |err| {
             if (err == error.FileNotFound) {
-                const file = try csv_dir.openFile(io, csv_file, .{ .mode = .read_only });
+                const file = csv_dir.openFile(io, csv_file, .{ .mode = .read_only }) catch {
+                    return errors.CsvFileNotFound;
+                };
                 defer file.close(io);
 
                 var stdout = std.Io.File.stdout().writer(io, &.{});

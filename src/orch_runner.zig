@@ -248,15 +248,71 @@ const RunVisuals = struct {
     position: chess.Position,
     meta: PuzzleMeta,
 
-    fn init(allocator: Allocator, position: chess.Position, meta: PuzzleMeta) RunVisuals {
-        _ = allocator;
-        return .{ .position = position, .meta = meta };
+    solution_match_type: PuzzleSolutionMatchType,
+
+    const PuzzleSolutionMatchType = enum {
+        firstMoveMatch,
+        trueMatch,
+        negative,
+        falseMatch,
+
+        pub fn fromSolution(solution: []const chess.Move, lines: []const chess.Move) PuzzleSolutionMatchType {
+            var result = PuzzleSolutionMatchType.negative;
+            for (0..solution.len) |j| {
+                if (j >= lines.len) {
+                    return result;
+                }
+                if (solution[j].equals(lines[j])) {
+                    if (result == PuzzleSolutionMatchType.negative) {
+                        result = PuzzleSolutionMatchType.firstMoveMatch;
+                    }
+                    if (j == solution.len - 1) {
+                        result = PuzzleSolutionMatchType.trueMatch;
+                    }
+                } else {
+                    if (result == PuzzleSolutionMatchType.negative) {
+                        result = PuzzleSolutionMatchType.falseMatch;
+                        break;
+                    }
+                }
+            }
+            return result;
+        }
+
+        fn pass(self: PuzzleSolutionMatchType, tag: op_lx.FilterTag) bool {
+            switch (self) {
+                PuzzleSolutionMatchType.firstMoveMatch => {
+                    return tag == op_lx.FilterTag.FirstMove;
+                },
+                PuzzleSolutionMatchType.falseMatch => {
+                    return tag == op_lx.FilterTag.False;
+                },
+                PuzzleSolutionMatchType.negative => {
+                    return tag == op_lx.FilterTag.Negative or tag == op_lx.FilterTag.Zero;
+                },
+                PuzzleSolutionMatchType.trueMatch => {
+                    return tag == op_lx.FilterTag.True;
+                },
+            }
+        }
+    };
+
+    fn init(allocator: Allocator, dot_usage: *DotUsage, position: chess.Position, meta: PuzzleMeta) !RunVisuals {
+        try dot_usage.runner.runOnPosition(allocator, position);
+
+        const played = try dot_usage.getLastLine(allocator);
+        const solution = meta.moves()[0..meta.size];
+
+        const solution_match_type = PuzzleSolutionMatchType.fromSolution(solution, played);
+
+        return .{ .position = position, .meta = meta, .solution_match_type = solution_match_type };
     }
 };
 
 const TagAppender = struct {
     tag_file: FileWriter,
     tag: op_lx.FilterTag,
+    append_newline: bool = false,
 
     const TagFileBufferSize: usize = 2048000;
 
@@ -273,11 +329,14 @@ const TagAppender = struct {
     }
 
     fn end(self: *Self) !void {
+        try self.tag_file.flush();
         try self.tag_file.end();
     }
 
     fn append(self: *Self, allocator: Allocator, visual: RunVisuals) !void {
-        try self.writeTag(allocator, visual);
+        if (visual.solution_match_type.pass(self.tag)) {
+            try self.writeTag(allocator, visual);
+        }
     }
 
     fn writeTag(self: *Self, allocator: Allocator, visual: RunVisuals) !void {
@@ -304,7 +363,13 @@ const TagAppender = struct {
 
         const meta_id: [5]u8 = @bitCast(meta.id);
 
-        var writer = self.tag_file;
+        var writer = &self.tag_file;
+
+        if (self.append_newline) {
+            _ = try writer.write("\n");
+        } else {
+            self.append_newline = true;
+        }
 
         _ = try writer.write(&meta_id);
 
@@ -385,6 +450,7 @@ const PreviewTagAppender = struct {
     }
 
     fn end(self: *Self) !void {
+        try self.tag_file.flush();
         try self.tag_file.end();
     }
 };
@@ -449,7 +515,7 @@ const PositionIterator = struct {
         const position = try self.find_db_reader.db_reader.readPosition(i);
         const meta = try self.find_db_reader.db_reader.readMeta(i);
 
-        return RunVisuals.init(allocator, position, meta);
+        return RunVisuals.init(allocator, &self.dot_usage, position, meta);
     }
 };
 
@@ -478,13 +544,17 @@ const FindDbReader = struct {
             meta_path = try std.mem.join(allocator, ".", &[2][]const u8{ filename, "meta" });
             defer allocator.free(meta_path);
 
-            BuildDb.read_csv_to_build_db_if_doesnt_exists(io, db_dir, db_dir, src_path, db_path, meta_path) catch {
-                try BuildDb.read_csv_to_build_db_if_doesnt_exists(io, scriptsDir, db_dir, src_path, db_path, meta_path);
+            BuildDb.read_csv_to_build_db_if_doesnt_exists(io, db_dir, db_dir, src_path, db_path, meta_path) catch |err| {
+                if (err == BuildDb.errors.CsvFileNotFound) {
+                    try BuildDb.read_csv_to_build_db_if_doesnt_exists(io, scriptsDir, db_dir, src_path, db_path, meta_path);
+                } else {
+                    return err;
+                }
             };
 
             const db_reader = try DbReader.open(io, db_dir, db_path, meta_path);
 
-            return .{ .db_dir = db_dir, .db_reader = db_reader };
+            return .{ .db_reader = db_reader, .db_dir = db_dir };
         } else {
             return errors.BadDbSrcFile;
         }

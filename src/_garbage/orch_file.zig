@@ -335,15 +335,6 @@ pub const PuzzleSolutionMatchType = enum {
     negative,
     falseMatch,
 
-    pub fn string(self: PuzzleSolutionMatchType) []const u8 {
-        return switch (self) {
-            PuzzleSolutionMatchType.firstMoveMatch => "firstMoveMatch",
-            PuzzleSolutionMatchType.trueMatch => "trueMatch",
-            PuzzleSolutionMatchType.negative => "negative",
-            PuzzleSolutionMatchType.falseMatch => "falseMatch",
-        };
-    }
-
     pub fn fromSolution(solution: []const chess.Move, lines: []const chess.Move) PuzzleSolutionMatchType {
         var result = PuzzleSolutionMatchType.negative;
         for (0..solution.len) |j| {
