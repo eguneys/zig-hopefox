@@ -24,9 +24,8 @@ pub const errors = error{
 pub const OrchRunner = struct {
     io: std.Io,
     orch: op.Orch,
-    dir: std.Io.Dir,
-
-    db_path: []const u8,
+    scriptsDir: std.Io.Dir,
+    dbDir: std.Io.Dir,
 
     const ScriptFileLimit = 204800;
 
@@ -36,7 +35,6 @@ pub const OrchRunner = struct {
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
         self.orch.deinit(allocator);
-        allocator.free(self.db_path);
     }
 
     pub fn init(io: std.Io, dir: std.Io.Dir, allocator: Allocator, scripts_path: []const u8, orch_path: []const u8) !OrchRunner {
@@ -49,16 +47,21 @@ pub const OrchRunner = struct {
         };
         defer allocator.free(text);
 
+        const orch_filename = try FindDbReader.extract_filename(orch_path);
+        const db_path = try std.mem.join(allocator, "_", &[2][]const u8{ orch_filename, Self.DbBaseDir });
+        defer allocator.free(db_path);
+
+        try std.Io.Dir.deleteTree(scriptsDir, io, db_path);
+        try std.Io.Dir.createDir(scriptsDir, io, db_path, std.Io.Dir.Permissions.default_dir);
+        const db_dir = try std.Io.Dir.openDir(scriptsDir, io, db_path, .{});
+        errdefer db_dir.close(io);
+
         var parser = try op.Parser.init(allocator, text);
         defer parser.deinit(allocator);
 
-        const orch_filename = try FindDbReader.extract_filename(orch_path);
-
-        const db_path = try std.mem.join(allocator, "_", &[2][]const u8{ orch_filename, Self.DbBaseDir });
-
         const orch = try parser.toOwnedOrch(allocator);
 
-        return .{ .io = io, .dir = scriptsDir, .orch = orch, .db_path = db_path };
+        return .{ .io = io, .scriptsDir = scriptsDir, .dbDir = db_dir, .orch = orch };
     }
 
     pub fn passStep(self: *Self, allocator: Allocator) !void {
@@ -73,7 +76,7 @@ pub const OrchRunner = struct {
 
     fn passScript(self: *Self, allocator: Allocator, ref: op.Ref, src_path: []const u8) anyerror!void {
         const script = self.orch.scripts_flat[ref];
-        var script_filters = try ScriptFilters.init(self.io, self.dir, allocator, script.path, src_path, self.db_path, script.preview);
+        var script_filters = try ScriptFilters.init(self.io, self.scriptsDir, self.dbDir, allocator, script.path, src_path, script.preview);
         defer script_filters.deinit(allocator);
 
         try self.passFilters(allocator, script.filters, &script_filters);
@@ -126,8 +129,8 @@ const ScriptFilters = struct {
         self.iterator.deinit(self.io, allocator);
     }
 
-    fn init(io: std.Io, dir: std.Io.Dir, allocator: Allocator, script_path: []const u8, src_path: []const u8, db_path: []const u8, preview: ?op.Preview) !Self {
-        const iterator = try PositionIterator.init(io, dir, allocator, script_path, src_path, db_path);
+    fn init(io: std.Io, scriptsDir: std.Io.Dir, dbDir: std.Io.Dir, allocator: Allocator, script_path: []const u8, src_path: []const u8, preview: ?op.Preview) !Self {
+        const iterator = try PositionIterator.init(io, scriptsDir, dbDir, allocator, script_path, src_path);
 
         return .{
             .script_path = script_path,
@@ -430,13 +433,13 @@ const PositionIterator = struct {
         self.find_db_reader.deinit(io);
     }
 
-    fn init(io: std.Io, script_dir: std.Io.Dir, allocator: Allocator, script_path: []const u8, src_path: []const u8, db_path: []const u8) !PositionIterator {
-        const script = try FileReader.readFileAlloc(io, script_dir, allocator, script_path, OrchRunner.ScriptFileLimit);
+    fn init(io: std.Io, scriptsDir: std.Io.Dir, dbDir: std.Io.Dir, allocator: Allocator, script_path: []const u8, src_path: []const u8) !PositionIterator {
+        const script = try FileReader.readFileAlloc(io, scriptsDir, allocator, script_path, OrchRunner.ScriptFileLimit);
         defer allocator.free(script);
         var dot_usage = try DotUsage.init(allocator, script);
         errdefer dot_usage.deinit(allocator);
 
-        const find_db_reader = try FindDbReader.init(io, script_dir, allocator, src_path, db_path);
+        const find_db_reader = try FindDbReader.init(io, scriptsDir, dbDir, allocator, src_path);
 
         return .{ .find_db_reader = find_db_reader, .dot_usage = dot_usage };
     }
@@ -458,12 +461,7 @@ const FindDbReader = struct {
         self.db_reader.close(io);
     }
 
-    fn init(io: std.Io, dir: std.Io.Dir, allocator: Allocator, src_path: []const u8, orch_db_path: []const u8) !FindDbReader {
-        try std.Io.Dir.deleteTree(dir, io, orch_db_path);
-        try std.Io.Dir.createDir(dir, io, orch_db_path, std.Io.Dir.Permissions.default_dir);
-        const db_dir = try std.Io.Dir.openDir(dir, io, orch_db_path, .{});
-        errdefer db_dir.close(io);
-
+    fn init(io: std.Io, scriptsDir: std.Io.Dir, db_dir: std.Io.Dir, allocator: Allocator, src_path: []const u8) !FindDbReader {
         var iterator = std.mem.splitBackwardsScalar(u8, src_path, '.');
 
         const extension = iterator.next() orelse return errors.BadDbSrcFile;
@@ -481,7 +479,7 @@ const FindDbReader = struct {
             defer allocator.free(meta_path);
 
             BuildDb.read_csv_to_build_db_if_doesnt_exists(io, db_dir, db_dir, src_path, db_path, meta_path) catch {
-                try BuildDb.read_csv_to_build_db_if_doesnt_exists(io, dir, db_dir, src_path, db_path, meta_path);
+                try BuildDb.read_csv_to_build_db_if_doesnt_exists(io, scriptsDir, db_dir, src_path, db_path, meta_path);
             };
 
             const db_reader = try DbReader.open(io, db_dir, db_path, meta_path);
@@ -542,6 +540,6 @@ pub const LiveOrchRunner = struct {
     pub const OrchFileSizeLimit: usize = 204800;
 
     pub fn init(io: std.Io, allocator: Allocator, scripts_path: []const u8, orch_path: []const u8) !OrchRunner {
-        return try OrchRunner.init(io, allocator, scripts_path, orch_path);
+        return try OrchRunner.init(io, std.Io.Dir.cwd(), allocator, scripts_path, orch_path);
     }
 };
