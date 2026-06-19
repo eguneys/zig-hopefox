@@ -27,7 +27,7 @@ pub fn main(init: std.process.Init) !void {
         }
         return err;
     };
-    defer liveOrch.deinit(allocator);
+    defer liveOrch.deinit(init.io, allocator);
 
     liveOrch.passStep(allocator) catch |err| {
         try stderr.interface.print("An error occured, please check your scripts folder.\n", .{});

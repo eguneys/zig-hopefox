@@ -1,6 +1,6 @@
 data/*
 **/output/
-.db-cache/
+*.db-cache/
 
 .zig-cache/
 zig-out/

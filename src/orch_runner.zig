@@ -33,8 +33,10 @@ pub const OrchRunner = struct {
 
     const Self = @This();
 
-    pub fn deinit(self: *Self, allocator: Allocator) void {
+    pub fn deinit(self: *Self, io: std.Io, allocator: Allocator) void {
         self.orch.deinit(allocator);
+        self.scriptsDir.close(io);
+        self.dbDir.close(io);
     }
 
     pub fn init(io: std.Io, dir: std.Io.Dir, allocator: Allocator, scripts_path: []const u8, orch_path: []const u8) !OrchRunner {
@@ -54,7 +56,6 @@ pub const OrchRunner = struct {
         try std.Io.Dir.deleteTree(scriptsDir, io, db_path);
         try std.Io.Dir.createDir(scriptsDir, io, db_path, std.Io.Dir.Permissions.default_dir);
         const db_dir = try std.Io.Dir.openDir(scriptsDir, io, db_path, .{});
-        errdefer db_dir.close(io);
 
         var parser = try op.Parser.init(allocator, text);
         defer parser.deinit(allocator);
@@ -457,7 +458,6 @@ const FindDbReader = struct {
     db_reader: DbReader,
 
     fn deinit(self: *FindDbReader, io: std.Io) void {
-        self.db_dir.close(io);
         self.db_reader.close(io);
     }
 
@@ -531,7 +531,7 @@ test "basic usage" {
     );
 
     var runner = try OrchRunner.init(testing.io, tmp, ally, ".", "analysis.orch");
-    defer runner.deinit(ally);
+    defer runner.deinit(testing.io, ally);
 
     try runner.passStep(ally);
 }
