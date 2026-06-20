@@ -1,9 +1,7 @@
 const std = @import("std");
-const orun = @import("orch_runner.zig");
 const LiveOrchRunner = @import("orch_runner.zig").LiveOrchRunner;
 
 pub fn main(init: std.process.Init) !void {
-    var stderr = std.Io.File.stderr().writer(init.io, &.{});
     var stdout = std.Io.File.stdout().writer(init.io, &.{});
     try stdout.interface.print("GofChess Meta v0.0.0\n", .{});
 
@@ -13,26 +11,11 @@ pub fn main(init: std.process.Init) !void {
 
     const scripts_path = "scripts";
 
-    var liveOrch = LiveOrchRunner.init(init.io, allocator, scripts_path, "analysis.orch") catch |err| {
-        switch (err) {
-            orun.errors.OrchFileNotFound => {
-                try stderr.interface.print("scripts/analysis.orch file not found.\n", .{});
-            },
-            orun.errors.ScriptsDirectoryNotFound => {
-                try stderr.interface.print("'scripts/' folder not found. Please create a 'scripts/' folder and place analysis.orch in there.\n", .{});
-            },
-            else => {
-                try stderr.interface.print("An error occured, please check your scripts folder.\n", .{});
-            },
-        }
-        return err;
-    };
-    defer liveOrch.deinit(init.io, allocator);
+    var live = try LiveOrchRunner.init(init.io, allocator, scripts_path, "analysis.orch");
+    defer live.deinit(init.io, allocator);
 
-    liveOrch.passStep(allocator) catch |err| {
-        try stderr.interface.print("An error occured, please check your scripts folder.\n", .{});
-        return err;
-    };
+    try stdout.interface.print("Watching for changes scripts/analysis.orch\n", .{});
+    try live.watcher.loop(allocator);
 
     try stdout.interface.print("bye\n", .{});
 }

@@ -27,6 +27,7 @@ pub const OrchRunner = struct {
     scriptsDir: std.Io.Dir,
     dbDir: std.Io.Dir,
 
+    const OrchFileSizeLimit: usize = 204800;
     const ScriptFileLimit = 204800;
 
     const DbBaseDir = ".db-cache";
@@ -39,12 +40,8 @@ pub const OrchRunner = struct {
         self.dbDir.close(io);
     }
 
-    pub fn init(io: std.Io, dir: std.Io.Dir, allocator: Allocator, scripts_path: []const u8, orch_path: []const u8) !OrchRunner {
-        const scriptsDir = dir.openDir(io, scripts_path, .{}) catch {
-            return errors.ScriptsDirectoryNotFound;
-        };
-
-        const text = FileReader.readFileAlloc(io, scriptsDir, allocator, orch_path, LiveOrchRunner.OrchFileSizeLimit) catch {
+    pub fn init(io: std.Io, scriptsDir: std.Io.Dir, allocator: Allocator, orch_path: []const u8) !OrchRunner {
+        const text = FileReader.readFileAlloc(io, scriptsDir, allocator, orch_path, OrchRunner.OrchFileSizeLimit) catch {
             return errors.OrchFileNotFound;
         };
         defer allocator.free(text);
@@ -219,7 +216,7 @@ const ScriptFilters = struct {
     fn appendPreview(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, runVisuals: RunVisuals) !void {
         const preview_tag_file = self.previewTagAppenders.getPtr(tag).?;
 
-        try preview_tag_file.append(self.io, allocator, runVisuals);
+        try preview_tag_file.append(self.io, allocator, &self.iterator.dot_usage, runVisuals);
     }
 
     fn appendTag(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, runVisuals: RunVisuals) !void {
@@ -393,13 +390,24 @@ const PreviewTagAppender = struct {
     header: PreviewTagHeader,
     start: std.Io.Timestamp,
 
+    append_newline: bool = false,
+
+    builder: san.PrintBuilder,
+
+    buffer: []u8,
+
     const TagFileBufferSize: usize = 2048000;
+
+    const CoverageHeaderBufferSize = 100;
 
     const Self = @This();
 
     fn deinit(self: *Self, allocator: Allocator) void {
         self.tag_file.deinit(allocator);
         self.header.deinit(allocator);
+
+        self.builder.deinit(allocator);
+        allocator.free(self.buffer);
     }
 
     fn init(io: std.Io, db_dir: std.Io.Dir, allocator: Allocator, src: []const u8, tag: op_lx.FilterTag, preview: op.Preview, total: usize) !Self {
@@ -411,42 +419,88 @@ const PreviewTagAppender = struct {
 
         const start = std.Io.Timestamp.now(io, .awake);
 
-        return .{ .tag_file = tag_file, .header = previewHeader, .preview = preview, .start = start };
+        const builder = try san.PrintBuilder.init(allocator);
+
+        return .{ .buffer = try allocator.alloc(u8, CoverageHeaderBufferSize), .builder = builder, .tag_file = tag_file, .header = previewHeader, .preview = preview, .start = start };
     }
 
-    fn append(self: *Self, io: std.Io, allocator: Allocator, visuals: RunVisuals) !void {
+    fn append(self: *Self, io: std.Io, allocator: Allocator, dot: *DotUsage, visuals: RunVisuals) !void {
+        if (self.header.i == 0) try self.writeHeader(io);
         try self.header.append(allocator, visuals);
+
+        if (visuals.solution_match_type.pass(self.header.tag)) {
+            try self.writeVisuals(allocator, dot, visuals);
+        }
 
         const step: f64 = @mod(self.header.total, 100);
         if (@mod(self.header.i, step) == 0) {
-            try self.write(io);
+            try self.writeHeader(io);
         }
     }
 
-    fn write(self: *Self, io: std.Io) !void {
+    fn writeVisuals(self: *Self, allocator: Allocator, dot: *DotUsage, visuals: RunVisuals) !void {
+        var writer = &self.tag_file;
+        _ = try writer.write("\n");
+
+        self.builder.resetPosition(visuals.position);
+
+        for (visuals.meta.moves()[0..visuals.meta.size]) |move| {
+            try self.builder.appendMove(allocator, move);
+        }
+
+        const sanMoves = self.builder.string.items;
+
+        const meta_id: [5]u8 = @bitCast(visuals.meta.id);
+
+        _ = try writer.write("https://lichess.org/training/");
+        _ = try writer.write(&meta_id);
+        _ = try writer.write("\n");
+
+        _ = try writer.write("[");
+        _ = try writer.write(sanMoves);
+        _ = try writer.write("] ");
+        _ = try writer.write(@tagName(visuals.solution_match_type));
+        _ = try writer.write("\n");
+
+        const out_string = dot.printLines(allocator) catch {
+            _ = try writer.write("Error writing output ");
+            _ = try writer.write(&meta_id);
+            return;
+        };
+
+        _ = try writer.write(out_string);
+    }
+
+    fn writeHeader(self: *Self, io: std.Io) !void {
         var writer = &self.tag_file;
         const header = self.header;
 
-        var buffer: [120]u8 = .{' '} ** 120;
+        for (0..self.buffer.len) |i| {
+            self.buffer[i] = ' ';
+        }
+
         const isEnd = header.i == header.total;
         var left: usize = 0;
 
+        const tmp_pos = writer.writer.logicalPos();
         try writer.seekTo(0);
         const totalMs: f64 = @floatFromInt(self.start.untilNow(io, .awake).toMilliseconds());
         const progress = header.i / header.total * 100;
         if (isEnd) {
-            left += (try std.fmt.bufPrint(buffer[left..], "{d:.2} ms per puzzle, took {d:.0}ms\n", .{ totalMs / header.total, totalMs })).len;
+            left += (try std.fmt.bufPrint(self.buffer[left..], "{d:.2} ms per puzzle, took {d:.0}ms\n", .{ totalMs / header.total, totalMs })).len;
         } else {
-            left += (try std.fmt.bufPrint(buffer[left..], "Progress: {d:.2} {d:.2} ms per puzzle\n", .{ progress, totalMs / header.total })).len;
+            left += (try std.fmt.bufPrint(self.buffer[left..], "Progress: {d:.2} {d:.2} ms per puzzle\n", .{ progress, totalMs / header.total })).len;
         }
 
         const Coverage = (1 - header.nbNegativeMatch / header.total) * 100;
         const Accuracy = (header.nbFullMatch + header.nbFirstMatch) / header.total * 100;
-        left += (try std.fmt.bufPrint(buffer[left..], "FirstM:{d} N:{d} F:{d} T:{d}\n", .{ header.nbFirstMatch, header.nbNegativeMatch, header.nbFalseMatch, header.nbFullMatch })).len;
-        left += (try std.fmt.bufPrint(buffer[left..], "Coverage:{d:.2}% Accuracy:{d:.2}%\n", .{ Coverage, Accuracy })).len;
-        left += (try std.fmt.bufPrint(buffer[left..], "Total:{d}", .{header.total})).len;
-        _ = try writer.write(buffer[0..left]);
+        left += (try std.fmt.bufPrint(self.buffer[left..], "FirstM:{d} N:{d} F:{d} T:{d}\n", .{ header.nbFirstMatch, header.nbNegativeMatch, header.nbFalseMatch, header.nbFullMatch })).len;
+        left += (try std.fmt.bufPrint(self.buffer[left..], "Coverage:{d:.2}% Accuracy:{d:.2}%\n", .{ Coverage, Accuracy })).len;
+        left += (try std.fmt.bufPrint(self.buffer[left..], "Total:{d}", .{header.total})).len;
+        _ = try writer.write(self.buffer);
         try writer.flush();
+
+        try writer.seekTo(@max(tmp_pos, PreviewTagAppender.CoverageHeaderBufferSize));
     }
 
     fn end(self: *Self) !void {
@@ -614,16 +668,75 @@ test "basic usage" {
         \\  Full: @preview
     );
 
-    var runner = try OrchRunner.init(testing.io, tmp, ally, ".", "analysis.orch");
+    var runner = try OrchRunner.init(testing.io, tmp, ally, "analysis.orch");
     defer runner.deinit(testing.io, ally);
 
     try runner.passStep(ally);
 }
 
-pub const LiveOrchRunner = struct {
-    pub const OrchFileSizeLimit: usize = 204800;
+pub const LiveOrchReloader = struct {
+    io: std.Io,
+    runner: OrchRunner,
+    dir: std.Io.Dir,
+    orch_path: []const u8,
 
-    pub fn init(io: std.Io, allocator: Allocator, scripts_path: []const u8, orch_path: []const u8) !OrchRunner {
-        return try OrchRunner.init(io, std.Io.Dir.cwd(), allocator, scripts_path, orch_path);
+    const Self = @This();
+
+    pub fn deinit(self: *Self, io: std.Io, allocator: Allocator) void {
+        self.runner.deinit(io, allocator);
+    }
+
+    fn reloadOrchFile(self: *Self, allocator: Allocator) !void {
+        self.runner = try OrchRunner.init(self.io, self.dir, allocator, self.orch_path);
+    }
+
+    pub fn reload(self: *Self, allocator: Allocator) !void {
+        var new_orch = try OrchRunner.init(
+            self.io,
+            self.dir,
+            allocator,
+            self.orch_path,
+        );
+        errdefer new_orch.deinit(self.io, allocator);
+
+        self.runner.deinit(allocator);
+        self.runner = new_orch;
+    }
+
+    pub fn init(io: std.Io, dir: std.Io.Dir, allocator: Allocator, orch_path: []const u8) !Self {
+        var self: Self = .{ .io = io, .dir = dir, .orch_path = orch_path, .runner = undefined };
+
+        try self.reloadOrchFile(allocator);
+
+        return self;
+    }
+
+    pub fn step(self: *Self, allocator: Allocator) !void {
+        try self.reloadOrchFile(allocator);
+        try self.runner.passStep(allocator);
+    }
+};
+
+const FileWatcher = @import("file_watcher.zig").FileWatcher;
+
+pub const LiveOrchRunner = struct {
+    watcher: FileWatcher(LiveOrchReloader),
+
+    dir: std.Io.Dir,
+
+    const Self = @This();
+
+    pub fn deinit(self: *Self, io: std.Io, allocator: Allocator) void {
+        self.watcher.handler.deinit(io, allocator);
+        self.dir.close(io);
+    }
+
+    pub fn init(io: std.Io, allocator: Allocator, scripts_path: []const u8, orch_path: []const u8) !Self {
+        const scriptsDir = std.Io.Dir.cwd().openDir(io, scripts_path, .{}) catch {
+            return errors.ScriptsDirectoryNotFound;
+        };
+
+        const step = try LiveOrchReloader.init(io, scriptsDir, allocator, orch_path);
+        return .{ .dir = scriptsDir, .watcher = FileWatcher(LiveOrchReloader).init(io, scriptsDir, orch_path, step) };
     }
 };

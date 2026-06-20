@@ -1,7 +1,7 @@
 src: ../data/two.csv
 script1.gof:
-  Negative: @preview
+  Negative: @preview(take=1)
     script2.gof:
       Zero: @preview
   Zero
-  Full
+  False: @preview
