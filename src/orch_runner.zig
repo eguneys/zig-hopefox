@@ -464,6 +464,8 @@ const PreviewTagHeader = struct {
     nbFalseMatch: f64 = 0,
     nbFirstMatch: f64 = 0,
 
+    tag: op_lx.FilterTag,
+
     const Self = @This();
 
     fn deinit(self: *Self, allocator: Allocator) void {
@@ -478,16 +480,28 @@ const PreviewTagHeader = struct {
         total: usize,
     ) Self {
         _ = allocator;
-        _ = tag;
         _ = preview;
-        return .{ .total = @floatFromInt(total), .i = 0 };
+        return .{ .total = @floatFromInt(total), .i = 0, .tag = tag };
     }
 
     fn append(self: *Self, allocator: Allocator, visuals: RunVisuals) !void {
         _ = allocator;
-        _ = visuals;
-
         self.i += 1;
+
+        switch (visuals.solution_match_type) {
+            RunVisuals.PuzzleSolutionMatchType.firstMoveMatch => {
+                self.nbFirstMatch += 1;
+            },
+            RunVisuals.PuzzleSolutionMatchType.falseMatch => {
+                self.nbFalseMatch += 1;
+            },
+            RunVisuals.PuzzleSolutionMatchType.negative => {
+                self.nbNegativeMatch += 1;
+            },
+            RunVisuals.PuzzleSolutionMatchType.trueMatch => {
+                self.nbFullMatch += 1;
+            },
+        }
     }
 };
 
