@@ -68,3 +68,30 @@ test ".eyesThrough cannotBeCapturedBy turn captures" {
         \\........
     );
 }
+
+test ".eyesThrough cannotBeCapturedBy turn captures does not defend" {
+    try expectVisuals(
+        \\1: {}
+        \\2: {}
+        \\3: {Bc5+}{Bg5+}
+        \\4: {Bg5+}
+        \\5: {Bg5+ Nxg5}
+        \\6: {Bg5+ Nxg5}
+    ,
+        \\queen_t .eyesThrough queen2 .through bishop
+        \\                       .hanging
+        \\bishop *Checks king *becomes bishop2
+        \\                                 .cannotBeCapturedBy queen2
+        \\turn    *Captures  bishop2 *becomes opponent2
+        \\                                        .doesNotDefend queen2
+    ,
+        \\........
+        \\....k...
+        \\....n...
+        \\........
+        \\........
+        \\..q.B..Q
+        \\........
+        \\........
+    );
+}

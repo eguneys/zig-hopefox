@@ -26,6 +26,9 @@ pub const Matcher = struct {
             lx.SymbolTag.cannotBeCapturedBy => {
                 try Filters.dispatch_cannotBeCapturedBy(allocator, history, slice, dot);
             },
+            lx.SymbolTag.doesNotDefend => {
+                try Filters.dispatch_doesNotDefend(allocator, history, slice, dot);
+            },
             else => {},
         }
     }
@@ -194,6 +197,7 @@ pub const Symbols = struct {
             lx.SymbolTag.knight => position.bb_knight,
             lx.SymbolTag.sq => position.bb_vacant(),
             lx.SymbolTag.turn => position.bb_turn(),
+            lx.SymbolTag.opponent => position.bb_opponent(),
             else => chess.Bitboard.Zero, // might throw error
         };
 
@@ -265,6 +269,42 @@ pub const Symbols = struct {
 };
 
 pub const Filters = struct {
+    fn dispatch_doesNotDefend(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const From = history.table.getColumn(from_symbol.identity);
+        const to_symbol = history.program.symbols[star.action.one];
+        const To = history.table.getColumn(to_symbol.identity);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_to = To[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from
+                .bitand(Symbols.bitboard(from_symbol, position));
+
+            const bb_defended = bb_to
+                .bitand(Symbols.bitboard(to_symbol, position));
+
+            while (bb_from2.next()) |sq_from| {
+                const aa_defended = Symbols.captures(from_symbol, sq_from, position);
+                var bb_defended2 = bb_defended.bitdiff(aa_defended);
+
+                while (bb_defended2.next()) |sq_to| {
+                    try history.table.duplicateLastRow(allocator);
+
+                    history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+                    history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
+
+                    const move = chess.Move.none;
+                    const ref = try history.tree.appendChild(allocator, off, move);
+                    try history.nodes.append(allocator, ref);
+                }
+            }
+        }
+    }
+
     fn dispatch_cannotBeCapturedBy(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
         const from_symbol = history.program.symbols[star.from];
         const From = history.table.getColumn(from_symbol.identity);
