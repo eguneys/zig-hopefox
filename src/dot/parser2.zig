@@ -122,6 +122,20 @@ pub const Parser = struct {
         }
     }
 
+    fn getSymbolBetween(self: *Parser, line_no: usize, column_no: usize) !?GetSymbol {
+        if (self.tokens.getLine(line_no)) |slice| {
+            for (0..slice.slice.len) |i| {
+                const reverse = slice.slice.len - 1 - i;
+                if (slice.token[reverse].tag == lx.TokenTag.Symbol) {
+                    if (slice.token[reverse].begin_column_no <= column_no and column_no <= slice.token[reverse].end_column_no) {
+                        return self.getSymbolForTokenRef(slice.slice.off + reverse);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     fn getLastBecomesSymbolBefore(self: *Parser, line_no: usize) !?GetSymbol {
         if (self.tokens.getLine(line_no)) |slice| {
             for (0..slice.slice.len) |i| {
@@ -129,7 +143,7 @@ pub const Parser = struct {
                 if (slice.token[reverse].tag == lx.TokenTag.Symbol) {
                     if (slice.token[reverse].symbol) |symbol| {
                         if (symbol.identity.tag == lx.SymbolTag.becomes) {
-                            return self.getSymbolForTokenRef(slice.slice.off + reverse + 1);
+                            return self.getSymbolForTokenRef(slice.slice.off + reverse);
                         }
                     }
                 }
@@ -151,12 +165,19 @@ pub const Parser = struct {
     }
 
     fn beginDot(self: *Parser, allocator: Allocator, line_no: usize, column_no: usize) !void {
-        if (try self.getLastBecomesSymbolBefore(line_no) orelse
-            try self.getLastBecomesSymbolBefore(line_no - 1) orelse
-            try self.getLastBecomesSymbolBefore(line_no - 2) orelse
-            try self.getLastBecomesSymbolBefore(line_no - 3) orelse
-            try self.getLastBecomesSymbolBefore(line_no - 4)) |from|
-        {
+        const above_from = find_above: {
+            for (1..line_no) |i| {
+                if (try self.getSymbolBetween(line_no - i, column_no)) |above_from| {
+                    break :find_above above_from;
+                }
+                if (try self.getLastBecomesSymbolBefore(line_no - i)) |above_becomes| {
+                    break :find_above above_becomes;
+                }
+            }
+            break :find_above null;
+        };
+
+        if (above_from) |from| {
             if (self.eatDotAfter(line_no, column_no)) |dot| {
                 try self.takeDotFrom(allocator, from.ref, dot.token.line_no, dot.token.end_column_no);
             }
@@ -314,6 +335,9 @@ pub const Parser = struct {
                             break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
                         }
                         if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.to)) |toand| {
+                            break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
+                        }
+                        if (try self.eatTokenAfterWithTag(star.token.line_no, star.token.end_column_no, lx.SymbolTag.through)) |toand| {
                             break :findtwo try self.takeSymbolAfter(allocator, toand.token.line_no, toand.token.end_column_no);
                         }
                     }
@@ -534,4 +558,25 @@ test "hanging instruction" {
 
     const hangingSymbolRef = program.side_effects[program.instructions[2].sideEffects].action.tag;
     try testing.expectEqual(lx.SymbolTag.hanging, program.symbols[hangingSymbolRef].identity.tag);
+}
+
+test "hanging instruction 2" {
+    const ally = testing.allocator;
+    const script =
+        \\queen .eyesThrough queen2 .through bishop
+        \\                       .hanging
+        \\bishop *Checks king *becomes bishop2
+    ;
+
+    var parser = try Parser.init(ally, script);
+    defer parser.deinit(ally);
+
+    const program = try parser.toOwnedProgram(ally);
+    defer program.deinit(ally);
+
+    const hangingSymbolRef = program.side_effects[program.instructions[1].sideEffects].action.tag;
+    try testing.expectEqual(lx.SymbolTag.hanging, program.symbols[hangingSymbolRef].identity.tag);
+    const queen2symbolRef = program.side_effects[program.instructions[1].sideEffects].from;
+
+    try testing.expectEqual(lx.SymbolTag.queen, program.symbols[queen2symbolRef].identity.tag);
 }

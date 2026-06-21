@@ -20,6 +20,12 @@ pub const Matcher = struct {
             lx.SymbolTag.hanging => {
                 try Filters.dispatch_hanging(allocator, history, slice, dot);
             },
+            lx.SymbolTag.eyesThrough => {
+                try Filters.dispatch_eyesThrough(allocator, history, slice, dot);
+            },
+            lx.SymbolTag.cannotBeCapturedBy => {
+                try Filters.dispatch_cannotBeCapturedBy(allocator, history, slice, dot);
+            },
             else => {},
         }
     }
@@ -59,6 +65,7 @@ pub const Matcher = struct {
                 var bb_captured2 = bb_captured
                     .bitand(Symbols.bitboard(captured_symbol, position))
                     .bitand(aa_captured);
+
                 while (bb_captured2.next()) |sq_captured| {
                     var bb_to2 = bb_to
                         .bitand(chess.Bitboard.fromSquare(sq_captured));
@@ -99,6 +106,7 @@ pub const Matcher = struct {
             const position = history.getPosition(off);
 
             var bb_from2 = bb_from.bitand(Symbols.bitboard(from_symbol, position));
+
             while (bb_from2.next()) |sq_from| {
                 var bb_checked2 = bb_checked
                     .bitand(Symbols.bitboard(checked_symbol, position));
@@ -185,6 +193,7 @@ pub const Symbols = struct {
             lx.SymbolTag.king => position.bb_king,
             lx.SymbolTag.knight => position.bb_knight,
             lx.SymbolTag.sq => position.bb_vacant(),
+            lx.SymbolTag.turn => position.bb_turn(),
             else => chess.Bitboard.Zero, // might throw error
         };
 
@@ -213,6 +222,7 @@ pub const Symbols = struct {
             lx.SymbolTag.knight => chess.Bitboard.Zero,
             lx.SymbolTag.pawn => chess.Attacks.pawn_plus(from, if (position.colorOn(from) == chess.Color.White) chess.DirectionPlus.Forward else chess.DirectionPlus.Backward),
             lx.SymbolTag.sq => chess.Bitboard.Zero,
+            lx.SymbolTag.turn => chess.Attacks.piece_eyes(from, position.occupied(), position.getPiece(from)),
             else => chess.Bitboard.Zero,
         };
     }
@@ -255,6 +265,88 @@ pub const Symbols = struct {
 };
 
 pub const Filters = struct {
+    fn dispatch_cannotBeCapturedBy(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const From = history.table.getColumn(from_symbol.identity);
+        const by_symbol = history.program.symbols[star.action.one];
+        const By = history.table.getColumn(by_symbol.identity);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_by = By[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from
+                .bitand(Symbols.bitboard(from_symbol, position));
+
+            const bb_attacker2 = bb_by
+                .bitand(Symbols.bitboard(by_symbol, position));
+
+            while (bb_from2.next()) |sq_from| {
+                var bb_attacker3 = bb_attacker2;
+
+                while (bb_attacker3.next()) |sq_capture| {
+                    if (!Symbols.captures(by_symbol, sq_capture, position).has(sq_from)) {
+                        try history.table.duplicateLastRow(allocator);
+
+                        history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+
+                        const move = chess.Move.none;
+                        const ref = try history.tree.appendChild(allocator, off, move);
+                        try history.nodes.append(allocator, ref);
+                    }
+                }
+            }
+        }
+    }
+
+    fn dispatch_eyesThrough(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const to_symbol = history.program.symbols[star.action.one];
+        const through_symbol = history.program.symbols[star.action.two];
+        const From = history.table.getColumn(from_symbol.identity);
+        const To = history.table.getColumn(to_symbol.identity);
+        const Through = history.table.getColumn(through_symbol.identity);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_to = To[off];
+            const bb_through = Through[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from
+                .bitand(Symbols.bitboard(from_symbol, position));
+
+            const bb_to2 = bb_to.bitand(Symbols.bitboard(to_symbol, position));
+
+            const bb_through2 = bb_through.bitand(Symbols.bitboard(through_symbol, position));
+
+            while (bb_from2.next()) |sq_from| {
+                const aa_from = Symbols.moves(from_symbol, sq_from, position.occupied());
+
+                var bb_through3 = bb_through2.bitand(aa_from);
+
+                while (bb_through3.next()) |sq_through| {
+                    const aa_to = Symbols.moves(from_symbol, sq_from, position.occupied().unset(sq_through));
+
+                    if (aa_to.bitand(bb_to2).single()) |sq_to| {
+                        try history.table.duplicateLastRow(allocator);
+
+                        history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+                        history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
+                        history.table.setLastRow(through_symbol.identity, chess.Bitboard.fromSquare(sq_through));
+
+                        const move = chess.Move.none;
+                        const ref = try history.tree.appendChild(allocator, off, move);
+                        try history.nodes.append(allocator, ref);
+                    }
+                }
+            }
+        }
+    }
+
     fn dispatch_hanging(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
         const from_symbol = history.program.symbols[star.from];
         const From = history.table.getColumn(from_symbol.identity);

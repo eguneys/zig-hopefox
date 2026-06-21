@@ -1,7 +1,6 @@
-src: ../data/two.csv
+src: ../data/test_b_forks_kr.csv
 script1.gof:
-  Negative: @preview(take=1)
-    script2.gof:
-      Zero: @preview
-  Zero
+  Negative: @preview
   False: @preview
+  True
+  FirstMove

@@ -25,6 +25,11 @@ pub const SymbolTag = enum {
     Check,
     and_,
     to,
+
+    eyesThrough,
+    through,
+    cannotBeCapturedBy,
+    turn,
 };
 
 pub const SymbolIdentity = struct { tag: SymbolTag, id: usize };

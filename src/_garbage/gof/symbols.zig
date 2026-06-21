@@ -12,6 +12,7 @@ pub const DescriptionSymbolType = enum {
     Major,
     Minor,
     Square,
+    Turn,
 };
 
 const RoleNames: [6][]const u8 = .{
@@ -37,6 +38,9 @@ pub const DescriptionSymbol = struct {
             if (std.mem.startsWith(u8, slice, name)) {
                 return .{ .kind = kind, .id = DescriptionSymbol.extract_id(slice[name.len..]) };
             }
+        }
+        if (std.mem.startsWith(u8, slice, "turn")) {
+            return .{ .kind = DescriptionSymbolType.Turn, .id = DescriptionSymbol.extract_id(slice[4..]) };
         }
 
         return null;
@@ -76,12 +80,17 @@ pub const SymbolPosition = struct {
             DescriptionSymbolType.Bishop => self.position.bb_bishop,
             DescriptionSymbolType.Rook => self.position.bb_rook,
             DescriptionSymbolType.Knight => self.position.bb_knight,
+            DescriptionSymbolType.Turn => self.position.bb_turn(),
             else => chess.Bitboard.Zero,
         };
     }
 
     pub fn captures(self: SymbolPosition, from: chess.Square) chess.Bitboard {
         switch (self.symbol.kind) {
+            DescriptionSymbolType.Turn => {
+                std.debug.print("{}", .{from});
+                return chess.Bitboard.Zero;
+            },
             DescriptionSymbolType.Pawn => {
                 const piece = self.position.getPiece(from);
                 const direction = if (piece.colorOf() == chess.Color.White)

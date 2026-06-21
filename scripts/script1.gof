@@ -1,4 +1,2 @@
-rook_t *Checks king_o *becomes rook2
-rook3_t *Blocks Check *becomes rook4
-rook2 *Captures rook4 *becomes rook5
-      .Forks king .and queen
+bishop_t *Checks_v king_o *becomes bishop2
+         .Forks king .and rook_t
