@@ -223,10 +223,11 @@ pub const Symbols = struct {
             lx.SymbolTag.rook => chess.Attacks.ray_plus(from, position.occupied(), chess.DirectionPlus.Straight),
             lx.SymbolTag.queen => chess.Attacks.ray_plus(from, position.occupied(), chess.DirectionPlus.All),
             lx.SymbolTag.king => chess.Attacks.king_plus(from, chess.DirectionPlus.All),
-            lx.SymbolTag.knight => chess.Bitboard.Zero,
+            lx.SymbolTag.knight => chess.Attacks.knight_plus(from, chess.DirectionPlus.All),
             lx.SymbolTag.pawn => chess.Attacks.pawn_plus(from, if (position.colorOn(from) == chess.Color.White) chess.DirectionPlus.Forward else chess.DirectionPlus.Backward),
             lx.SymbolTag.sq => chess.Bitboard.Zero,
             lx.SymbolTag.turn => chess.Attacks.piece_eyes(from, position.occupied(), position.getPiece(from)),
+            lx.SymbolTag.opponent => chess.Attacks.piece_eyes(from, position.occupied(), position.getPiece(from)),
             else => chess.Bitboard.Zero,
         };
     }

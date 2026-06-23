@@ -173,3 +173,23 @@ test "eyesThrough regression 3 Qxc4 is not hanging" {
         \\queen *Captures queen2 *becomes queen3
     , chess.Fen.parse("r5k1/2q2rpp/8/2bn4/bpQ5/5NPP/PB1N1P2/4RRK1 b - - 4 28"));
 }
+
+test "eyesThrough regression doesNotdefend" {
+    try expectVisualsPosition(
+        \\1: {}
+        \\2: {}
+        \\3: {Bxg2}{Be6+}{Bxb7+}
+        \\4: {Bxg2}{Be6+}{Bxb7+}
+        \\5: {Be6+ Nxe6}{Bxb7+ Kxb7}
+        \\6: {Bxb7+ Kxb7}
+        \\7: {Bxb7+ Kxb7 Qxc5}
+    ,
+        \\queen_t .eyesThrough queen2 .through bishop
+        \\                       .hanging
+        \\bishop *Checks king *becomes bishop2
+        \\                                 .cannotBeCapturedBy queen2
+        \\turn    *Captures  bishop2 *becomes opponent2
+        \\                                        .doesNotDefend queen2
+        \\queen *Captures queen2 *becomes queen3
+    , chess.Fen.parse("2kr1b1r/1p2p1pp/p7/2qBQ1B1/3n1P2/8/P5PP/1n3R1K w - - 1 22"));
+}
