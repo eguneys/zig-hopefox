@@ -657,7 +657,7 @@ pub const Attacks = struct {
             Piece.Black_Rook, Piece.White_Rook => Attacks.ray_plus(square, occupied, DirectionPlus.Straight),
             Piece.Black_Queen, Piece.White_Queen => Attacks.ray_plus(square, occupied, DirectionPlus.All),
             Piece.Black_King, Piece.White_King => Attacks.king_plus(square, DirectionPlus.All),
-            Piece.Black_Knight, Piece.White_Knight => Bitboard.Zero,
+            Piece.Black_Knight, Piece.White_Knight => Attacks.knight_plus(square, DirectionPlus.All),
             Piece.Black_Pawn => Attacks.pawn_plus(square, DirectionPlus.Backward),
             Piece.White_Pawn => Attacks.pawn_plus(square, DirectionPlus.Forward),
         };

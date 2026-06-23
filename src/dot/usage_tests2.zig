@@ -153,3 +153,23 @@ test "eyesThrough regression 2 Bg3 without attack through" {
         \\queen *Captures queen2 *becomes queen3
     , chess.Fen.parse("5k2/5p2/pq1b4/1p6/3QB3/P4Nr1/1PP2R1K/5R2 b - - 1 41"));
 }
+
+test "eyesThrough regression 3 Qxc4 is not hanging" {
+    try expectVisualsPosition(
+        \\1: {}
+        \\2: 
+        \\3: 
+        \\4: 
+        \\5: 
+        \\6: 
+        \\7: 
+    ,
+        \\queen_t .eyesThrough queen2 .through bishop
+        \\                       .hanging
+        \\bishop *Checks king *becomes bishop2
+        \\                                 .cannotBeCapturedBy queen2
+        \\turn    *Captures  bishop2 *becomes opponent2
+        \\                                        .doesNotDefend queen2
+        \\queen *Captures queen2 *becomes queen3
+    , chess.Fen.parse("r5k1/2q2rpp/8/2bn4/bpQ5/5NPP/PB1N1P2/4RRK1 b - - 4 28"));
+}
