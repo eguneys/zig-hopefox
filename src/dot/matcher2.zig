@@ -368,7 +368,9 @@ pub const Filters = struct {
                 var bb_through3 = bb_through2.bitand(aa_from);
 
                 while (bb_through3.next()) |sq_through| {
-                    const aa_to = Symbols.moves(from_symbol, sq_from, position.occupied().unset(sq_through));
+                    const aa_to =
+                        Symbols.moves(from_symbol, sq_from, position.occupied().unset(sq_through))
+                            .bitdiff(Symbols.moves(from_symbol, sq_from, position.occupied()));
 
                     if (aa_to.bitand(bb_to2).single()) |sq_to| {
                         try history.table.duplicateRow(allocator, off);

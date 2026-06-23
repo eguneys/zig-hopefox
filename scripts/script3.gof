@@ -1,4 +1,4 @@
-queen .eyesThrough queen2 .through bishop
+queen_t .eyesThrough queen2 .through bishop
                      .hanging
 bishop *Checks king *becomes bishop2
                                   .cannotBeCapturedBy queen2
