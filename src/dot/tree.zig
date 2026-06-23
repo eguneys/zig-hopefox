@@ -56,6 +56,7 @@ pub fn Tree(C: type) type {
                 }
             }
 
+            self.size += 1;
             self.flat.items[off].children.len += 1;
             return self.flat.items.len - 1;
         }

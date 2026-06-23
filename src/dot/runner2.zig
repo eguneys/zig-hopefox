@@ -27,26 +27,26 @@ pub const History = struct {
         allocator.free(self.empty_row);
     }
 
-    pub fn init(allocator: Allocator, program: par.Program, capacity: usize) !History {
-        var symbols: ArrayList(lx.SymbolIdentity) = .empty;
-        errdefer symbols.deinit(allocator);
-
+    pub fn init(allocator: Allocator, program: par.Program) !History {
         var empty_row: ArrayList(chess.Bitboard) = .empty;
         errdefer empty_row.deinit(allocator);
 
+        var table = try Table(lx.SymbolIdentity, chess.Bitboard).init(allocator);
+        errdefer table.deinit(allocator);
+
         for (program.symbols) |ref| {
-            try symbols.append(allocator, ref.identity);
-            try empty_row.append(allocator, chess.Bitboard.All);
+            if (try table.addColumn(allocator, ref.identity)) {
+                try empty_row.append(allocator, chess.Bitboard.All);
+            }
         }
 
-        var self: History = undefined;
-        self.table = try Table(lx.SymbolIdentity, chess.Bitboard)
-            .init(allocator, try symbols.toOwnedSlice(allocator), capacity);
-        self.tree = try Tree(chess.Move).init(allocator);
-        self.nodes = .empty;
-        self.program = program;
-        self.empty_row = try empty_row.toOwnedSlice(allocator);
-        return self;
+        var tree = try Tree(chess.Move).init(allocator);
+        errdefer tree.deinit(allocator);
+
+        const empty_row_slice = try empty_row.toOwnedSlice(allocator);
+        errdefer allocator.free(empty_row_slice);
+
+        return .{ .table = table, .tree = tree, .nodes = .empty, .program = program, .empty_row = empty_row_slice, .position = undefined };
     }
 
     pub fn getPosition(self: History, off: usize) chess.Position {
@@ -91,10 +91,10 @@ pub const Runner = struct {
         self.slices.deinit(allocator);
     }
 
-    pub fn init(allocator: Allocator, program: par.Program, capacity: usize) !Runner {
+    pub fn init(allocator: Allocator, program: par.Program) !Runner {
         return .{
             .slices = try ArrayList(Slice).initCapacity(allocator, 10),
-            .history = try History.init(allocator, program, capacity),
+            .history = try History.init(allocator, program),
         };
     }
 
@@ -148,7 +148,6 @@ test "basic usage" {
     var runner = try Runner.init(
         ally,
         program,
-        1024,
     );
     defer runner.deinit(ally);
 

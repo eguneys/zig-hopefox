@@ -91,7 +91,7 @@ pub const DotUsage = struct {
         return .{
             .move_buffer = .empty,
             .buffer = try std.ArrayList(u8).initCapacity(allocator, 1024),
-            .runner = try Runner.init(allocator, program, 2048),
+            .runner = try Runner.init(allocator, program),
             .visual = try Visual.init(allocator),
         };
     }

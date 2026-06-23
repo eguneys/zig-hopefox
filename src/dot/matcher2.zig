@@ -73,7 +73,7 @@ pub const Matcher = struct {
                     var bb_to2 = bb_to
                         .bitand(chess.Bitboard.fromSquare(sq_captured));
                     while (bb_to2.next()) |sq_to| {
-                        try history.table.duplicateLastRow(allocator);
+                        try history.table.duplicateRow(allocator, off);
 
                         history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
                         history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
@@ -118,7 +118,7 @@ pub const Matcher = struct {
                     var bb_to2 = bb_to
                         .bitand(aa_checked);
                     while (bb_to2.next()) |sq_to| {
-                        try history.table.duplicateLastRow(allocator);
+                        try history.table.duplicateRow(allocator, off);
 
                         history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
                         history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
@@ -161,7 +161,7 @@ pub const Matcher = struct {
                     .bitand(bb_blocks)
                     .bitand(aa_blocks);
                 while (bb_to2.next()) |sq_to| {
-                    try history.table.duplicateLastRow(allocator);
+                    try history.table.duplicateRow(allocator, off);
 
                     history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
                     history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
@@ -291,11 +291,10 @@ pub const Filters = struct {
                 const aa_defended = Symbols.captures(from_symbol, sq_from, position);
                 var bb_defended2 = bb_defended.bitdiff(aa_defended);
 
-                while (bb_defended2.next()) |sq_to| {
-                    try history.table.duplicateLastRow(allocator);
+                if (bb_defended2.isNotEmpty()) {
+                    try history.table.duplicateRow(allocator, off);
 
                     history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
-                    history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
 
                     const move = chess.Move.none;
                     const ref = try history.tree.appendChild(allocator, off, move);
@@ -328,7 +327,7 @@ pub const Filters = struct {
 
                 while (bb_attacker3.next()) |sq_capture| {
                     if (!Symbols.captures(by_symbol, sq_capture, position).has(sq_from)) {
-                        try history.table.duplicateLastRow(allocator);
+                        try history.table.duplicateRow(allocator, off);
 
                         history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
 
@@ -372,7 +371,7 @@ pub const Filters = struct {
                     const aa_to = Symbols.moves(from_symbol, sq_from, position.occupied().unset(sq_through));
 
                     if (aa_to.bitand(bb_to2).single()) |sq_to| {
-                        try history.table.duplicateLastRow(allocator);
+                        try history.table.duplicateRow(allocator, off);
 
                         history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
                         history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
@@ -419,7 +418,7 @@ pub const Filters = struct {
                     continue;
                 }
 
-                try history.table.duplicateLastRow(allocator);
+                try history.table.duplicateRow(allocator, off);
 
                 history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
 
@@ -456,7 +455,7 @@ pub const Filters = struct {
                         .bitand(Symbols.bitboard(fork_b_symbol, position))
                         .bitand(aa_captures);
                     while (bb_forkb2.next()) |sq_forkb| {
-                        try history.table.duplicateLastRow(allocator);
+                        try history.table.duplicateRow(allocator, off);
 
                         history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
                         history.table.setLastRow(fork_a_symbol.identity, chess.Bitboard.fromSquare(sq_forka));
@@ -471,3 +470,22 @@ pub const Filters = struct {
         }
     }
 };
+
+fn log_history(h: History, row: usize) void {
+    for (h.table.symbols) |symbol| {
+        std.debug.print("{}\n", .{symbol});
+        log.bbo(h.table.getColumn(symbol)[row]);
+        log.str("\n");
+    }
+}
+
+fn log_singles(h: History, row: usize) void {
+    var symbols = h.table.column_by_symbol.keyIterator();
+    while (symbols.next()) |symbol| {
+        const bb = h.table.getColumn(symbol.*)[row];
+        if (bb.single()) |single| {
+            log.sym_id(symbol.*);
+            std.debug.print(":{d}:{t} ", .{ h.table.column_by_symbol.get(symbol.*).?, single });
+        }
+    }
+}

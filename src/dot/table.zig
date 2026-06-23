@@ -7,63 +7,66 @@ const log = @import("logs.zig");
 
 pub fn Table(C: type, R: type) type {
     return struct {
-        symbols: []C,
-        columns: []ArrayList(R),
+        columns: ArrayList(ArrayList(R)),
         column_by_symbol: AutoHashMap(C, usize),
 
         const Self = @This();
 
         pub fn deinit(self: *Self, allocator: Allocator) void {
-            allocator.free(self.symbols);
-            for (self.columns) |*column| column.deinit(allocator);
-            allocator.free(self.columns);
+            for (self.columns.items) |*column| column.deinit(allocator);
+            self.columns.deinit(allocator);
             self.column_by_symbol.deinit();
         }
 
-        pub fn init(allocator: Allocator, symbols: []C, capacity: usize) !Self {
-            var columns = try ArrayList(ArrayList(R)).initCapacity(allocator, symbols.len);
-            errdefer columns.deinit(allocator);
+        pub fn init(allocator: Allocator) !Self {
+            const column_by_symbol: AutoHashMap(C, usize) = .init(allocator);
 
-            var column_by_symbol = AutoHashMap(C, usize).init(allocator);
+            return .{ .column_by_symbol = column_by_symbol, .columns = .empty };
+        }
 
-            for (symbols) |symbol| {
-                var column = try ArrayList(R).initCapacity(allocator, capacity);
+        pub fn addColumn(self: *Self, allocator: Allocator, key: C) !bool {
+            const existing = try self.column_by_symbol.getOrPut(key);
+
+            if (!existing.found_existing) {
+                existing.value_ptr.* = self.columns.items.len;
+
+                var column: ArrayList(R) = .empty;
                 errdefer column.deinit(allocator);
-                try columns.append(allocator, column);
-                try column_by_symbol.put(symbol, columns.items.len - 1);
+                try self.columns.append(allocator, column);
+                return true;
             }
-            return .{ .column_by_symbol = column_by_symbol, .symbols = symbols, .columns = try columns.toOwnedSlice(allocator) };
+            return false;
         }
 
         pub fn getColumn(self: Self, column: C) []R {
-            const icolumn = self.column_by_symbol.get(column) orelse 0;
-            return self.columns[icolumn].items;
+            const icolumn = self.column_by_symbol.get(column).?;
+            return self.columns.items[icolumn].items;
         }
 
         pub fn getValue(self: Self, column: C, row: usize) R {
-            const icolumn = self.column_by_symbol.get(column) orelse 0;
-            return self.columns[icolumn].items[row];
+            const icolumn = self.column_by_symbol.get(column).?;
+            return self.columns.items[icolumn].items[row];
         }
 
         pub fn setLastRow(self: Self, column: C, value: R) void {
-            const icolumn = self.column_by_symbol.get(column) orelse 0;
-            self.columns[icolumn].items[self.columns[icolumn].items.len - 1] = value;
+            const icolumn = self.column_by_symbol.get(column).?;
+            self.columns.items[icolumn].items[self.columns.items[icolumn].items.len - 1] = value;
         }
 
-        pub fn duplicateLastRow(self: *Self, allocator: Allocator) !void {
-            for (self.columns) |*column| {
-                try column.append(allocator, column.items[column.items.len - 1]);
+        pub fn duplicateRow(self: *Self, allocator: Allocator, row: usize) !void {
+            for (self.columns.items) |*column| {
+                try column.append(allocator, column.items[row]);
             }
         }
 
         pub fn appendRow(self: *Self, allocator: Allocator, row: []R) !void {
-            for (row, self.columns) |value, *column| {
+            for (row, self.columns.items) |value, *column| {
                 try column.append(allocator, value);
             }
         }
 
         pub fn clearRetainingCapacity(self: *Self) void {
-            for (self.columns) |*column| column.clearRetainingCapacity();
+            for (self.columns.items) |*column| column.clearRetainingCapacity();
         }
     };
 }
@@ -71,17 +74,17 @@ pub fn Table(C: type, R: type) type {
 test "basic usage" {
     const ally = std.testing.allocator;
 
-    var symbols = try ArrayList(usize).initCapacity(ally, 10);
-
-    try symbols.append(ally, 1);
-    try symbols.append(ally, 2);
-    try symbols.append(ally, 3);
-    try symbols.append(ally, 4);
-
-    var table = try Table(usize, usize).init(ally, try symbols.toOwnedSlice(ally), 100);
+    var table = try Table(usize, usize).init(ally);
     defer table.deinit(ally);
 
-    try std.testing.expectEqual(4, table.columns.len);
+    _ = try table.addColumn(ally, 1);
+    _ = try table.addColumn(ally, 2);
+    _ = try table.addColumn(ally, 3);
+    _ = try table.addColumn(ally, 4);
+
+    _ = try table.addColumn(ally, 3);
+    _ = try table.addColumn(ally, 3);
+    try std.testing.expectEqual(4, table.columns.items.len);
 
     var row = try ArrayList(usize).initCapacity(ally, 8);
     defer row.deinit(ally);
@@ -92,13 +95,13 @@ test "basic usage" {
     try row.append(ally, 53);
     try table.appendRow(ally, row.items);
 
-    try std.testing.expectEqual(1, table.columns[0].items.len);
+    try std.testing.expectEqual(1, table.columns.items[0].items.len);
     try std.testing.expectEqual(51, table.getValue(2, 0));
     try std.testing.expectEqual(52, table.getValue(3, 0));
 
     try table.duplicateLastRow(ally);
 
-    try std.testing.expectEqual(2, table.columns[0].items.len);
+    try std.testing.expectEqual(2, table.columns.items[0].items.len);
 
     table.setLastRow(2, 0);
     try std.testing.expectEqual(0, table.getValue(2, 1));

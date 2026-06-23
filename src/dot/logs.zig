@@ -20,7 +20,7 @@ pub fn pos(a: cs.Position) void {
 }
 
 pub fn sym_id(a: lx.SymbolIdentity) void {
-    std.debug.print("\nS:{t}{d}\n", .{ a.tag, a.id });
+    std.debug.print("S:{t}{d}", .{ a.tag, a.id });
 }
 
 pub fn sym(a: par.Symbol) void {
