@@ -143,7 +143,7 @@ pub const Parser = struct {
                 if (slice.token[reverse].tag == lx.TokenTag.Symbol) {
                     if (slice.token[reverse].symbol) |symbol| {
                         if (symbol.identity.tag == lx.SymbolTag.becomes) {
-                            return self.getSymbolForTokenRef(slice.slice.off + reverse);
+                            return self.getSymbolForTokenRef(slice.slice.off + reverse + 1);
                         }
                     }
                 }

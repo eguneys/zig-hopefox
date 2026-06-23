@@ -22,6 +22,7 @@ pub const errors = error{
 };
 
 pub const OrchRunner = struct {
+    text: []const u8,
     io: std.Io,
     orch: op.Orch,
     scriptsDir: std.Io.Dir,
@@ -38,13 +39,13 @@ pub const OrchRunner = struct {
         self.orch.deinit(allocator);
         self.scriptsDir.close(io);
         self.dbDir.close(io);
+        allocator.free(self.text);
     }
 
     pub fn init(io: std.Io, scriptsDir: std.Io.Dir, allocator: Allocator, orch_path: []const u8) !OrchRunner {
         const text = FileReader.readFileAlloc(io, scriptsDir, allocator, orch_path, OrchRunner.OrchFileSizeLimit) catch {
             return errors.OrchFileNotFound;
         };
-        defer allocator.free(text);
 
         const orch_filename = try FindDbReader.extract_filename(orch_path);
         const db_path = try std.mem.join(allocator, "_", &[2][]const u8{ orch_filename, Self.DbBaseDir });
@@ -59,7 +60,7 @@ pub const OrchRunner = struct {
 
         const orch = try parser.toOwnedOrch(allocator);
 
-        return .{ .io = io, .scriptsDir = scriptsDir, .dbDir = db_dir, .orch = orch };
+        return .{ .text = text, .io = io, .scriptsDir = scriptsDir, .dbDir = db_dir, .orch = orch };
     }
 
     pub fn passStep(self: *Self, allocator: Allocator) !void {
@@ -102,8 +103,8 @@ const ScriptFilters = struct {
     script_path: []const u8,
 
     io: std.Io,
-    preview: ?op.Preview,
 
+    previewAppender: ?PreviewTagAppender,
     previewTagAppenders: AutoHashMap(op_lx.FilterTag, PreviewTagAppender),
     tagAppenders: AutoHashMap(op_lx.FilterTag, TagAppender),
 
@@ -125,15 +126,26 @@ const ScriptFilters = struct {
         self.tagAppenders.deinit();
 
         self.iterator.deinit(self.io, allocator);
+
+        if (self.previewAppender) |*appender| {
+            appender.deinit(allocator);
+        }
     }
 
     fn init(io: std.Io, scriptsDir: std.Io.Dir, dbDir: std.Io.Dir, allocator: Allocator, script_path: []const u8, src_path: []const u8, preview: ?op.Preview) !Self {
         const iterator = try PositionIterator.init(io, scriptsDir, dbDir, allocator, script_path, src_path);
 
+        const db_dir = iterator.find_db_reader.db_dir;
+        const previewAppender = if (preview) |pview| findpv: {
+            const src = try ScriptFilters.preview_src_for_tag(script_path, allocator, null);
+            defer allocator.free(src);
+            break :findpv try PreviewTagAppender.init(io, db_dir, allocator, src, null, pview, iterator.find_db_reader.db_reader.header.count);
+        } else null;
+
         return .{
             .script_path = script_path,
             .io = io,
-            .preview = preview,
+            .previewAppender = previewAppender,
             .previewTagAppenders = .init(allocator),
             .tagAppenders = .init(allocator),
             .iterator = iterator,
@@ -153,6 +165,9 @@ const ScriptFilters = struct {
         for (0..total) |i| {
             const runVisuals = try self.iterator.runOnPosition(allocator, i);
 
+            if (self.previewAppender) |*appender|
+                try appender.append(self.io, allocator, &self.iterator.dot_usage, runVisuals);
+
             for (filters) |filter| {
                 if (filter.preview != null) {
                     try self.appendPreview(allocator, filter.tag, runVisuals);
@@ -171,13 +186,13 @@ const ScriptFilters = struct {
         }
     }
 
-    fn preview_src_for_tag(self: Self, allocator: Allocator, tag: op_lx.FilterTag) ![]const u8 {
-        const script_path = try FindDbReader.extract_filename(self.script_path);
-        const filter_path = @tagName(tag);
+    fn preview_src_for_tag(script_path: []const u8, allocator: Allocator, tag: ?op_lx.FilterTag) ![]const u8 {
+        const script_name = try FindDbReader.extract_filename(script_path);
+        const filter_path = if (tag) |t| @tagName(t) else "S";
 
         const suffix = "output";
 
-        const result = try std.mem.join(allocator, "._", &[3][]const u8{ script_path, filter_path, suffix });
+        const result = try std.mem.join(allocator, "._", &[3][]const u8{ script_name, filter_path, suffix });
 
         return result;
     }
@@ -194,7 +209,7 @@ const ScriptFilters = struct {
     }
 
     fn initPreview(self: *Self, allocator: Allocator, tag: op_lx.FilterTag, preview: op.Preview, total: usize) !void {
-        const src = try self.preview_src_for_tag(allocator, tag);
+        const src = try ScriptFilters.preview_src_for_tag(self.script_path, allocator, tag);
         defer allocator.free(src);
 
         const db_dir = self.iterator.find_db_reader.db_dir;
@@ -394,6 +409,8 @@ const PreviewTagAppender = struct {
 
     builder: san.PrintBuilder,
 
+    i_visual: usize,
+
     buffer: []u8,
 
     const TagFileBufferSize: usize = 2048000;
@@ -410,7 +427,7 @@ const PreviewTagAppender = struct {
         allocator.free(self.buffer);
     }
 
-    fn init(io: std.Io, db_dir: std.Io.Dir, allocator: Allocator, src: []const u8, tag: op_lx.FilterTag, preview: op.Preview, total: usize) !Self {
+    fn init(io: std.Io, db_dir: std.Io.Dir, allocator: Allocator, src: []const u8, tag: ?op_lx.FilterTag, preview: op.Preview, total: usize) !Self {
         var tag_file = try FileWriter.init(io, db_dir, allocator, src, Self.TagFileBufferSize);
         errdefer tag_file.deinit(allocator);
 
@@ -421,15 +438,54 @@ const PreviewTagAppender = struct {
 
         const builder = try san.PrintBuilder.init(allocator);
 
-        return .{ .buffer = try allocator.alloc(u8, CoverageHeaderBufferSize), .builder = builder, .tag_file = tag_file, .header = previewHeader, .preview = preview, .start = start };
+        return .{ .i_visual = 0, .buffer = try allocator.alloc(u8, CoverageHeaderBufferSize), .builder = builder, .tag_file = tag_file, .header = previewHeader, .preview = preview, .start = start };
+    }
+
+    fn previewPass(self: *Self, visuals: RunVisuals) bool {
+        const result = findresult: {
+            if (self.preview.single) |single| {
+                if (std.mem.containsAtLeast(u8, single, 1, &visuals.meta.id_slice())) {
+                    break :findresult true;
+                } else {
+                    break :findresult false;
+                }
+            }
+            break :findresult true;
+        };
+
+        if (result == false) {
+            return false;
+        }
+
+        self.i_visual += 1;
+
+        if (self.preview.skip) |skip| {
+            if (self.i_visual < skip) {
+                return false;
+            }
+        }
+        if (self.preview.take) |take| {
+            if (self.i_visual > take) {
+                return false;
+            }
+        }
+        return true;
     }
 
     fn append(self: *Self, io: std.Io, allocator: Allocator, dot: *DotUsage, visuals: RunVisuals) !void {
         if (self.header.i == 0) try self.writeHeader(io);
         try self.header.append(allocator, visuals);
 
-        if (visuals.solution_match_type.pass(self.header.tag)) {
-            try self.writeVisuals(allocator, dot, visuals);
+        if (self.header.tag) |tag| {
+            if (visuals.solution_match_type.pass(tag)) {
+                if (self.previewPass(visuals)) {
+                    try self.writeVisuals(allocator, dot, visuals);
+                }
+            }
+        } else {
+            if (self.previewPass(visuals)) {
+                try self.writeVisuals(allocator, dot, visuals);
+            }
         }
 
         const step: f64 = @mod(self.header.total, 100);
@@ -452,7 +508,9 @@ const PreviewTagAppender = struct {
 
         const meta_id: [5]u8 = @bitCast(visuals.meta.id);
 
-        _ = try writer.write("https://lichess.org/training/");
+        _ = try writer.write(try std.fmt.bufPrint(self.buffer, "{d}", .{self.header.i}));
+
+        _ = try writer.write(" https://lichess.org/training/");
         _ = try writer.write(&meta_id);
         _ = try writer.write("\n");
 
@@ -518,7 +576,7 @@ const PreviewTagHeader = struct {
     nbFalseMatch: f64 = 0,
     nbFirstMatch: f64 = 0,
 
-    tag: op_lx.FilterTag,
+    tag: ?op_lx.FilterTag,
 
     const Self = @This();
 
@@ -529,7 +587,7 @@ const PreviewTagHeader = struct {
 
     fn init(
         allocator: Allocator,
-        tag: op_lx.FilterTag,
+        tag: ?op_lx.FilterTag,
         preview: op.Preview,
         total: usize,
     ) Self {

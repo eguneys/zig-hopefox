@@ -44,6 +44,10 @@ pub const PuzzleMeta = packed struct(u400) {
     pub fn moves(self: PuzzleMeta) [20]types.Move {
         return @bitCast(self.solution);
     }
+
+    pub fn id_slice(self: PuzzleMeta) [5]u8 {
+        return @bitCast(self.id);
+    }
 };
 
 test "basic usage" {

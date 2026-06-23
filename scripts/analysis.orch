@@ -1,6 +1,3 @@
 src: ../data/test_b_forks_kr.csv
-script1.gof:
-  Negative: @preview
-  False: @preview
-  True
-  FirstMove
+script3.gof:
+  True: @preview(take=3)

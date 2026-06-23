@@ -137,7 +137,7 @@ pub const Parser = struct {
 
         if (indent != expectIndent) return null;
 
-        var result: Script = undefined;
+        var result: Script = .{ .path = undefined, .filters = undefined, .preview = null };
 
         result.path = try self.parsePath(allocator);
         errdefer allocator.free(result.path);
@@ -369,4 +369,60 @@ test "regression" {
     defer orch.deinit(ally);
 
     try testing.expectEqual(1, orch.scripts.len);
+}
+
+test "preview on script" {
+    const ally = testing.allocator;
+
+    //{ FirstMove, True, Negative, False, Full, Zero };
+    var parser = try Parser.init(ally,
+        \\src: ../data/test_b_forks_kr2.csv
+        \\script.gof: @preview(single=_0idx)
+        \\  Zero
+    );
+    defer parser.deinit(ally);
+
+    var orch = try parser.toOwnedOrch(ally);
+    defer orch.deinit(ally);
+
+    try testing.expectEqual(1, orch.scripts.len);
+    try testing.expect(orch.scripts_flat[0].preview != null);
+    try testing.expectEqualStrings("0idx", orch.scripts_flat[0].preview.?.single.?);
+}
+
+test "regression 2" {
+    const ally = testing.allocator;
+
+    //{ FirstMove, True, Negative, False, Full, Zero };
+    var parser = try Parser.init(ally,
+        \\src: ../data/test_b_forks_kr.csv
+        \\script3.gof: @preview(single=_01PrL take=3)
+        \\  True
+    );
+    defer parser.deinit(ally);
+
+    var orch = try parser.toOwnedOrch(ally);
+    defer orch.deinit(ally);
+
+    try testing.expectEqual(1, orch.scripts.len);
+    try testing.expect(orch.scripts_flat[0].preview != null);
+    try testing.expectEqualStrings("01PrL", orch.scripts_flat[0].preview.?.single.?);
+}
+
+test "regression 3" {
+    const ally = testing.allocator;
+
+    //{ FirstMove, True, Negative, False, Full, Zero };
+    var parser = try Parser.init(ally,
+        \\src: ../data/test_b_forks_kr.csv
+        \\script3.gof: @preview(take=3)
+        \\  True 
+    );
+    defer parser.deinit(ally);
+
+    var orch = try parser.toOwnedOrch(ally);
+    defer orch.deinit(ally);
+
+    try testing.expectEqual(1, orch.scripts.len);
+    try testing.expect(orch.scripts_flat[0].preview.?.single == null);
 }

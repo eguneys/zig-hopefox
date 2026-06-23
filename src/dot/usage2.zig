@@ -140,6 +140,7 @@ pub const DotUsage = struct {
                 const history = self.runner.history.tree.getHistoryReversed(slice.off);
                 for (0..history.len) |j| {
                     const move = self.runner.history.tree.getNode(history[history.len - 1 - j]).value;
+                    if (move.isNone()) continue;
                     try self.move_buffer.append(allocator, move);
                 }
                 break;
