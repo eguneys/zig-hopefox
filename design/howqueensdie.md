@@ -10,7 +10,10 @@ Finally, we will give you a sneak peek to the method behind this research, namel
 
 Our overall conclusion over finding these basic patterns is, Queen can always be the first one to save when under a threat, apart from a checkmate, thus the other side of the double threat is usually to the king, where as the queen is lost, as the king escapes. Let's get started.
 
-### Bishop Checks King with a Discovered attack on Hanging Queen
+### Bishop Checks King with a Discovered Attack on Hanging Queen
+
+
+
 
 ### Bishop Skewers King and Queen
 
@@ -18,7 +21,7 @@ Our overall conclusion over finding these basic patterns is, Queen can always be
 
 ### Pawn Forks King and Queen
 
-### Pawn Checks King with a Discovered attack on Hanging Queen
+### Pawn Checks King with a Discovered Attack on Hanging Queen
 
 ### Immediately Hanging the Queen
 
@@ -32,7 +35,7 @@ Our overall conclusion over finding these basic patterns is, Queen can always be
 
 To conclude this chapter, I would like to thank the Lichess Team, for presenting this amazing ecosystem, outreach to the community and tools that guided me with this entire research.
 
-We are happy to hear your best wishes to continue this amazing journey, and share our experiences with all of you.
+We are happy to hear your best wishes to continue this amazing journey, and share our experiences with all of you. What do you think, did we miss some aspects, or have ideas for our next research topic, interested in how GofChess Language works, inspired by another creative use case for it?
 
 May the Queens of the game of chess bring us all the good luck in the universe that will never die.
 
