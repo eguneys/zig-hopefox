@@ -1,8 +1,11 @@
-src: ../data/test_b_forks_kr.csv
+src: ../data/lichess_db_puzzle.csv
 script3.gof:
   True: @preview(take=3)
   FirstMove: @preview(take=4)
   False: @preview(take=3)
-    script4.gof: @preview
+    script4.gof: @preview(take=5)
       True
-  FullFalse: @preview
+      FullFalse: @preview(take=5)
+      FirstMove: @preview(take=5)
+      False: @preview(take=5)
+  FullFalse: @preview(take=5)

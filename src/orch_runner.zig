@@ -423,7 +423,7 @@ const PreviewTagAppender = struct {
 
     const TagFileBufferSize: usize = 2048000;
 
-    const CoverageHeaderBufferSize = 120;
+    const CoverageHeaderBufferSize = 180;
 
     const Self = @This();
 
