@@ -99,7 +99,7 @@ test "basic usage" {
     try std.testing.expectEqual(51, table.getValue(2, 0));
     try std.testing.expectEqual(52, table.getValue(3, 0));
 
-    try table.duplicateLastRow(ally);
+    try table.duplicateRow(ally, 0);
 
     try std.testing.expectEqual(2, table.columns.items[0].items.len);
 

@@ -6,9 +6,24 @@ const ReadNumber = @import("tool.zig").ReadNumber;
 
 pub const errors = error{UnknownToken};
 
-pub const TokenTag = enum { Src, Word, Dot, PathJoin, Colon, At, OpenParen, CloseParen, Equals, Number, Filter, Param, AlphaNumericLiteral, Eof };
+pub const TokenTag = enum {
+    Src,
+    Word,
+    Dot,
+    PathJoin,
+    Colon,
+    At,
+    OpenParen,
+    CloseParen,
+    Equals,
+    Number,
+    Filter,
+    Param,
+    AlphaNumericLiteral,
+    Eof,
+};
 
-pub const FilterTag = enum { FirstMove, True, Negative, False, Full, Zero };
+pub const FilterTag = enum { FirstMove, True, Negative, False, FullFalse, Full, Zero };
 
 pub const ParamTag = enum { take, skip, single };
 
