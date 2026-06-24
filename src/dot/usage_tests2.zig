@@ -193,3 +193,28 @@ test "eyesThrough regression doesNotdefend" {
         \\queen *Captures queen2 *becomes queen3
     , chess.Fen.parse("2kr1b1r/1p2p1pp/p7/2qBQ1B1/3n1P2/8/P5PP/1n3R1K w - - 1 22"));
 }
+
+test "Captures .dot next line" {
+    try expectVisuals(
+        \\1: {}
+        \\2: {}
+        \\3: {Bxg5+}
+        \\4: {Bxg5+}
+        \\5: {Bxg5+}
+    ,
+        \\queen_t .eyesThrough queen2 .through bishop
+        \\                     .hanging
+        \\bishop_t *Captures opponent *becomes bishop2
+        \\                                  .cannotBeCapturedBy queen2
+        \\         .Checks king_t
+    ,
+        \\........
+        \\....k...
+        \\....n...
+        \\......p.
+        \\........
+        \\..q.B..Q
+        \\........
+        \\........
+    );
+}

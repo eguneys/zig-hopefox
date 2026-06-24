@@ -29,6 +29,12 @@ pub const Matcher = struct {
             lx.SymbolTag.doesNotDefend => {
                 try Filters.dispatch_doesNotDefend(allocator, history, slice, dot);
             },
+            lx.SymbolTag.Captures => {
+                try Filters.dispatch_captures(allocator, history, slice, dot);
+            },
+            lx.SymbolTag.Check => {
+                try Filters.dispatch_checks(allocator, history, slice, dot);
+            },
             else => {},
         }
     }
@@ -468,6 +474,70 @@ pub const Filters = struct {
                         const ref = try history.tree.appendChild(allocator, off, move);
                         try history.nodes.append(allocator, ref);
                     }
+                }
+            }
+        }
+    }
+
+    fn dispatch_captures(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const captured_symbol = history.program.symbols[star.action.one];
+        const From = history.table.getColumn(from_symbol.identity);
+        const Captured = history.table.getColumn(captured_symbol.identity);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_captured = Captured[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from.bitand(Symbols.bitboard(from_symbol, position));
+            while (bb_from2.next()) |sq_from| {
+                const aa_captured = Symbols.captures(from_symbol, sq_from, position);
+                var bb_captured2 = bb_captured
+                    .bitand(Symbols.bitboard(captured_symbol, position))
+                    .bitand(aa_captured);
+
+                while (bb_captured2.next()) |sq_captured| {
+                    try history.table.duplicateRow(allocator, off);
+
+                    history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+                    history.table.setLastRow(captured_symbol.identity, chess.Bitboard.fromSquare(sq_captured));
+
+                    const move = chess.Move.none;
+                    const ref = try history.tree.appendChild(allocator, off, move);
+                    try history.nodes.append(allocator, ref);
+                }
+            }
+        }
+    }
+
+    fn dispatch_checks(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const checked_symbol = history.program.symbols[star.action.one];
+        const From = history.table.getColumn(from_symbol.identity);
+        const Checked = history.table.getColumn(checked_symbol.identity);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_checked = Checked[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from.bitand(Symbols.bitboard(from_symbol, position));
+
+            while (bb_from2.next()) |sq_from| {
+                var bb_checked2 = bb_checked
+                    .bitand(Symbols.bitboard(checked_symbol, position));
+                while (bb_checked2.next()) |sq_checked| {
+                    try history.table.duplicateRow(allocator, off);
+
+                    history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+                    history.table.setLastRow(checked_symbol.identity, chess.Bitboard.fromSquare(sq_checked));
+
+                    const move = chess.Move.none;
+                    const ref = try history.tree.appendChild(allocator, off, move);
+                    try history.nodes.append(allocator, ref);
                 }
             }
         }

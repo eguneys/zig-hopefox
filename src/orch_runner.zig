@@ -559,7 +559,7 @@ const PreviewTagAppender = struct {
         }
 
         const Coverage = (1 - header.nbNegativeMatch / header.total) * 100;
-        const Accuracy = (header.nbFullMatch + header.nbFirstMatch) / header.total * 100;
+        const Accuracy = (header.nbFullMatch + header.nbFirstMatch) / (header.total - header.nbNegativeMatch) * 100;
         left += (try std.fmt.bufPrint(self.buffer[left..], "FirstM:{d} N:{d} F:{d} FF:{d} T:{d}\n", .{ header.nbFirstMatch, header.nbNegativeMatch, header.nbFalseMatch, header.nbFullFalseMatch, header.nbFullMatch })).len;
         left += (try std.fmt.bufPrint(self.buffer[left..], "Coverage:{d:.2}% Accuracy:{d:.2}%\n", .{ Coverage, Accuracy })).len;
         left += (try std.fmt.bufPrint(self.buffer[left..], "Total:{d}", .{header.total})).len;
