@@ -8,7 +8,9 @@ Finally, we will give you a sneak peek to the method behind this research, namel
 
 ## Basic Patterns
 
-Our overall conclusion over finding these basic patterns is, Queen can always be the first one to save when under a threat, apart from a checkmate, thus the other side of the double threat is usually to the king, where as the queen is lost, as the king escapes. Let's get started.
+Our overall conclusion over finding these basic patterns is, Queen can always be the first one to save when under a threat, apart from a checkmate, thus the other side of the double threat is usually to the king, where as the queen is lost, as the king escapes.
+
+But before we get started, we want to mention our coverage is not exhaustive, since we don't include every piece combination for every case, but some special cases we find is sufficient for demonstration purposes is included. This is mostly not due to a limitation of the gof scripts, but for the sake of keeping a compact proof of concept.
 
 ### Bishop Checks King with a Discovered Attack on Hanging Queen
 
@@ -43,12 +45,12 @@ https://lichess.org/training/00DTg
 
 Among 4.6 million puzzles, there are a total of **13683** puzzles that fits this description, and solved with this exact sequence.
 
-If we change our description slightly, such as instead of our bishop capturing something while giving check to the king, to bishop simply moving to a vacant square while giving check, we find total of **3216** puzzles. Here's a couple examples:
+If we change our description slightly, such as instead of our bishop capturing something while giving check, to bishop simply moving to a vacant square while giving check, we find total of **3216** puzzles. Here's a couple examples:
 
-https://lichess.org/training/00gSv
-https://lichess.org/training/02ra2
-https://lichess.org/training/02zVb
-https://lichess.org/training/03wTh
+- https://lichess.org/training/00gSv
+- https://lichess.org/training/02ra2
+- https://lichess.org/training/02zVb
+- https://lichess.org/training/03wTh
 
 
 
