@@ -12,6 +12,43 @@ Our overall conclusion over finding these basic patterns is, Queen can always be
 
 ### Bishop Checks King with a Discovered Attack on Hanging Queen
 
+First we have to explain what exactly we are searching for, and what the corresponding GofChess script looks like to express that:
+
+The Gof script:
+
+```
+queen_t .eyesThrough queen2 .through bishop
+                     .hanging
+bishop_t *Captures opponent *becomes bishop2
+                                  .cannotBeCapturedBy queen2
+         .Checks king_t
+turn  *Captures bishop2 *becomes opponent2
+                                    .doesNotDefend queen2
+queen *Captures queen2 *becomes queen3
+```
+
+Explanation in English:
+```
+Our queen attacks opponent's queen but there is our bishop in between them.
+Opponent's queen is hanging, otherwise has no defenders.
+Our bishop captures an opponent's piece, while giving a check to the king. 
+But also the bishop cannot be captured by their hanging queen.
+Our bishop is captured by the opponent. But meanwhile capturing piece doesn't defend the hanging queen.
+
+At this point our queen can capture the opponent's hanging queen. Queen is lost.
+```
+
+An example position:
+https://lichess.org/training/00DTg
+
+Among 4.6 million puzzles, there are a total of **13683** puzzles that fits this description, and solved with this exact sequence.
+
+If we change our description slightly, such as instead of our bishop capturing something while giving check to the king, to bishop simply moving to a vacant square while giving check, we find total of **3216** puzzles. Here's a couple examples:
+
+https://lichess.org/training/00gSv
+https://lichess.org/training/02ra2
+https://lichess.org/training/02zVb
+https://lichess.org/training/03wTh
 
 
 
@@ -36,6 +73,8 @@ Our overall conclusion over finding these basic patterns is, Queen can always be
 To conclude this chapter, I would like to thank the Lichess Team, for presenting this amazing ecosystem, outreach to the community and tools that guided me with this entire research.
 
 We are happy to hear your best wishes to continue this amazing journey, and share our experiences with all of you. What do you think, did we miss some aspects, or have ideas for our next research topic, interested in how GofChess Language works, inspired by another creative use case for it?
+
+If you want to reproduce the results, or make your own compilations, send us a DM at https://lichess.org/@/heroku for more information.
 
 May the Queens of the game of chess bring us all the good luck in the universe that will never die.
 
