@@ -218,3 +218,19 @@ test "Captures .dot next line" {
         \\........
     );
 }
+
+test "Checks .dot next line" {
+    try expectVisualsPosition(
+        \\1: {}
+        \\2: {}
+        \\3: {Bxa1}{Bxh4}
+        \\4: {Bxa1}{Bxh4}
+        \\5: 
+    ,
+        \\queen_t .eyesThrough queen2 .through bishop
+        \\                     .hanging
+        \\bishop_t *Captures opponent *becomes bishop2
+        \\                                  .cannotBeCapturedBy queen2
+        \\         .Checks king_t
+    , chess.Fen.parse("r4k1r/pp6/3q1bQ1/2BP4/2P1p2P/6P1/P1B5/R5K1 b - - 0 35"));
+}

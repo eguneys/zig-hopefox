@@ -528,7 +528,9 @@ pub const Filters = struct {
 
             while (bb_from2.next()) |sq_from| {
                 var bb_checked2 = bb_checked
-                    .bitand(Symbols.bitboard(checked_symbol, position));
+                    .bitand(Symbols.bitboard(checked_symbol, position))
+                    .bitand(Symbols.captures(from_symbol, sq_from, position));
+
                 while (bb_checked2.next()) |sq_checked| {
                     try history.table.duplicateRow(allocator, off);
 
