@@ -3,4 +3,6 @@ script3.gof:
   True: @preview(take=3)
   FirstMove: @preview(take=4)
   False: @preview(take=3)
-  FullFalse: @preview(take=5)
+    script4.gof: @preview
+      True
+  FullFalse: @preview

@@ -497,7 +497,7 @@ const PreviewTagAppender = struct {
         }
 
         const step: f64 = @mod(self.header.total, 100);
-        if (@mod(self.header.i, step) == 0) {
+        if (@mod(self.header.i, step) == 0 or self.header.i == self.header.total) {
             try self.writeHeader(io);
         }
     }

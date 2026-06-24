@@ -32,6 +32,8 @@ pub const SymbolTag = enum {
     turn,
     doesNotDefend,
     opponent,
+
+    Movesto,
 };
 
 pub const SymbolIdentity = struct { tag: SymbolTag, id: usize };

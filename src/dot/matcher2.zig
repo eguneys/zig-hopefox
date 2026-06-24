@@ -40,6 +40,9 @@ pub const Matcher = struct {
     }
     pub fn run_star(allocator: Allocator, history: *History, slice: Slice, star: par.Becomes) !void {
         switch (history.program.symbols[star.action.tag].identity.tag) {
+            lx.SymbolTag.Movesto => {
+                try dispatch_movesto(allocator, history, slice, star);
+            },
             lx.SymbolTag.Captures => {
                 try dispatch_captures(allocator, history, slice, star);
             },
@@ -50,6 +53,50 @@ pub const Matcher = struct {
                 try dispatch_blocks(allocator, history, slice, star);
             },
             else => {},
+        }
+    }
+
+    fn dispatch_movesto(allocator: Allocator, history: *History, slice: Slice, star: par.Becomes) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const to_symbol = history.program.symbols[star.to];
+        const captured_symbol = history.program.symbols[star.action.one];
+        const From = history.table.getColumn(from_symbol.identity);
+        const To = history.table.getColumn(to_symbol.identity);
+        const Captured = history.table.getColumn(captured_symbol.identity);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_to = To[off];
+            const bb_captured = Captured[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from.bitand(Symbols.bitboard(from_symbol, position));
+            while (bb_from2.next()) |sq_from| {
+                const aa_captured = Symbols.moves(from_symbol, sq_from, position.occupied());
+                var bb_captured2 = bb_captured
+                    .bitand(Symbols.bitboard(captured_symbol, position))
+                    .bitand(aa_captured);
+
+                while (bb_captured2.next()) |sq_captured| {
+                    var bb_to2 = bb_to
+                        .bitand(chess.Bitboard.fromSquare(sq_captured));
+                    while (bb_to2.next()) |sq_to| {
+                        try history.table.duplicateRow(allocator, off);
+
+                        history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+                        history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
+                        history.table.setLastRow(captured_symbol.identity, chess.Bitboard.fromSquare(sq_captured));
+
+                        var move: chess.Move = undefined;
+                        move.from = @truncate(@intFromEnum(sq_from));
+                        move.to = @truncate(@intFromEnum(sq_to));
+                        move.kind = chess.MoveType.Normal;
+                        const ref = try history.tree.appendChild(allocator, off, move);
+                        try history.nodes.append(allocator, ref);
+                    }
+                }
+            }
         }
     }
 
