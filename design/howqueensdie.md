@@ -8,6 +8,8 @@ Finally, we will give you a sneak peek to the method behind this research, namel
 
 ## Basic Patterns
 
+Our overall conclusion over finding these basic patterns is, Queen can always be the first one to save when under a threat, apart from a checkmate, thus the other side of the double threat is usually to the king, where as the queen is lost, as the king escapes. Let's get started.
+
 ### Bishop Checks King with a Discovered attack on Hanging Queen
 
 ### Bishop Skewers King and Queen
@@ -32,6 +34,6 @@ To conclude this chapter, I would like to thank the Lichess Team, for presenting
 
 We are happy to hear your best wishes to continue this amazing journey, and share our experiences with all of you.
 
-May the Queens of the game of chess bring us all the good luck in the universe.
+May the Queens of the game of chess bring us all the good luck in the universe that will never die.
 
-PS: I feel like I am having a deja-vu.
+PS: I feel like I am having a déjà vu.
