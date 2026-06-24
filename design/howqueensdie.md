@@ -20,6 +20,8 @@ Finally, we will give you a sneak peek to the method behind this research, namel
 
 ### Immediately Hanging the Queen
 
+### Queen Traps
+
 ## Advanced Exceptions to Basic Patterns
 
 ## Methodology of GofChess Language v2.0
