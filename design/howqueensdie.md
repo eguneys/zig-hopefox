@@ -1,6 +1,6 @@
 ## How Queens Die: Analysing a 4.6 Million Puzzle Database
 
-![Cover](ChatGPT Image 26 Haz 2026 19_25_51.png)
+![Cover](/ChatGPT Image 26 Haz 2026 19_25_51.png)
 
 **TLDR; AI Summary**:
 > When I read your draft, I still thought  
