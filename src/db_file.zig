@@ -51,16 +51,14 @@ pub const PuzzleMeta = packed struct(u400) {
 };
 
 test "basic usage" {
-    const ally = std.testing.allocator;
     const position = types.Fen.parse(types.Fen.Initial);
     var meta = PuzzleMeta.parse(position, "abcdef", "e2e4 e7e5 b1c3");
 
+    var buffer: [20]u8 = undefined;
     //try std.testing.expectEqual(2, meta.moves().len);
-    const res = try types.Prints.moveFromToUci(ally, meta.moves()[0]);
-    defer ally.free(res);
+    const res = try types.Prints.moveFromToUci(&buffer, meta.moves()[0]);
     try std.testing.expectEqualStrings("e7e5", res);
-    const res2 = try types.Prints.moveFromToUci(ally, meta.moves()[1]);
-    defer ally.free(res2);
+    const res2 = try types.Prints.moveFromToUci(&buffer, meta.moves()[1]);
     try std.testing.expectEqualStrings("b1c3", res2);
 }
 
@@ -142,6 +140,8 @@ pub const BuildDb = struct {
             const id = parts.next().?;
             const fen = parts.next().?;
             const moves = parts.next().?;
+
+            if (std.mem.eql(u8, "PuzzleId", id)) continue;
 
             var position = types.Fen.parse(fen);
 

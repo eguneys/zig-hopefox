@@ -939,10 +939,10 @@ pub const Prints = struct {
         };
     }
 
-    pub fn moveFromToUci(allocator: std.mem.Allocator, move: Move) ![]const u8 {
+    pub fn moveFromToUci(buffer: []u8, move: Move) ![]const u8 {
         return switch (move.kind) {
-            MoveType.EnPassant, MoveType.Castling, MoveType.Normal => std.fmt.allocPrint(allocator, "{s}{s}", .{ Prints.fromSquare(@enumFromInt(move.from)), Prints.fromSquare(@enumFromInt(move.to)) }),
-            MoveType.Promotion => std.fmt.allocPrint(allocator, "{s}{s}{c}", .{ Prints.fromSquare(@enumFromInt(move.from)), Prints.fromSquare(@enumFromInt(move.to)), Prints.fromPromotionRoleLower(move.promotion) }),
+            MoveType.EnPassant, MoveType.Castling, MoveType.Normal => std.fmt.bufPrint(buffer, "{s}{s}", .{ Prints.fromSquare(@enumFromInt(move.from)), Prints.fromSquare(@enumFromInt(move.to)) }),
+            MoveType.Promotion => std.fmt.bufPrint(buffer, "{s}{s}{c}", .{ Prints.fromSquare(@enumFromInt(move.from)), Prints.fromSquare(@enumFromInt(move.to)), Prints.fromPromotionRoleLower(move.promotion) }),
         };
     }
 

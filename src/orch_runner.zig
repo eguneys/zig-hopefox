@@ -376,6 +376,7 @@ const TagAppender = struct {
     tag_file: FileWriter,
     tag: op_lx.FilterTag,
     append_newline: bool = false,
+    builder: san.PrintBuilder,
 
     const TagFileBufferSize: usize = 2048000;
 
@@ -383,12 +384,14 @@ const TagAppender = struct {
 
     fn deinit(self: *Self, allocator: Allocator) void {
         self.tag_file.deinit(allocator);
+        self.builder.deinit(allocator);
     }
 
     fn init(io: std.Io, db_dir: std.Io.Dir, allocator: Allocator, src: []const u8, tag: op_lx.FilterTag) !Self {
         const tag_file = try FileWriter.init(io, db_dir, allocator, src, Self.TagFileBufferSize);
 
-        return .{ .tag_file = tag_file, .tag = tag };
+        const builder = try san.PrintBuilder.init(allocator);
+        return .{ .builder = builder, .tag_file = tag_file, .tag = tag };
     }
 
     fn end(self: *Self) !void {
@@ -406,23 +409,21 @@ const TagAppender = struct {
         const meta = visual.meta;
         const position = visual.position;
 
-        var builder = try san.PrintBuilder.init(allocator);
-        defer builder.deinit(allocator);
-        builder.resetPosition(position);
+        self.builder.resetPosition(position);
 
         for (meta.moves()[0..meta.size]) |move| {
-            try builder.appendMove(allocator, move);
+            try self.builder.appendMove(allocator, move);
         }
 
-        const uciMoves = builder.uci_string.items;
+        const uciMoves = self.builder.uci_string.items;
 
         var before_position = position;
         before_position.unmake_move_and_flip_turn(@bitCast(meta.move), if (meta.captured > 15) null else @enumFromInt(meta.captured));
         const fen_str = try chess.Prints.fen(allocator, before_position);
         defer allocator.free(fen_str);
 
-        const uciMove = try san.Prints.fromMoveToUci(allocator, @bitCast(meta.move));
-        defer allocator.free(uciMove);
+        var buffer: [20]u8 = undefined;
+        const uciMove = try san.Prints.fromMoveToUci(&buffer, @bitCast(meta.move));
 
         const meta_id: [5]u8 = @bitCast(meta.id);
 

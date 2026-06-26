@@ -124,8 +124,9 @@ pub const DotUsage = struct {
                 try self.buffer.append(allocator, '\n');
             }
 
-            const str_line_no = try std.fmt.allocPrint(allocator, "{d}: ", .{self.runner.getLineNo(slice.instruction)});
-            defer allocator.free(str_line_no);
+            var buf: [64]u8 = undefined;
+
+            const str_line_no = try std.fmt.bufPrint(&buf, "{d}: ", .{self.runner.getLineNo(slice.instruction)});
             try self.buffer.appendSlice(allocator, str_line_no);
             _ = try self.printInstructionLine(allocator, slice);
         }

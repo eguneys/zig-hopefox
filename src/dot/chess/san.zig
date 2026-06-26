@@ -224,8 +224,8 @@ pub const Prints = struct {
         return .{ .single = try single.toOwnedSlice(allocator), .list = try list.toOwnedSlice(allocator) };
     }
 
-    pub fn fromMoveToUci(allocator: std.mem.Allocator, move: types.Move) ![]const u8 {
-        return try types.Prints.moveFromToUci(allocator, move);
+    pub fn fromMoveToUci(buffer: []u8, move: types.Move) ![]const u8 {
+        return try types.Prints.moveFromToUci(buffer, move);
     }
 
     pub fn fromSan(self: Prints, san: San) []const u8 {
@@ -312,8 +312,8 @@ pub const PrintBuilder = struct {
         }
         try self.string.appendSlice(allocator, self.prints.fromSan(San.fromMove(self.position, move)));
 
-        const uci_move = try Prints.fromMoveToUci(allocator, move);
-        defer allocator.free(uci_move);
+        var buffer: [20]u8 = undefined;
+        const uci_move = try Prints.fromMoveToUci(&buffer, move);
         try self.uci_string.appendSlice(allocator, uci_move);
         _ = self.position.make_move(move);
         self.position.flipTurn();
