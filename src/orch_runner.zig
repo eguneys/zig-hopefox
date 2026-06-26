@@ -338,8 +338,10 @@ const RunVisuals = struct {
 
         var solution_match_type = PuzzleSolutionMatchType.negative;
 
+        const count = dot_usage.getInstructionCount();
+
         for (playedSlices) |playedSlice| {
-            const slice_match = PuzzleSolutionMatchType.fromSolution(solution, dot_usage.move_buffer.items[playedSlice.off .. playedSlice.off + playedSlice.len], dot_usage.getInstructionCount());
+            const slice_match = PuzzleSolutionMatchType.fromSolution(solution, dot_usage.move_buffer.items[playedSlice.off .. playedSlice.off + playedSlice.len], count);
 
             if (slice_match == PuzzleSolutionMatchType.fullTrueMatch) {
                 solution_match_type = slice_match;
@@ -347,11 +349,9 @@ const RunVisuals = struct {
             }
             if (slice_match == PuzzleSolutionMatchType.trueMatch) {
                 solution_match_type = slice_match;
-                break;
             }
             if (slice_match == PuzzleSolutionMatchType.firstMoveMatch) {
                 solution_match_type = slice_match;
-                break;
             }
         }
 

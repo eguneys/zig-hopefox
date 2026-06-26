@@ -1,5 +1,5 @@
 src: ../data/lichess_db_puzzle.csv
-ctq_hanging_queen_capture_knight.gof:
+ctq_hanging_queen.gof:
   FullTrue: @preview(take=20)
   True: @preview(take=10)
   FullFalse: @preview(skip=300 take=10)

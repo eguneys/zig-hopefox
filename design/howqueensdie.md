@@ -21,7 +21,7 @@ As a side note: we have built a [showcase of these lists here](https://eguneys.g
 
 ## Basic Patterns
 
-Our overall conclusion over finding these basic patterns is, Queen can always be the first one to save when under a threat, apart from a checkmate, thus the other side of the double threat is usually to the king, where as the queen is lost, as the king escapes.
+Our overall conclusion over finding these basic patterns is, Queen can always be the first one to save when under a threat, apart from a checkmate, thus the other side of the double threat is usually to the king, where the queen is lost, as the king escapes.
 
 But before we get started, we want to mention our coverage is not exhaustive, since we don't include every piece combination for every case, but some special cases we find is sufficient for demonstration purposes is included. This is mostly not due to a limitation of the gof scripts, but for the sake of keeping a compact proof of concept.
 
@@ -62,9 +62,9 @@ Here are some examples:
 - https://lichess.org/training/01Ag5
 
 
-Among 4.6 million puzzles, there are a total of **11427** puzzles that fits this description, and solved with this exact sequence.
+Among 4.6 million puzzles, there are a total of **13427** puzzles that fits this description, and solved with this exact sequence.
 
-If we change our description slightly, such as instead of our bishop capturing something while giving check, to bishop simply moving to a vacant square while giving check, we find total of **3216** puzzles. Here's a couple examples:
+If we change our description slightly, such as instead of our bishop capturing something while giving check, to bishop simply moving to a vacant square while giving check, we find roughly about **3216** puzzles. Here's a couple examples:
 
 - https://lichess.org/training/00gSv
 - https://lichess.org/training/02ra2
@@ -85,11 +85,16 @@ king *Evades bishop2 *becomes king2
 bishop2 *Captures queen *becomes bishop3
 ```
 
-We found only **132** positions across all puzzles in the database. But while these are exact matches with this exact solution, there are still some different considerations that are not accounted for. Such as the puzzle begins with this sequence but continues, or after the Bishop check, king doesn't evade but there is a desperado block, they are simply not checked for.
+We found only **908** positions across all puzzles in the database. But while these are exact matches with this exact solution, there are still some different considerations that are not accounted for. Such as the puzzle begins with this sequence but continues, or after the Bishop check, king doesn't evade but there is a desperado block, they are simply not checked for.
+
+Bishop skewers were suprisingly low for some reason, let's take a look at rook skewers and queen skewers:
+
+- Rook skewers: **3403**
+- Queen skewers: **4872**
 
 ### Knight Forks King and Queen
 
-There are total of **11028** puzzles where knight forks king and queen and captures the queen next move. You can view all of them on the showcase website. Feel free to try it out, it's surely a different kind of experience to be bombarded with knight forks all over the place. There is something soothing about it.
+There are total of **58420** puzzles where knight forks king and queen and captures the queen next move. You can view all of them on the showcase website. Feel free to try it out, it's surely a different kind of experience to be bombarded with knight forks all over the place. There is something soothing about it.
 
 ### Pawn Forks King and Queen
 
@@ -140,6 +145,8 @@ We haven't double checked the numbers are correct one by one, but feel free to e
 ## Advanced Exceptions to Basic Patterns
 
 We already know alwasy we have to capture a hanging queen whenever we can. But let's look at an exception where we have to fork a king and queen, but capturing the queen next move is not the best move. Or merely landing a knight fork on king and queen is not the best move. As you might have guessed there are thousands of those counter examples. We will show you what we mean with several examples, because that's the intersection where the beauty of chess emerges:
+
+### Knight Can't Capture The Queen after landing a fork
 
 
 
