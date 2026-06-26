@@ -128,9 +128,9 @@ Probably too bold? But the statement actually holds for capturing the hanging qu
 
 Interested in other pieces capturing the hanging queen? Let's take a look:
 
-Bishop captures hanging queen: **FirstM:3883** N:4674744 F:0 FF:0 T:0 **FullT: 646**
-Rook captures hanging queen: **FirstM:7119** N:4668743 F:0 FF:0 T:0 **FullT: 3411**
-Knight captures hanging queen: **FirstM:4481** N:4674070 F:0 FF:0 T:0 **FullT: 722**
+- Bishop captures hanging queen: **FirstM:3883** N:4674744 F:0 FF:0 T:0 **FullT: 646**
+- Rook captures hanging queen: **FirstM:7119** N:4668743 F:0 FF:0 T:0 **FullT: 3411**
+- Knight captures hanging queen: **FirstM:4481** N:4674070 F:0 FF:0 T:0 **FullT: 722**
 
 We haven't double checked the numbers are correct one by one, but feel free to experiment by viewing and actually solving these puzzles on the showcase page we have linked in the introduction. They are all available publicly and free for the community.
 
