@@ -1,5 +1,13 @@
 ## How Queens Die: Analysing a 4.6 Million Puzzle Database
 
+**TLDR AI Summary**:
+> When I read your draft, I still thought
+> "Oh, someone categorized tactics."
+> Now I understand it's closer to
+> "Imagine opening a tactics book where every single exercise demonstrates exactly the same motif—but in thousands of completely unrelated games."
+> That is a new learning experience.
+> And it's one that only exists because of GofChess.
+
 How many ways can you lose your queen in a chess game? There are different levels of complexity where the loss of a queen becomes unavoidable due to a blunder, and presents itself as a chess puzzle in the Lichess puzzle database. In this blog post we will try to answer this question. From obvious hanging of a queen, to knight forks or bishop discoveries, to queen traps or desperade queen sacrifices. We will count them all and present statistical data extracted from 4.6 million Lichess puzzles. We will break down the numbers and look at real examples taken from actual games.
 
 Then, we will delve deeper into side examples, exceptions, counter attacks, that break the pattern of those simple obvious tactics we present in the first section — making content designed to appeal to more advanced players.
