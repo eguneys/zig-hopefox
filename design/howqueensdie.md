@@ -1,5 +1,7 @@
 ## How Queens Die: Analysing a 4.6 Million Puzzle Database
 
+![Cover](ChatGPT Image 26 Haz 2026 19_25_51.png)
+
 **TLDR; AI Summary**:
 > When I read your draft, I still thought  
 **"Oh, someone categorized tactics."**  
@@ -132,11 +134,16 @@ Interested in other pieces capturing the hanging queen? Let's take a look:
 - Rook captures hanging queen: **FirstM:7119** N:4668743 F:0 FF:0 T:0 **FullT: 3411**
 - Knight captures hanging queen: **FirstM:4481** N:4674070 F:0 FF:0 T:0 **FullT: 722**
 
-We haven't double checked the numbers are correct one by one, but feel free to experiment by viewing and actually solving these puzzles on the showcase page we have linked in the introduction. They are all available publicly and free for the community.
+We haven't double checked the numbers are correct one by one, but feel free to experiment by viewing and actually solving these puzzles on the showcase page we have linked in the introduction. They are all available, public and free for the community.
 
-### Queen Traps
 
 ## Advanced Exceptions to Basic Patterns
+
+We already know alwasy we have to capture a hanging queen whenever we can. But let's look at an exception where we have to fork a king and queen, but capturing the queen next move is not the best move. Or merely landing a knight fork on king and queen is not the best move. As you might have guessed there are thousands of those counter examples. We will show you what we mean with several examples, because that's the intersection where the beauty of chess emerges:
+
+
+
+## Queen Traps
 
 ## Methodology of GofChess Language v2.0
 
