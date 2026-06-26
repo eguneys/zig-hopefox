@@ -75,11 +75,11 @@ king *Evades bishop2 *becomes king2
 bishop2 *Captures queen *becomes bishop3
 ```
 
-We found only 132 positions across all puzzles in the database. But while these are exact matches with this exact solution, there are still some different considerations that are not accounted for. Such as the puzzle begins with this sequence but continues, or after the Bishop check, king doesn't evade but there is a desperado block, they are simply not checked for.
+We found only **132** positions across all puzzles in the database. But while these are exact matches with this exact solution, there are still some different considerations that are not accounted for. Such as the puzzle begins with this sequence but continues, or after the Bishop check, king doesn't evade but there is a desperado block, they are simply not checked for.
 
 ### Knight Forks King and Queen
 
-There are total of 11028 puzzles where knight forks king and queen and captures the queen next move. You can view all of them on the showcase website. Feel free to try it out, it's surely a different kind of experience to be bombarded with knight forks all over the place. There is something soothing about it.
+There are total of **11028** puzzles where knight forks king and queen and captures the queen next move. You can view all of them on the showcase website. Feel free to try it out, it's surely a different kind of experience to be bombarded with knight forks all over the place. There is something soothing about it.
 
 ### Pawn Forks King and Queen
 
