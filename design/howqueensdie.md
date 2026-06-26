@@ -1,4 +1,4 @@
-## How Queens Die: Analysing a 4.6 Million Puzzle Database
+## How Queens Die: Analysing a 6 Million Puzzle Database
 
 ![Cover](cover5.png)
 
@@ -10,7 +10,7 @@ Now I understand it's closer to
 That is a new learning experience.
 And it's one that only exists because of **GofChess**.
 
-How many ways can you lose your queen in a chess game? There are different levels of complexity where the loss of a queen becomes unavoidable due to a blunder, and presents itself as a chess puzzle in the Lichess puzzle database. In this blog post we will try to answer this question. From obvious hanging of a queen, to knight forks or bishop discoveries, to queen traps or desperade queen sacrifices. We will count them all and present statistical data extracted from 4.6 million Lichess puzzles. We will break down the numbers and look at real examples taken from actual games.
+How many ways can you lose your queen in a chess game? There are different levels of complexity where the loss of a queen becomes unavoidable due to a blunder, and presents itself as a chess puzzle in the Lichess puzzle database. In this blog post we will try to answer this question. From obvious hanging of a queen, to knight forks or bishop discoveries, to queen traps or desperade queen sacrifices. We will count them all and present statistical data extracted from 6 million Lichess puzzles. We will break down the numbers and look at real examples taken from actual games.
 
 Then, we will delve deeper into side examples, exceptions, counter attacks, that break the pattern of those simple obvious tactics we present in the first section — making content designed to appeal to more advanced players.
 
@@ -62,7 +62,7 @@ Here are some examples:
 - https://lichess.org/training/01Ag5
 
 
-Among 4.6 million puzzles, there are a total of **13427** puzzles that fits this description, and solved with this exact sequence.
+Among 6 million puzzles, there are a total of **15782** puzzles that fits this description, and solved with this exact sequence.
 
 If we change our description slightly, such as instead of our bishop capturing something while giving check, to bishop simply moving to a vacant square while giving check, we find roughly about **3216** puzzles. Here's a couple examples:
 
@@ -85,16 +85,16 @@ king *Evades bishop2 *becomes king2
 bishop2 *Captures queen *becomes bishop3
 ```
 
-We found only **908** positions across all puzzles in the database. But while these are exact matches with this exact solution, there are still some different considerations that are not accounted for. Such as the puzzle begins with this sequence but continues, or after the Bishop check, king doesn't evade but there is a desperado block, they are simply not checked for.
+We found only **1053** positions across all puzzles in the database. But while these are exact matches with this exact solution, there are still some different considerations that are not accounted for. Such as the puzzle begins with this sequence but continues, or after the Bishop check, king doesn't evade but there is a desperado block, they are simply not checked for.
 
 Bishop skewers were suprisingly low for some reason, let's take a look at rook skewers and queen skewers:
 
-- Rook skewers: **3403**
-- Queen skewers: **4872**
+- Rook skewers: **4278**
+- Queen skewers: **6780**
 
 ### Knight Forks King and Queen
 
-There are total of **58420** puzzles where knight forks king and queen and captures the queen next move. You can view all of them on the showcase website. Feel free to try it out, it's surely a different kind of experience to be bombarded with knight forks all over the place. There is something soothing about it.
+There are total of **69695** puzzles where knight forks king and queen and captures the queen next move. You can view all of them on the showcase website. Feel free to try it out, it's surely a different kind of experience to be bombarded with knight forks all over the place. There is something soothing about it.
 
 ### Pawn Forks King and Queen
 
@@ -111,19 +111,20 @@ This one again a rare gem of a tactic, it feels so good to pull this off, it fee
 This one has a suprising result. Let me show you the output of the script:
 
 ```
-0.01 ms per puzzle, took 42399ms
-FirstM:5507 N:4668729 F:0 FF:0 T:0 **FullT: 5037**
-Coverage:0.23% Accuracy:52.23%
-Total:4679273                                                        
-2228 https://lichess.org/training/01qgQ
-[Qxd7 Rxe1 Kxg3] firstMoveMatch
+0.01 ms per puzzle, took 46560ms
+FirstM:6767 N:6002012 F:0 FF:0 T:0 FullT: 5603
+Coverage:0.21% Accuracy:54.70%
+Total:6014382                                                        
+1579 https://lichess.org/training/0119E
+[Qxf8#] fullTrueMatch
 1: {}
-2: {Qxd7}
+2: {Qxf8#}
 ```
 
-There are **5037** puzzles where the solution is a simple capturing of the hanging queen. **FullT: 5037** means 5037 puzzles matched our script that the matching moves are also exactly equal to the puzzle solution. 
 
-More interestingly **FirstM: 5507** means 5507 puzzles matched correctly for the first moves to the solution, but the puzzle continues, _or the rest of the match is a false match_. 
+There are **5603** puzzles where the solution is a simple capturing of the hanging queen. **FullT: 5603** means 5603 puzzles matched our script that the matching moves are also exactly equal to the puzzle solution. 
+
+More interestingly **FirstM: 6767** means 6767 puzzles matched correctly for the first moves to the solution, but the puzzle continues, _or the rest of the match is a false match_. 
 
 But look at the rest of the statistics: **F: 0 FF: 0**, meaning there is no false positives, that is our script didn't match any moves that is not the solution.
 
@@ -135,12 +136,19 @@ Probably too bold? But the statement actually holds for capturing the hanging qu
 
 Interested in other pieces capturing the hanging queen? Let's take a look:
 
-- Bishop captures hanging queen: **FirstM:3883** N:4674744 F:0 FF:0 T:0 **FullT: 646**
-- Rook captures hanging queen: **FirstM:7119** N:4668743 F:0 FF:0 T:0 **FullT: 3411**
-- Knight captures hanging queen: **FirstM:4481** N:4674070 F:0 FF:0 T:0 **FullT: 722**
+- Bishop captures hanging queen: **FirstM:4479** N:6009499 F:0 FF:0 T:0 **FullT: 404**
+- Rook captures hanging queen: **FirstM:8586** N:6001108 F:0 FF:0 T:0 **FullT: 4688**
+- Knight captures hanging queen: **FirstM:5035 N:6008963 F:0 FF:0 T:0 FullT: 384**
+
 
 We haven't double checked the numbers are correct one by one, but feel free to experiment by viewing and actually solving these puzzles on the showcase page we have linked in the introduction. They are all available, public and free for the community.
 
+
+Initially we ran these scripts against 4.6 million old database, and when we switched to 6 million database all the numbers have increased, except for these two:
+- Bishop captures hanging queen in 4.6 million old database: **FirstM:3883** N:4674744 F:0 FF:0 T:0 **FullT: 646**
+
+- Knight captures hanging queen in 4.6 million old database: **FirstM:4481** N:4674070 F:0 FF:0 T:0 **FullT: 722**
+If you have an opinion what might have caused this, feel free to share.
 
 ## Advanced Exceptions to Basic Patterns
 
@@ -148,6 +156,7 @@ We already know alwasy we have to capture a hanging queen whenever we can. But l
 
 ### Knight Can't Capture The Queen after landing a fork
 
+### Knight Captures The Queen after landing a fork but puzzle doesn't end
 
 
 ## Queen Traps
