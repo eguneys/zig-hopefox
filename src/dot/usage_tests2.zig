@@ -282,3 +282,51 @@ test "Capture the Queen: Knight fork" {
         \\........
     );
 }
+
+test "rook skewer" {
+    try expectVisuals(
+        \\1: {Rh8+}
+        \\2: {Rh8+}
+        \\3: {Rh8+ Kd7}
+        \\4: {Rh8+ Kd7 Rxa8}
+    ,
+        \\rook_t *Checks king_o *becomes rook2
+        \\       .eyesThrough queen_t .through king
+        \\king *Evades rook2 *becomes king2
+        \\rook2 *Captures queen *becomes rook3
+    ,
+        \\q...k...
+        \\....pp..
+        \\........
+        \\........
+        \\.......R
+        \\........
+        \\........
+        \\........
+    );
+}
+
+test "queen skewer" {
+    try expectVisuals(
+        \\1: {Rh8+}
+        \\2: {Rh8+}
+        \\3: {Rh8+ Kd7}
+        \\4: {Rh8+ Kd7 Rxa8}
+    ,
+        \\queen_t *Checks king_o *becomes queen2
+        \\                                  .hanging
+        \\        .eyesThrough queen4_t .through king_t
+        \\king *Evades queen2 *becomes king2
+        \\                               .doesNotDefend queen4
+        \\queen2 *Captures queen4 *becomes queen3
+    ,
+        \\q...k...
+        \\....pp..
+        \\........
+        \\........
+        \\.......Q
+        \\........
+        \\........
+        \\........
+    );
+}

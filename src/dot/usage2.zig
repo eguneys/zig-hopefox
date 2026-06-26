@@ -148,6 +148,45 @@ pub const DotUsage = struct {
         }
         return self.move_buffer.items;
     }
+
+    const Slice = struct { off: usize, len: usize };
+    pub fn getLastLines(self: *DotUsage, allocator: Allocator) ![]Slice {
+        var result: ArrayList(Slice) = .empty;
+        errdefer result.deinit(allocator);
+
+        self.move_buffer.clearRetainingCapacity();
+        for (0..self.runner.slices.items.len) |i| {
+            const slice = self.runner.slices.items[self.runner.slices.items.len - 1 - i];
+            if (slice.len > 0) {
+                for (slice.off..slice.off + slice.len) |k| {
+                    const result_off = self.move_buffer.items.len;
+                    const history = self.runner.history.tree.getHistoryReversed(k);
+                    for (0..history.len) |j| {
+                        const move = self.runner.history.tree.getNode(history[history.len - 1 - j]).value;
+                        if (move.isNone()) continue;
+                        try self.move_buffer.append(allocator, move);
+                    }
+                    const len = self.move_buffer.items.len - result_off;
+                    try result.append(allocator, .{ .off = result_off, .len = len });
+                }
+                break;
+            }
+        }
+        return result.toOwnedSlice(allocator);
+    }
+
+    pub fn getInstructionCount(self: *DotUsage) usize {
+        var result: usize = 0;
+        for (self.runner.history.program.instructions) |instruction| {
+            switch (instruction) {
+                par.InstructionTag.becomes => {
+                    result += 1;
+                },
+                else => {},
+            }
+        }
+        return result;
+    }
 };
 
 test "basic usage" {

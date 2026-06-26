@@ -1,0 +1,6 @@
+queen_t *Checks king_o *becomes queen2
+                                  .hanging
+        .eyesThrough queen4_t .through king_t
+king *Evades queen2 *becomes king2
+                               .doesNotDefend queen4
+queen2 *Captures queen4 *becomes queen3

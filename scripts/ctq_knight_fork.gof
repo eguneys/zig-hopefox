@@ -1,4 +1,4 @@
 knight_t *Movesto sq *becomes knight2
          .Forks king_t .and queen
-king *Evades knight *becomes king2
+king *Evades knight2 *becomes king2
 knight2 *Captures queen *becomes knight3

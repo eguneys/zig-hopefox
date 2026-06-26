@@ -6,6 +6,9 @@ Then, we will delve deeper into side examples, exceptions, counter attacks, that
 
 Finally, we will give you a sneak peek to the method behind this research, namely **GofChess Language 2.0**, the modernized and significantly improved successor of the earlier version [we introduced this past May](https://lichess.org/@/heroku/blog/gofchess-a-technical-dive-into-formalization-of-chess-tactics/KULHdYDn).
 
+
+As a side note: we have built a [showcase of these lists here](https://eguneys.github.io/gofchess-puzzler-27/) where you can solve the puzzles. This is an experience of a new kind, where you are constantly seeing the same pattern but on completely different chess positions.
+
 ## Basic Patterns
 
 Our overall conclusion over finding these basic patterns is, Queen can always be the first one to save when under a threat, apart from a checkmate, thus the other side of the double threat is usually to the king, where as the queen is lost, as the king escapes.
@@ -49,7 +52,7 @@ Here are some examples:
 - https://lichess.org/training/01Ag5
 
 
-Among 4.6 million puzzles, there are a total of **13683** puzzles that fits this description, and solved with this exact sequence.
+Among 4.6 million puzzles, there are a total of **11427** puzzles that fits this description, and solved with this exact sequence.
 
 If we change our description slightly, such as instead of our bishop capturing something while giving check, to bishop simply moving to a vacant square while giving check, we find total of **3216** puzzles. Here's a couple examples:
 
@@ -59,14 +62,34 @@ If we change our description slightly, such as instead of our bishop capturing s
 - https://lichess.org/training/03wTh
 
 
-
 ### Bishop Skewers King and Queen
+
+This is a basic skewer tactic where bishop checks the king, but also the queen behind it, so when the king moves, bishop can capture the queen.
+
+The Gof script:
+
+```gof
+bishop_t *Checks king_o *becomes bishop2
+         .eyesThrough queen_t .through king_t
+king *Evades bishop2 *becomes king2
+bishop2 *Captures queen *becomes bishop3
+```
+
+We found only 132 positions across all puzzles in the database. But while these are exact matches with this exact solution, there are still some different considerations that are not accounted for. Such as the puzzle begins with this sequence but continues, or after the Bishop check, king doesn't evade but there is a desperado block, they are simply not checked for.
 
 ### Knight Forks King and Queen
 
+There are total of 11028 puzzles where knight forks king and queen and captures the queen next move. You can view all of them on the showcase website. Feel free to try it out, it's surely a different kind of experience to be bombarded with knight forks all over the place. There is something soothing about it.
+
 ### Pawn Forks King and Queen
 
+Due to dual nature of pawn movement, where it can push forward but only captures diagonally and when there is a piece around, we simply haven't integrated the pawns into the GofChess Language 2.0 yet. Hopefully in the future we can express those just as well as everything else.
+
+This one is about pawn pushes forward and attacks both king and queen at the same time. We reckon it's quite common, and hope to cover it in the future. We will continue to add more content on the showcase page, so consider adding a bookmark.
+
 ### Pawn Checks King with a Discovered Attack on Hanging Queen
+
+This one again a rare gem of a tactic, it feels so good to pull this off, it feels similar to a queen skewer we covered before, but when the pawn moves with check, it discovers an attack on the queen by another piece of ours, and when the king evades the check, our piece captures the queen.
 
 ### Immediately Hanging the Queen
 

@@ -1,0 +1,4 @@
+rook_t *Checks king_o *becomes rook2
+       .eyesThrough queen_t .through king_t
+king *Evades rook2 *becomes king2
+rook2 *Captures queen *becomes rook3

@@ -1,0 +1,4 @@
+bishop_t *Checks king_o *becomes bishop2
+         .eyesThrough queen_t .through king_t
+king *Evades bishop2 *becomes king2
+bishop2 *Captures queen *becomes bishop3

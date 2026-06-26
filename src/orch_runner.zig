@@ -270,7 +270,8 @@ const RunVisuals = struct {
         fullFalseMatch,
         fullTrueMatch,
 
-        pub fn fromSolution(solution: []const chess.Move, lines: []const chess.Move) PuzzleSolutionMatchType {
+        pub fn fromSolution(solution: []const chess.Move, lines: []const chess.Move, full_len: usize) PuzzleSolutionMatchType {
+            var has_false = false;
             var result = PuzzleSolutionMatchType.negative;
             for (0..solution.len) |j| {
                 if (j >= lines.len) {
@@ -280,19 +281,23 @@ const RunVisuals = struct {
                     if (result == PuzzleSolutionMatchType.negative) {
                         result = PuzzleSolutionMatchType.firstMoveMatch;
                     }
-                    if (result == PuzzleSolutionMatchType.negative or result == PuzzleSolutionMatchType.firstMoveMatch) {
-                        if (j == solution.len - 1) {
-                            if (solution.len == lines.len) {
-                                result = PuzzleSolutionMatchType.fullTrueMatch;
+                    if (!has_false) {
+                        if (result == PuzzleSolutionMatchType.negative or result == PuzzleSolutionMatchType.firstMoveMatch or result == PuzzleSolutionMatchType.trueMatch) {
+                            if (j == solution.len - 1) {
+                                if (j == full_len - 1) {
+                                    result = PuzzleSolutionMatchType.fullTrueMatch;
+                                } else {
+                                    result = PuzzleSolutionMatchType.trueMatch;
+                                }
                             }
-                            result = PuzzleSolutionMatchType.trueMatch;
                         }
                     }
                 } else {
+                    has_false = true;
                     if (result == PuzzleSolutionMatchType.negative) {
                         result = PuzzleSolutionMatchType.falseMatch;
                     }
-                    if (j >= solution.len - 1) {
+                    if (j == full_len) {
                         result = PuzzleSolutionMatchType.fullFalseMatch;
                     }
                 }
@@ -327,10 +332,28 @@ const RunVisuals = struct {
     fn init(allocator: Allocator, dot_usage: *DotUsage, position: chess.Position, meta: PuzzleMeta) !RunVisuals {
         try dot_usage.runner.runOnPosition(allocator, position);
 
-        const played = try dot_usage.getLastLine(allocator);
+        const playedSlices = try dot_usage.getLastLines(allocator);
+        defer allocator.free(playedSlices);
         const solution = meta.moves()[0..meta.size];
 
-        const solution_match_type = PuzzleSolutionMatchType.fromSolution(solution, played);
+        var solution_match_type = PuzzleSolutionMatchType.negative;
+
+        for (playedSlices) |playedSlice| {
+            const slice_match = PuzzleSolutionMatchType.fromSolution(solution, dot_usage.move_buffer.items[playedSlice.off .. playedSlice.off + playedSlice.len], dot_usage.getInstructionCount());
+
+            if (slice_match == PuzzleSolutionMatchType.fullTrueMatch) {
+                solution_match_type = slice_match;
+                break;
+            }
+            if (slice_match == PuzzleSolutionMatchType.trueMatch) {
+                solution_match_type = slice_match;
+                break;
+            }
+            if (slice_match == PuzzleSolutionMatchType.firstMoveMatch) {
+                solution_match_type = slice_match;
+                break;
+            }
+        }
 
         return .{ .position = position, .meta = meta, .solution_match_type = solution_match_type };
     }
@@ -509,7 +532,7 @@ const PreviewTagAppender = struct {
             }
         }
 
-        const step: f64 = @divTrunc(self.header.total, 500);
+        const step: f64 = @divTrunc(self.header.total, 200);
         if (@mod(self.header.i, step) == 0 or self.header.i == self.header.total) {
             try self.writeHeader(io);
         }
