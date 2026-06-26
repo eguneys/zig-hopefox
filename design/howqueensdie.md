@@ -1,6 +1,6 @@
 ## How Queens Die: Analysing a 4.6 Million Puzzle Database
 
-**TLDR AI Summary**:
+**TLDR; AI Summary**:
 > When I read your draft, I still thought  
 **"Oh, someone categorized tactics."**  
 Now I understand it's closer to  
@@ -12,7 +12,7 @@ How many ways can you lose your queen in a chess game? There are different level
 
 Then, we will delve deeper into side examples, exceptions, counter attacks, that break the pattern of those simple obvious tactics we present in the first section — making content designed to appeal to more advanced players.
 
-Finally, we will give you a sneak peek to the method behind this research, namely **GofChess Language 2.0**, the modernized and significantly improved successor of the earlier version [we introduced this past May](https://lichess.org/@/heroku/blog/gofchess-a-technical-dive-into-formalization-of-chess-tactics/KULHdYDn).
+Finally, we will mention the method behind this research, namely **GofChess Language 2.0**, the modernized and significantly improved successor of the earlier version [we introduced this past May](https://lichess.org/@/heroku/blog/gofchess-a-technical-dive-into-formalization-of-chess-tactics/KULHdYDn).
 
 
 As a side note: we have built a [showcase of these lists here](https://eguneys.github.io/gofchess-puzzler-27/) where you can solve the puzzles. This is an experience of a new kind, where you are constantly seeing the same pattern but on completely different chess positions.
@@ -100,6 +100,39 @@ This one is about pawn pushes forward and attacks both king and queen at the sam
 This one again a rare gem of a tactic, it feels so good to pull this off, it feels similar to a queen skewer we covered before, but when the pawn moves with check, it discovers an attack on the queen by another piece of ours, and when the king evades the check, our piece captures the queen.
 
 ### Immediately Hanging the Queen
+
+This one has a suprising result. Let me show you the output of the script:
+
+```
+0.01 ms per puzzle, took 42399ms
+FirstM:5507 N:4668729 F:0 FF:0 T:0 **FullT: 5037**
+Coverage:0.23% Accuracy:52.23%
+Total:4679273                                                        
+2228 https://lichess.org/training/01qgQ
+[Qxd7 Rxe1 Kxg3] firstMoveMatch
+1: {}
+2: {Qxd7}
+```
+
+There are **5037** puzzles where the solution is a simple capturing of the hanging queen. **FullT: 5037** means 5037 puzzles matched our script that the matching moves are also exactly equal to the puzzle solution. 
+
+More interestingly **FirstM: 5507** means 5507 puzzles matched correctly for the first moves to the solution, but the puzzle continues, _or the rest of the match is a false match_. 
+
+But look at the rest of the statistics: **F: 0 FF: 0**, meaning there is no false positives, that is our script didn't match any moves that is not the solution.
+
+Thus, if you want to take away anything from this article here it is:
+
+> If you can capture a hanging queen, capture it without thinking. That is 100% correct.
+
+Probably too bold? But the statement actually holds for capturing the hanging queen with your own queen not with any other piece. And it is true within 4.6 million puzzle database.
+
+Interested in other pieces capturing the hanging queen? Let's take a look:
+
+Bishop captures hanging queen: **FirstM:3883** N:4674744 F:0 FF:0 T:0 **FullT: 646**
+Rook captures hanging queen: **FirstM:7119** N:4668743 F:0 FF:0 T:0 **FullT: 3411**
+Knight captures hanging queen: **FirstM:4481** N:4674070 F:0 FF:0 T:0 **FullT: 722**
+
+We haven't double checked the numbers are correct one by one, but feel free to experiment by viewing and actually solving these puzzles on the showcase page we have linked in the introduction. They are all available publicly and free for the community.
 
 ### Queen Traps
 
