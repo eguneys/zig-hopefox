@@ -269,6 +269,7 @@ const RunVisuals = struct {
         falseMatch,
         fullFalseMatch,
         fullTrueMatch,
+        fullFirstMoveMatch,
 
         pub fn fromSolution(solution: []const chess.Move, lines: []const chess.Move, full_len: usize) PuzzleSolutionMatchType {
             var has_false = false;
@@ -289,6 +290,11 @@ const RunVisuals = struct {
                                 } else {
                                     result = PuzzleSolutionMatchType.trueMatch;
                                 }
+                            }
+                        }
+                        if (result == PuzzleSolutionMatchType.firstMoveMatch) {
+                            if (j == full_len - 1) {
+                                result = PuzzleSolutionMatchType.fullFirstMoveMatch;
                             }
                         }
                     }
@@ -325,6 +331,9 @@ const RunVisuals = struct {
                 PuzzleSolutionMatchType.fullTrueMatch => {
                     return tag == op_lx.FilterTag.FullTrue;
                 },
+                PuzzleSolutionMatchType.fullFirstMoveMatch => {
+                    return tag == op_lx.FilterTag.FullFirstMove;
+                },
             }
         }
     };
@@ -342,6 +351,10 @@ const RunVisuals = struct {
 
         for (playedSlices) |playedSlice| {
             const slice_match = PuzzleSolutionMatchType.fromSolution(solution, dot_usage.move_buffer.items[playedSlice.off .. playedSlice.off + playedSlice.len], count);
+            if (slice_match == PuzzleSolutionMatchType.fullFirstMoveMatch) {
+                solution_match_type = slice_match;
+                break;
+            }
 
             if (slice_match == PuzzleSolutionMatchType.fullTrueMatch) {
                 solution_match_type = slice_match;
@@ -596,7 +609,19 @@ const PreviewTagAppender = struct {
 
         const Coverage = (1 - header.nbNegativeMatch / header.total) * 100;
         const Accuracy = (header.nbFullMatch + header.nbFirstMatch) / (header.total - header.nbNegativeMatch) * 100;
-        left += (try std.fmt.bufPrint(self.buffer[left..], "FirstM:{d} N:{d} F:{d} FF:{d} T:{d} FullT: {d}\n", .{ header.nbFirstMatch, header.nbNegativeMatch, header.nbFalseMatch, header.nbFullFalseMatch, header.nbFullMatch, header.nbFullTrueMatch })).len;
+        left += (try std.fmt.bufPrint(self.buffer[left..],
+            \\FirstM:{d} N:{d} F:{d} T:{d}
+            \\FFM:{d}  FF:{d}  FullT: {d}
+            \\
+        , .{
+            header.nbFirstMatch,
+            header.nbNegativeMatch,
+            header.nbFalseMatch,
+            header.nbFullMatch,
+            header.nbFullFirstMoveMatch,
+            header.nbFullFalseMatch,
+            header.nbFullTrueMatch,
+        })).len;
         left += (try std.fmt.bufPrint(self.buffer[left..], "Coverage:{d:.2}% Accuracy:{d:.2}%\n", .{ Coverage, Accuracy })).len;
         left += (try std.fmt.bufPrint(self.buffer[left..], "Total:{d}", .{header.total})).len;
         _ = try writer.write(self.buffer);
@@ -621,6 +646,7 @@ const PreviewTagHeader = struct {
     nbFirstMatch: f64 = 0,
     nbFullFalseMatch: f64 = 0,
     nbFullTrueMatch: f64 = 0,
+    nbFullFirstMoveMatch: f64 = 0,
 
     tag: ?op_lx.FilterTag,
 
@@ -664,6 +690,9 @@ const PreviewTagHeader = struct {
             },
             RunVisuals.PuzzleSolutionMatchType.fullTrueMatch => {
                 self.nbFullTrueMatch += 1;
+            },
+            RunVisuals.PuzzleSolutionMatchType.fullFirstMoveMatch => {
+                self.nbFullFirstMoveMatch += 1;
             },
         }
     }

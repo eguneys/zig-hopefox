@@ -28,6 +28,7 @@ pub const FilterTag = enum {
     True,
     Negative,
     False,
+    FullFirstMove,
     FullTrue,
     FullFalse,
     Full,
