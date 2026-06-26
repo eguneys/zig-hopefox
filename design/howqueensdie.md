@@ -132,7 +132,7 @@ Thus, if you want to take away anything from this article here it is:
 
 > If you can capture a hanging queen, capture it without thinking. That is 100% correct.
 
-Probably too bold? But the statement actually holds for capturing the hanging queen with your own queen not with any other piece. And it is true within 4.6 million puzzle database.
+Probably too bold? But the statement actually holds for capturing the hanging queen with your own queen not with any other piece. And it is true within 6 million puzzle database.
 
 Interested in other pieces capturing the hanging queen? Let's take a look:
 
@@ -148,6 +148,7 @@ Initially we ran these scripts against 4.6 million old database, and when we swi
 - Bishop captures hanging queen in 4.6 million old database: **FirstM:3883** N:4674744 F:0 FF:0 T:0 **FullT: 646**
 
 - Knight captures hanging queen in 4.6 million old database: **FirstM:4481** N:4674070 F:0 FF:0 T:0 **FullT: 722**
+
 If you have an opinion what might have caused this, feel free to share.
 
 ## Advanced Exceptions to Basic Patterns
