@@ -108,9 +108,10 @@ pub const CheckFind = struct {
 
         if (position.bb_white_king().single()) |white_king| {
             var white_candies =
-                types.Attacks.ray_plus(white_king, occ, types.DirectionPlus.All);
+                types.Attacks.ray_plus(white_king, occ, types.DirectionPlus.AllKnight);
 
             while (white_candies.next()) |candidate| {
+                if (position.pieceOn(candidate) == null) continue;
                 const check = types.Attacks.piece_ray(candidate, occ, position.getPiece(candidate));
                 if (check.has(white_king)) {
                     result.white_checkers = result.white_checkers.set(candidate);
@@ -120,9 +121,10 @@ pub const CheckFind = struct {
 
         if (position.bb_black_king().single()) |black_king| {
             var black_candies =
-                types.Attacks.ray_plus(black_king, occ, types.DirectionPlus.All);
+                types.Attacks.ray_plus(black_king, occ, types.DirectionPlus.AllKnight);
 
             while (black_candies.next()) |candidate| {
+                if (position.pieceOn(candidate) == null) continue;
                 const check = types.Attacks.piece_ray(candidate, occ, position.getPiece(candidate));
                 if (check.has(black_king)) {
                     result.black_checkers = result.black_checkers.set(candidate);
@@ -588,4 +590,17 @@ test "promotion e8=Q" {
     const uciMove = try Prints.fromMoveToUci(ally, Uci.move("e7e8q").toMove(position));
     defer ally.free(uciMove);
     try std.testing.expectEqualStrings("e7e8q", uciMove);
+}
+
+test "knight check+" {
+    try testSan("Nc7+", "e6c7",
+        \\k.......
+        \\........
+        \\....N...
+        \\........
+        \\........
+        \\........
+        \\........
+        \\........
+    );
 }

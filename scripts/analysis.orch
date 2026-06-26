@@ -1,11 +1,6 @@
 src: ../data/lichess_db_puzzle.csv
-script3.gof:
-  True: @preview(take=3)
-  FirstMove: @preview(take=4)
-  False: @preview(take=3)
-    script4.gof: @preview(take=5)
-      True
-      FullFalse: @preview(take=5)
-      FirstMove: @preview(take=5)
-      False: @preview(take=5)
-  FullFalse: @preview(take=5)
+ctq_knight_fork.gof:
+  FullTrue: @preview(take=20)
+  False: @preview(take=10)
+  FullFalse: @preview(skip=300 take=10)
+  FirstMove: @preview(take=10)

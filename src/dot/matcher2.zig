@@ -40,6 +40,9 @@ pub const Matcher = struct {
     }
     pub fn run_star(allocator: Allocator, history: *History, slice: Slice, star: par.Becomes) !void {
         switch (history.program.symbols[star.action.tag].identity.tag) {
+            lx.SymbolTag.Evades => {
+                try dispatch_evades(allocator, history, slice, star);
+            },
             lx.SymbolTag.Movesto => {
                 try dispatch_movesto(allocator, history, slice, star);
             },
@@ -53,6 +56,54 @@ pub const Matcher = struct {
                 try dispatch_blocks(allocator, history, slice, star);
             },
             else => {},
+        }
+    }
+
+    fn dispatch_evades(allocator: Allocator, history: *History, slice: Slice, star: par.Becomes) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const to_symbol = history.program.symbols[star.to];
+        const evade_symbol = history.program.symbols[star.action.one];
+        const From = history.table.getColumn(from_symbol.identity);
+        const To = history.table.getColumn(to_symbol.identity);
+        const Evade = history.table.getColumn(evade_symbol.identity);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_to = To[off];
+            const bb_evade = Evade[off];
+
+            const position = history.getPosition(off);
+
+            const bb_evade2 = bb_evade
+                .bitand(Symbols.bitboard(evade_symbol, position));
+
+            var bb_from2 = bb_from.bitand(Symbols.bitboard(from_symbol, position));
+            while (bb_from2.next()) |sq_from| {
+                const aa_moves = Symbols.moves(from_symbol, sq_from, position.occupied());
+
+                var bb_evade3 = bb_evade2;
+
+                while (bb_evade3.next()) |sq_evade| {
+                    const aa_evade = Symbols.moves(evade_symbol, sq_evade, position.occupied());
+                    var bb_to2 = bb_to
+                        .bitdiff(aa_evade)
+                        .bitand(aa_moves);
+                    while (bb_to2.next()) |sq_to| {
+                        try history.table.duplicateRow(allocator, off);
+
+                        history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+                        history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
+                        history.table.setLastRow(evade_symbol.identity, chess.Bitboard.fromSquare(sq_evade));
+
+                        var move: chess.Move = undefined;
+                        move.from = @truncate(@intFromEnum(sq_from));
+                        move.to = @truncate(@intFromEnum(sq_to));
+                        move.kind = chess.MoveType.Normal;
+                        const ref = try history.tree.appendChild(allocator, off, move);
+                        try history.nodes.append(allocator, ref);
+                    }
+                }
+            }
         }
     }
 
@@ -262,8 +313,8 @@ pub const Symbols = struct {
             lx.SymbolTag.bishop => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.Diagonal),
             lx.SymbolTag.rook => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.Straight),
             lx.SymbolTag.queen => chess.Attacks.eyes_plus(from, occupied, chess.DirectionPlus.All),
-            lx.SymbolTag.king => chess.Bitboard.Zero,
-            lx.SymbolTag.knight => chess.Bitboard.Zero,
+            lx.SymbolTag.king => chess.Attacks.king_plus(from, chess.DirectionPlus.All),
+            lx.SymbolTag.knight => chess.Attacks.knight_plus(from, chess.DirectionPlus.All),
             lx.SymbolTag.pawn => chess.Bitboard.Zero,
             lx.SymbolTag.sq => chess.Bitboard.Zero,
             else => chess.Bitboard.Zero,

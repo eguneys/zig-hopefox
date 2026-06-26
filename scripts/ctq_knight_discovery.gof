@@ -1,0 +1,8 @@
+queen_t .eyesThrough queen2 .through bishop
+                     .hanging
+knight_t *Captures opponent *becomes knight2
+                                  .cannotBeCapturedBy queen2
+         .Checks king_t
+turn  *Captures knight2 *becomes opponent2
+                                    .doesNotDefend queen2
+queen *Captures queen2 *becomes queen3

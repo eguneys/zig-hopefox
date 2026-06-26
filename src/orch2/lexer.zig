@@ -23,7 +23,16 @@ pub const TokenTag = enum {
     Eof,
 };
 
-pub const FilterTag = enum { FirstMove, True, Negative, False, FullFalse, Full, Zero };
+pub const FilterTag = enum {
+    FirstMove,
+    True,
+    Negative,
+    False,
+    FullTrue,
+    FullFalse,
+    Full,
+    Zero,
+};
 
 pub const ParamTag = enum { take, skip, single };
 

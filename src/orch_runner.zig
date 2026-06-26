@@ -268,6 +268,7 @@ const RunVisuals = struct {
         negative,
         falseMatch,
         fullFalseMatch,
+        fullTrueMatch,
 
         pub fn fromSolution(solution: []const chess.Move, lines: []const chess.Move) PuzzleSolutionMatchType {
             var result = PuzzleSolutionMatchType.negative;
@@ -281,6 +282,9 @@ const RunVisuals = struct {
                     }
                     if (result == PuzzleSolutionMatchType.negative or result == PuzzleSolutionMatchType.firstMoveMatch) {
                         if (j == solution.len - 1) {
+                            if (solution.len == lines.len) {
+                                result = PuzzleSolutionMatchType.fullTrueMatch;
+                            }
                             result = PuzzleSolutionMatchType.trueMatch;
                         }
                     }
@@ -312,6 +316,9 @@ const RunVisuals = struct {
                 },
                 PuzzleSolutionMatchType.fullFalseMatch => {
                     return tag == op_lx.FilterTag.FullFalse;
+                },
+                PuzzleSolutionMatchType.fullTrueMatch => {
+                    return tag == op_lx.FilterTag.FullTrue;
                 },
             }
         }
@@ -471,10 +478,16 @@ const PreviewTagAppender = struct {
             if (self.i_visual < skip) {
                 return false;
             }
-        }
-        if (self.preview.take) |take| {
-            if (self.i_visual > take) {
-                return false;
+            if (self.preview.take) |take| {
+                if (self.i_visual - skip > take) {
+                    return false;
+                }
+            }
+        } else {
+            if (self.preview.take) |take| {
+                if (self.i_visual > take) {
+                    return false;
+                }
             }
         }
         return true;
@@ -496,7 +509,7 @@ const PreviewTagAppender = struct {
             }
         }
 
-        const step: f64 = @mod(self.header.total, 100);
+        const step: f64 = @divTrunc(self.header.total, 500);
         if (@mod(self.header.i, step) == 0 or self.header.i == self.header.total) {
             try self.writeHeader(io);
         }
@@ -560,7 +573,7 @@ const PreviewTagAppender = struct {
 
         const Coverage = (1 - header.nbNegativeMatch / header.total) * 100;
         const Accuracy = (header.nbFullMatch + header.nbFirstMatch) / (header.total - header.nbNegativeMatch) * 100;
-        left += (try std.fmt.bufPrint(self.buffer[left..], "FirstM:{d} N:{d} F:{d} FF:{d} T:{d}\n", .{ header.nbFirstMatch, header.nbNegativeMatch, header.nbFalseMatch, header.nbFullFalseMatch, header.nbFullMatch })).len;
+        left += (try std.fmt.bufPrint(self.buffer[left..], "FirstM:{d} N:{d} F:{d} FF:{d} T:{d} FullT: {d}\n", .{ header.nbFirstMatch, header.nbNegativeMatch, header.nbFalseMatch, header.nbFullFalseMatch, header.nbFullMatch, header.nbFullTrueMatch })).len;
         left += (try std.fmt.bufPrint(self.buffer[left..], "Coverage:{d:.2}% Accuracy:{d:.2}%\n", .{ Coverage, Accuracy })).len;
         left += (try std.fmt.bufPrint(self.buffer[left..], "Total:{d}", .{header.total})).len;
         _ = try writer.write(self.buffer);
@@ -584,6 +597,7 @@ const PreviewTagHeader = struct {
     nbFalseMatch: f64 = 0,
     nbFirstMatch: f64 = 0,
     nbFullFalseMatch: f64 = 0,
+    nbFullTrueMatch: f64 = 0,
 
     tag: ?op_lx.FilterTag,
 
@@ -624,6 +638,9 @@ const PreviewTagHeader = struct {
             },
             RunVisuals.PuzzleSolutionMatchType.fullFalseMatch => {
                 self.nbFullFalseMatch += 1;
+            },
+            RunVisuals.PuzzleSolutionMatchType.fullTrueMatch => {
+                self.nbFullTrueMatch += 1;
             },
         }
     }

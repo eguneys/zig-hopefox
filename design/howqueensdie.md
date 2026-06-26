@@ -40,8 +40,14 @@ Our bishop is captured by the opponent. But meanwhile capturing piece doesn't de
 At this point our queen can capture the opponent's hanging queen. Queen is lost.
 ```
 
-An example position:
-https://lichess.org/training/00DTg
+Here are some examples:
+
+- https://lichess.org/training/00DTg
+- https://lichess.org/training/00E29
+- https://lichess.org/training/00xGN
+- https://lichess.org/training/017Ut
+- https://lichess.org/training/01Ag5
+
 
 Among 4.6 million puzzles, there are a total of **13683** puzzles that fits this description, and solved with this exact sequence.
 

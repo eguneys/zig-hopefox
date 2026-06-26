@@ -381,7 +381,7 @@ test "square" {
 
 pub const Direction = enum { Up, Down, Left, Right, Up_Left, Up_Right, Down_Left, Down_Right };
 
-pub const DirectionPlus = enum { Forward, Backward, KingSide, QueenSide, Diagonal, Horizontal, Vertical, All, Straight };
+pub const DirectionPlus = enum { Forward, Backward, KingSide, QueenSide, Diagonal, Horizontal, Vertical, All, Straight, Knight, AllKnight };
 
 pub const Attacks = struct {
     const ray_masks = generate_ray_masks();
@@ -577,6 +577,9 @@ pub const Attacks = struct {
                 .bitor(Attacks.ray(square, occupied, Direction.Down)),
             DirectionPlus.All => Attacks.ray_plus(square, occupied, DirectionPlus.Diagonal)
                 .bitor(Attacks.ray_plus(square, occupied, DirectionPlus.Straight)),
+            DirectionPlus.Knight => Attacks.knight_plus(square, DirectionPlus.All),
+            DirectionPlus.AllKnight => Attacks.ray_plus(square, occupied, DirectionPlus.All)
+                .bitor(Attacks.ray_plus(square, occupied, DirectionPlus.Knight)),
             else => Bitboard.Zero,
         };
     }
@@ -634,6 +637,7 @@ pub const Attacks = struct {
                 .bitor(Attacks.king_plus(square, DirectionPlus.Vertical)),
             DirectionPlus.All => Attacks.king_plus(square, DirectionPlus.Straight)
                 .bitor(Attacks.king_plus(square, DirectionPlus.Diagonal)),
+            else => Bitboard.Zero,
         };
     }
 

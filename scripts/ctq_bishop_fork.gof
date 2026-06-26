@@ -1,0 +1,4 @@
+bishop_t *Captures opponent *becomes bishop2
+         .Forks king_t .and queen
+queen *Captures bishop2 *becomes queen2
+pawn *Captures queen2 *becomes pawn2
