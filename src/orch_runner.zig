@@ -283,7 +283,11 @@ const RunVisuals = struct {
                         result = PuzzleSolutionMatchType.firstMoveMatch;
                     }
                     if (!has_false) {
-                        if (result == PuzzleSolutionMatchType.negative or result == PuzzleSolutionMatchType.firstMoveMatch or result == PuzzleSolutionMatchType.trueMatch) {
+                        if (result == PuzzleSolutionMatchType.negative or
+                            result == PuzzleSolutionMatchType.firstMoveMatch or
+                            result == PuzzleSolutionMatchType.fullFirstMoveMatch or
+                            result == PuzzleSolutionMatchType.trueMatch)
+                        {
                             if (j == solution.len - 1) {
                                 if (isFull) {
                                     result = PuzzleSolutionMatchType.fullTrueMatch;
@@ -351,15 +355,17 @@ const RunVisuals = struct {
 
         for (playedSlices) |playedSlice| {
             const slice_match = PuzzleSolutionMatchType.fromSolution(solution, dot_usage.move_buffer.items[playedSlice.off .. playedSlice.off + playedSlice.len], isFull);
-            if (slice_match == PuzzleSolutionMatchType.fullFirstMoveMatch) {
-                solution_match_type = slice_match;
-                break;
-            }
-
             if (slice_match == PuzzleSolutionMatchType.fullTrueMatch) {
                 solution_match_type = slice_match;
                 break;
             }
+            if (solution_match_type == PuzzleSolutionMatchType.negative) {
+                solution_match_type = slice_match;
+            }
+            if (slice_match == PuzzleSolutionMatchType.fullFirstMoveMatch) {
+                solution_match_type = slice_match;
+            }
+
             if (slice_match == PuzzleSolutionMatchType.trueMatch) {
                 solution_match_type = slice_match;
             }

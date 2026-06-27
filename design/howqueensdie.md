@@ -160,7 +160,14 @@ We already know alwasy we have to capture a hanging queen whenever we can. But l
 
 ### Knight Captures The Queen after landing a fork but puzzle doesn't end
 
+We searched for several patterns for the partial matches and here are the results:
 
+- Knight lands a fork, captures the queen, but also defends their queen, then opponent captures the queen
+  - knight recaptures. Total of **704** puzzles.
+    - The above pattern plus puzzle still continues. Total of **14** puzzles.
+  - knight doesn't recapture instead some other move is played. Total of **32** puzzles.
+
+The only thing left here after landing the fork is, knight captures the queen, but it doesn't defend their own queen. There are total of **4301** puzzles with that pattern, but we won't delve deeper into this.
 
 
 ### Knight Can't Capture The Queen after landing a fork
@@ -173,6 +180,8 @@ We already know alwasy we have to capture a hanging queen whenever we can. But l
 ## Conclusion
 
 To conclude this chapter, I would like to thank the Lichess Team, for presenting this amazing ecosystem, outreach to the community and tools that guided me with this entire research.
+
+Lichess recently launched the 6 million puzzle database, we started with the old database with 4.6 million puzzles, then we re-run all the scripts on the new database. Numbers have changed, but the results are automated and fully reproducible. If we made any mistakes please let us know.
 
 We are happy to hear your best wishes to continue this amazing journey, and share our experiences with all of you. What do you think, did we miss some aspects, or have ideas for our next research topic, interested in how GofChess Language works, inspired by another creative use case for it?
 

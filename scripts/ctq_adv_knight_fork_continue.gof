@@ -3,3 +3,5 @@ knight_t *Movesto sq *becomes knight2
 king *Evades knight2 *becomes king2
 knight2 *Captures queen *becomes knight3
         .Defends queen3
+turn *Captures queen3 *becomes opponent
+knight3 *Captures opponent *becomes knight4
