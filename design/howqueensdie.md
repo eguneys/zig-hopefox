@@ -185,9 +185,11 @@ This one is not impossible to investigate, but a challenge we want to tackle in 
 
 ## Methodology of GofChess Language v2.0
 
-
 Even though this version streamlines most of the work, it's not fully automated yet. Because the use-cases for the language is still shaping up, we simply keep things flexible, by not working on a fixed pipeline, things change and we don't want to do any more work than we have to.
 
+The language v2.0 has been written from scratch in Zig Programming Language. It runs very fast, and has a very smooth developer experience. We plan to publish a separate blog post discussing the ins and outs of our development journey with Zig which also inspired the design of v2.0.
+
+To discuss the methodology briefly, you have already seen the new syntax of gof scripts in previous chapters. In addition we have a separate orchestrator file, that controls which scripts are run against which databases, which is basically csv files with links to puzzles, exactly the same format as how Lichess distributes it.
 
 ## Conclusion
 
