@@ -289,7 +289,7 @@ const RunVisuals = struct {
                             result == PuzzleSolutionMatchType.trueMatch)
                         {
                             if (j == solution.len - 1) {
-                                if (isFull) {
+                                if (isFull and lines.len == solution.len) {
                                     result = PuzzleSolutionMatchType.fullTrueMatch;
                                 } else {
                                     result = PuzzleSolutionMatchType.trueMatch;

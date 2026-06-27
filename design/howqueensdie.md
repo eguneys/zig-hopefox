@@ -140,7 +140,7 @@ Interested in other pieces capturing the hanging queen? Let's take a look:
 
 - Bishop captures hanging queen: **FirstM:4479** N:6009499 F:0 FF:0 T:0 **FullT: 404**
 - Rook captures hanging queen: **FirstM:8586** N:6001108 F:0 FF:0 T:0 **FullT: 4688**
-- Knight captures hanging queen: **FirstM:5035 N:6008963 F:0 FF:0 T:0 FullT: 384**
+- Knight captures hanging queen: **FirstM:5035** N:6008963 F:0 FF:0 T:0 **FullT: 384**
 
 
 We haven't double checked the numbers are correct one by one, but feel free to experiment by viewing and actually solving these puzzles on the showcase page we have linked in the introduction. They are all available, public and free for the community.
@@ -173,6 +173,9 @@ The only thing left here after landing the fork is, knight captures the queen, b
 ### Knight Can't Capture The Queen after landing a fork
 
 
+
+
+
 ## Queen Traps
 
 ## Methodology of GofChess Language v2.0
@@ -181,7 +184,7 @@ The only thing left here after landing the fork is, knight captures the queen, b
 
 To conclude this chapter, I would like to thank the Lichess Team, for presenting this amazing ecosystem, outreach to the community and tools that guided me with this entire research.
 
-Lichess recently launched the 6 million puzzle database, we started with the old database with 4.6 million puzzles, then we re-run all the scripts on the new database. Numbers have changed, but the results are automated and fully reproducible. If we made any mistakes please let us know.
+Lichess recently launched the 6 million puzzle database, we started with the old database with 4.6 million puzzles, then we re-run all the scripts on the new database. Numbers have changed, we fixed bugs on filters that categorize the puzzles, re-crunched the numbers. But the results are automated and fully reproducible. If we made any mistakes please let us know.
 
 We are happy to hear your best wishes to continue this amazing journey, and share our experiences with all of you. What do you think, did we miss some aspects, or have ideas for our next research topic, interested in how GofChess Language works, inspired by another creative use case for it?
 
