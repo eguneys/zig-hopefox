@@ -1,8 +1,13 @@
-src: .backup/ctq_advanced_knight_cant_capture_after_fork_FullFirstMove_dbsrc.csv
-
+src: ../data/lichess_db_puzzle.csv
+ctq_knight_fork.gof:
+  FullTrue: @preview(take=10)
+  FullFalse: @preview(take=10)
+  FullFirstMove: @preview(take=10)
+    ctq_adv_knight_fork_continue.gof:
+      FullTrue: @preview(take=10)
+      FullFalse: @preview(take=10)
+      FullFirstMove: @preview(take=10)
 ctq_advanced_knight_cant_capture_after_fork.gof:
   FullTrue: @preview(take=10)
   FullFalse: @preview(take=10)
   FullFirstMove: @preview(take=10)
-  FirstMove: @preview
-  Negative: @preview

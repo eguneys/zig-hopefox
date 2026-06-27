@@ -175,7 +175,7 @@ The only thing left here after landing the fork is, knight captures the queen, b
 This pattern although interesting probably most of them leads to mate. For example, we searched for these patterns after knight landing a fork:
 
 - Instead of knight capturing the queen, rook checks the king, possibly delivering a mate: Total of **215** puzzles.
-  - The above pattern, but the puzzle continues, there are total of **175** puzzles.
+  - The above pattern, but the puzzle continues, there are total of **176** puzzles.
 
 At this point, we stopped our investigation.
 
@@ -184,6 +184,10 @@ At this point, we stopped our investigation.
 This one is not impossible to investigate, but a challenge we want to tackle in the future. Maybe for a next blog post about **General Piece Traps**.
 
 ## Methodology of GofChess Language v2.0
+
+
+Even though this version streamlines most of the work, it's not fully automated yet. Because the use-cases for the language is still shaping up, we simply keep things flexible, by not working on a fixed pipeline, things change and we don't want to do any more work than we have to.
+
 
 ## Conclusion
 
