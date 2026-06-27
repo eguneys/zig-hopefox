@@ -5,9 +5,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout = std.Io.File.stdout().writer(init.io, &.{});
     try stdout.interface.print("GofChess Meta v0.0.0\n", .{});
 
-    var gpa: std.heap.DebugAllocator(.{}) = .init;
-
-    const allocator = gpa.allocator();
+    //var gpa: std.heap.DebugAllocator(.{}) = .init;
+    const allocator = std.heap.page_allocator;
 
     const scripts_path = "scripts";
 

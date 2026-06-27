@@ -176,17 +176,8 @@ pub const DotUsage = struct {
         return result.toOwnedSlice(allocator);
     }
 
-    pub fn getInstructionCount(self: *DotUsage) usize {
-        var result: usize = 0;
-        for (self.runner.history.program.instructions) |instruction| {
-            switch (instruction) {
-                par.InstructionTag.becomes => {
-                    result += 1;
-                },
-                else => {},
-            }
-        }
-        return result;
+    pub fn isFull(self: *DotUsage) bool {
+        return self.runner.slices.items[self.runner.slices.items.len - 1].len > 0;
     }
 };
 

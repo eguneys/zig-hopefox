@@ -14,6 +14,9 @@ pub const Matcher = struct {
     pub const Slice = struct { off: usize, len: usize };
     pub fn run_dot(allocator: Allocator, history: *History, slice: Slice, dot: par.SideEffects) !void {
         switch (history.program.symbols[dot.action.tag].identity.tag) {
+            lx.SymbolTag.Defends => {
+                try Filters.dispatch_defends(allocator, history, slice, dot);
+            },
             lx.SymbolTag.Forks => {
                 try Filters.dispatch_forks(allocator, history, slice, dot);
             },
@@ -374,6 +377,42 @@ pub const Symbols = struct {
 };
 
 pub const Filters = struct {
+    fn dispatch_defends(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const From = history.table.getColumn(from_symbol.identity);
+        const to_symbol = history.program.symbols[star.action.one];
+        const To = history.table.getColumn(to_symbol.identity);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_to = To[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from
+                .bitand(Symbols.bitboard(from_symbol, position));
+
+            const bb_defended = bb_to
+                .bitand(Symbols.bitboard(to_symbol, position));
+
+            while (bb_from2.next()) |sq_from| {
+                const aa_defended = Symbols.captures(from_symbol, sq_from, position);
+                var bb_defended2 = bb_defended.bitand(aa_defended);
+
+                while (bb_defended2.next()) |sq_to| {
+                    try history.table.duplicateRow(allocator, off);
+
+                    history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+                    history.table.setLastRow(to_symbol.identity, chess.Bitboard.fromSquare(sq_to));
+
+                    const move = chess.Move.none;
+                    const ref = try history.tree.appendChild(allocator, off, move);
+                    try history.nodes.append(allocator, ref);
+                }
+            }
+        }
+    }
+
     fn dispatch_doesNotDefend(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
         const from_symbol = history.program.symbols[star.from];
         const From = history.table.getColumn(from_symbol.identity);

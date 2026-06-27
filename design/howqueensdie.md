@@ -157,14 +157,13 @@ If you have an opinion what might have caused this, feel free to share.
 
 We already know alwasy we have to capture a hanging queen whenever we can. But let's look at an exception where we have to fork a king and queen, but capturing the queen next move is not the best move. Or merely landing a knight fork on king and queen is not the best move. As you might have guessed there are thousands of those counter examples. We will show you what we mean with several examples, because that's the intersection where the beauty of chess emerges:
 
-### Knight Can't Capture The Queen after landing a fork
-
-Knight successfully lands a fork on king and queen, but after the kind evades check, instead of knight normally capturing the queen, let's say a rook checks the king first. Possibly delivering a mate or just for exchanging their hanging rook. In either case, at this point there are **323** puzzles with this exact sequence, and the puzzle ends here.
-
-But let's get deeper, becase there are **
-
 
 ### Knight Captures The Queen after landing a fork but puzzle doesn't end
+
+
+
+
+### Knight Can't Capture The Queen after landing a fork
 
 
 ## Queen Traps

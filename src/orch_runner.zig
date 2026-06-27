@@ -271,7 +271,7 @@ const RunVisuals = struct {
         fullTrueMatch,
         fullFirstMoveMatch,
 
-        pub fn fromSolution(solution: []const chess.Move, lines: []const chess.Move, full_len: usize) PuzzleSolutionMatchType {
+        pub fn fromSolution(solution: []const chess.Move, lines: []const chess.Move, isFull: bool) PuzzleSolutionMatchType {
             var has_false = false;
             var result = PuzzleSolutionMatchType.negative;
             for (0..solution.len) |j| {
@@ -285,7 +285,7 @@ const RunVisuals = struct {
                     if (!has_false) {
                         if (result == PuzzleSolutionMatchType.negative or result == PuzzleSolutionMatchType.firstMoveMatch or result == PuzzleSolutionMatchType.trueMatch) {
                             if (j == solution.len - 1) {
-                                if (j == full_len - 1) {
+                                if (isFull) {
                                     result = PuzzleSolutionMatchType.fullTrueMatch;
                                 } else {
                                     result = PuzzleSolutionMatchType.trueMatch;
@@ -293,7 +293,7 @@ const RunVisuals = struct {
                             }
                         }
                         if (result == PuzzleSolutionMatchType.firstMoveMatch) {
-                            if (j == full_len - 1) {
+                            if (isFull) {
                                 result = PuzzleSolutionMatchType.fullFirstMoveMatch;
                             }
                         }
@@ -303,7 +303,7 @@ const RunVisuals = struct {
                     if (result == PuzzleSolutionMatchType.negative) {
                         result = PuzzleSolutionMatchType.falseMatch;
                     }
-                    if (j == full_len) {
+                    if (isFull) {
                         result = PuzzleSolutionMatchType.fullFalseMatch;
                     }
                 }
@@ -347,10 +347,10 @@ const RunVisuals = struct {
 
         var solution_match_type = PuzzleSolutionMatchType.negative;
 
-        const count = dot_usage.getInstructionCount();
+        const isFull = dot_usage.isFull();
 
         for (playedSlices) |playedSlice| {
-            const slice_match = PuzzleSolutionMatchType.fromSolution(solution, dot_usage.move_buffer.items[playedSlice.off .. playedSlice.off + playedSlice.len], count);
+            const slice_match = PuzzleSolutionMatchType.fromSolution(solution, dot_usage.move_buffer.items[playedSlice.off .. playedSlice.off + playedSlice.len], isFull);
             if (slice_match == PuzzleSolutionMatchType.fullFirstMoveMatch) {
                 solution_match_type = slice_match;
                 break;

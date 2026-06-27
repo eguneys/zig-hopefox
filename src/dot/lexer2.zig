@@ -35,6 +35,8 @@ pub const SymbolTag = enum {
 
     Movesto,
     Evades,
+
+    Defends,
 };
 
 pub const SymbolIdentity = struct { tag: SymbolTag, id: usize };

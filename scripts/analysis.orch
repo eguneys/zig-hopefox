@@ -1,8 +1,6 @@
 src: ../data/lichess_db_puzzle.csv
 
 ctq_knight_fork.gof:
-  FullTrue: @preview(take=20)
-  True: @preview(take=10)
+  FullTrue: @preview(take=10)
   FullFalse: @preview(take=10)
-  FirstMove: @preview(take=10)
-  Negative: @preview(take=10)
+  FullFirstMove: @preview(take=10)
