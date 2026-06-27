@@ -1,4 +1,4 @@
 knight_t *Movesto sq *becomes knight2
-         .Forks king_t .and queen
+         .Forks king_t .and queen_t
 king *Evades knight2 *becomes king2
 rook *Checks king2 *becomes rook2
