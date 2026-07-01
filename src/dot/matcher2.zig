@@ -38,6 +38,9 @@ pub const Matcher = struct {
             lx.SymbolTag.Check => {
                 try Filters.dispatch_checks(allocator, history, slice, dot);
             },
+            lx.SymbolTag.defendedby => {
+                try Filters.dispatch_defendedby(allocator, history, slice, dot);
+            },
             else => {},
         }
     }
@@ -408,6 +411,42 @@ pub const Filters = struct {
                     const move = chess.Move.none;
                     const ref = try history.tree.appendChild(allocator, off, move);
                     try history.nodes.append(allocator, ref);
+                }
+            }
+        }
+    }
+
+    fn dispatch_defendedby(allocator: Allocator, history: *History, slice: Matcher.Slice, star: par.SideEffects) !void {
+        const from_symbol = history.program.symbols[star.from];
+        const From = history.table.getColumn(from_symbol.identity);
+        const to_symbol = history.program.symbols[star.action.one];
+        const To = history.table.getColumn(to_symbol.identity);
+
+        for (slice.off..slice.off + slice.len) |off| {
+            const bb_from = From[off];
+            const bb_to = To[off];
+
+            const position = history.getPosition(off);
+
+            var bb_from2 = bb_from
+                .bitand(Symbols.bitboard(from_symbol, position));
+
+            const bb_defendedby = bb_to
+                .bitand(Symbols.bitboard(to_symbol, position));
+
+            while (bb_from2.next()) |sq_from| {
+                var bb_defendedby2 = bb_defendedby;
+                while (bb_defendedby2.next()) |sq_to| {
+                    const aa_defendedby = Symbols.captures(to_symbol, sq_to, position);
+                    if (aa_defendedby.has(sq_from)) {
+                        try history.table.duplicateRow(allocator, off);
+
+                        history.table.setLastRow(from_symbol.identity, chess.Bitboard.fromSquare(sq_from));
+
+                        const move = chess.Move.none;
+                        const ref = try history.tree.appendChild(allocator, off, move);
+                        try history.nodes.append(allocator, ref);
+                    }
                 }
             }
         }

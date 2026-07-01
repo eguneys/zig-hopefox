@@ -1,0 +1,2 @@
+queen_t *Captures bishop_o *becomes queen2
+knight *Captures queen2 *becomes opponent3
